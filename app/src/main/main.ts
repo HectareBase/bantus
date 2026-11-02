@@ -1,7 +1,7 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, ipcMain, screen, shell, type Display } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
@@ -13,9 +13,13 @@ const COLLAPSED_WIDTH = 52;
 const SESSION_ID = /^local_[0-9a-f-]{36}$/;
 const PRELOAD = join(__dirname, '..', 'preload', 'preload.js');
 const WEB = join(__dirname, '..', '..', 'web', 'renderer');
+/** アプリのアイコン（npm run icons で assets/icon.svg から作る） */
+const ICON = join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
+/** 変数に持っておかないと、ガベージコレクションでトレイから消える */
+let tray: Tray | undefined;
 let collapsed = false;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
@@ -79,6 +83,7 @@ function createWidget(): BrowserWindow {
     transparent: true,
     hasShadow: false,
     backgroundColor: '#00000000',
+    icon: ICON,
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   w.loadFile(join(WEB, 'index.html'));
@@ -129,6 +134,7 @@ function openSettingsWindow() {
     minWidth: 520,
     minHeight: 400,
     title: 'Bantus — 設定',
+    icon: ICON,
     autoHideMenuBar: true,
     show: false,
     backgroundMaterial: 'mica',
@@ -138,6 +144,25 @@ function openSettingsWindow() {
   settingsWin.loadFile(join(WEB, 'settings.html'));
   settingsWin.once('ready-to-show', () => settingsWin?.show());
   settingsWin.on('closed', () => (settingsWin = undefined));
+}
+
+/** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで設定と終了 */
+function createTray(): Tray {
+  const t = new Tray(ICON);
+  t.setToolTip('Bantus');
+  t.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '設定', click: () => openSettingsWindow() },
+      { type: 'separator' },
+      { label: '終了', click: () => app.quit() },
+    ]),
+  );
+  t.on('click', () => {
+    if (!win || win.isDestroyed()) return;
+    win.show();
+    win.moveTop();
+  });
+  return t;
 }
 
 /** カーソルの位置から、内側の端がそこに来る幅を出す */
@@ -163,6 +188,7 @@ function sendSessions(force = false) {
 
 app.whenReady().then(() => {
   win = createWidget();
+  tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
 
   ipcMain.on('open-session', (_e, id: unknown) => {
@@ -218,7 +244,10 @@ app.whenReady().then(() => {
   screen.on('display-added', reposition);
   screen.on('display-removed', reposition);
 
-  app.on('before-quit', stopWatching);
+  app.on('before-quit', () => {
+    stopWatching();
+    tray?.destroy();
+  });
 });
 
 app.on('window-all-closed', () => app.quit());

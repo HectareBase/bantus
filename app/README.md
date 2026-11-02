@@ -46,6 +46,8 @@ npm run screenshots                # すべての見本を dist/screenshots/<名
 - 見本データの ID は `local_all-01` の形なので、クリックしても何も開かない。`minutesAgo` は「何分前に動きがあったか」
 - 中身は環境変数で決まる：`WIDGET_FIXTURE`（見本のパス）、`WIDGET_FIXTURE_CYCLE`（巡回の秒数）、`WIDGET_SCREENSHOT`（撮って終わる。保存先）、`WIDGET_SCREENSHOT_FOCUS`（撮る前にフォーカスする要素のセレクター）
 
+アイコンの元は `assets/icon.svg`（24px 以下は点と線を太くした `assets/icon-small.svg`）。書き換えたら `npm run icons` で `assets/icon.ico` と `assets/icon.png` を作り直す。
+
 PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows がウィンドウを非表示のままにするので、付けないでください。
 
 ## できること（今の版）

@@ -83,6 +83,7 @@ button { font: inherit; color: inherit; }
   border: 1px solid var(--card-stroke);
   border-radius: 8px;
 }
+.app-icon { width: 18px; height: 18px; margin-right: 6px; flex: none; }
 .app-name { font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
 .spacer { flex: 1; }
 
@@ -263,6 +264,7 @@ html.paused .spinner, html.paused .pulse, html.paused .mini-ring.blink { animati
 #mini { display: none; }
 html.collapsed main { display: none; }
 html.collapsed .app-name { display: none; }
+html.collapsed .app-icon { margin: 4px 0 0; }
 html.collapsed .titlebar { flex-direction: column; height: auto; margin: 8px 6px; padding: 4px 0; gap: 4px; }
 html.collapsed .spacer { display: none; }
 html.collapsed #quit, html.collapsed #settings { display: none; }

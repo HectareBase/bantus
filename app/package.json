@@ -9,6 +9,7 @@
     "start": "npm run build && electron .",
     "debug": "npm run build && node scripts/debug.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
+    "icons": "electron scripts/make-icons.mjs",
     "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
