@@ -61,6 +61,18 @@ export function tooltip(s: SessionView): string {
   return lines.join('\n');
 }
 
+/**
+ * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
+ * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中から待機になったとき
+ * - 消す：処理中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
+ * - クリックしたときに消すのは renderer
+ */
+export function nextAttention(prev: SessionState | undefined, next: SessionState, flagged: boolean): boolean {
+  if (prev === next) return flagged;
+  if (next === 'waiting') return true;
+  return prev === 'busy' && next === 'idle';
+}
+
 export function buildCards(sessions: SessionView[]): Card[] {
   const map = new Map<string, Card>();
   for (const s of sessions) {

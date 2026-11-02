@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, formatAgo, stateOfRank, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, stateOfRank, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -54,6 +54,27 @@ describe('cardBadge', () => {
     assert.deepEqual(cardBadge(card({ state: 'waiting' }, { state: 'waiting' }, { state: 'busy' })), { state: 'waiting', text: '要対応 2' }));
   it('なければ処理中', () => assert.deepEqual(cardBadge(card({ state: 'busy' }, { state: 'idle' })), { state: 'busy', text: '処理中 1' }));
   it('待機と停止中だけなら出さない', () => assert.deepEqual(cardBadge(card({ state: 'idle' }, { state: 'stopped' })), { state: '', text: '' }));
+});
+
+describe('nextAttention', () => {
+  it('対応待ちになったら付ける（起動した時点で対応待ちでも）', () => {
+    assert.equal(nextAttention('busy', 'waiting', false), true);
+    assert.equal(nextAttention(undefined, 'waiting', false), true);
+  });
+  it('処理中から待機になったら付ける', () => assert.equal(nextAttention('busy', 'idle', false), true));
+  it('起動した時点で待機なら付けない', () => assert.equal(nextAttention(undefined, 'idle', false), false));
+  it('処理中になったら消す', () => {
+    assert.equal(nextAttention('waiting', 'busy', true), false);
+    assert.equal(nextAttention('idle', 'busy', true), false);
+  });
+  it('対応待ちから待機・停止中になったら消す', () => {
+    assert.equal(nextAttention('waiting', 'idle', true), false);
+    assert.equal(nextAttention('waiting', 'stopped', true), false);
+  });
+  it('状態が同じなら今のまま', () => {
+    assert.equal(nextAttention('idle', 'idle', true), true);
+    assert.equal(nextAttention('idle', 'idle', false), false);
+  });
 });
 
 describe('tooltip と waitingLabel', () => {

@@ -137,15 +137,18 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .badge[data-state="busy"] { background: var(--busy-bg); color: var(--busy); }
 
 /* ---- 小見出し（ワークツリー） ---- */
+/* 小見出し、行、「停止中 n」は、どれも「16px の印の列 + 8px + 文字」の並び。ワークツリーのあるなしで字下げを変えない */
 .subhead {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px 1fr;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px 2px;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 6px 8px 2px;
   font-size: 11px;
   color: var(--text-secondary);
 }
-.subhead svg { width: 12px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.subhead svg { justify-self: center; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .subhead-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- 行 ---- */
@@ -163,12 +166,11 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   cursor: default;
   outline: none;
 }
-.card-body.has-subheads .row { padding-left: 18px; }
 .row:hover { background: var(--hover); }
 .row:active { background: var(--pressed); }
 .row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 
-/* 対応待ちと処理中の行だけ、左端に状態の色の帯を付ける */
+/* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付ける。クリックするか処理中になると消える */
 .row::before {
   content: "";
   position: absolute;
@@ -179,8 +181,8 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   border-radius: 2px;
   background: transparent;
 }
-.row[data-state="waiting"]::before { background: var(--waiting); }
-.row[data-state="busy"]::before { background: var(--busy); }
+.row[data-attention][data-state="waiting"]::before { background: var(--waiting); }
+.row[data-attention][data-state="idle"]::before { background: var(--idle); }
 
 .text { min-width: 0; display: flex; flex-direction: column; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -194,9 +196,10 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 /* ---- 停止中（たたむ） ---- */
 .stopped[hidden] { display: none; }
 .stopped-toggle {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px 1fr;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   width: calc(100% - 8px);
   margin: 2px 4px 0;
   padding: 4px 8px;
@@ -208,12 +211,12 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   text-align: left;
 }
 .stopped-toggle:hover { background: var(--hover); }
-.stopped-toggle svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.1s; }
+.stopped-toggle svg { justify-self: center; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.1s; }
 .stopped.open .stopped-toggle svg { transform: rotate(90deg); }
 .stopped-rows { display: none; }
 .stopped.open .stopped-rows { display: block; }
 
-/* ---- 状態の印 ---- */
+/* ---- 状態の印（どれも外側の直径 10px にそろえる） ---- */
 .status {
   width: 16px;
   height: 16px;
@@ -224,7 +227,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 
 /* 処理中：回り続けるリング */
 .spinner { animation: spin 1s linear infinite; will-change: transform; }
-.spinner circle { fill: none; stroke: var(--busy); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 26 38; }
+.spinner circle { fill: none; stroke: var(--busy); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 18 9; }
 
 /* 対応待ち：ゆっくり点滅する点 */
 .pulse { fill: var(--waiting); animation: blink 1.6s ease-in-out infinite; will-change: opacity; }

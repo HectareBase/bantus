@@ -2,7 +2,7 @@
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
 import type { SessionState, SessionView, WidgetLayout } from '../shared/types';
-import { buildCards, buildGroups, cardBadge, formatAgo, stateOfRank, tooltip, type Card, type Group } from './model.js';
+import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, stateOfRank, tooltip, type Card, type Group } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const ICON_FOLDER = 'M2 4.5h4l1.5 1.5H14v6.5H2z';
@@ -38,6 +38,8 @@ const cards = new Map<string, CardRefs>();
 const subheads = new Map<string, HTMLElement>();
 const lists = new Map<string, HTMLUListElement>();
 const openStopped = new Set<string>();
+/** 未確認（左端の帯を出す）セッションの ID */
+const attention = new Set<string>();
 
 // ---- 小さな道具 ----
 
@@ -67,21 +69,33 @@ function statusIcon(state: SessionState): SVGElement {
   switch (state) {
     case 'busy':
       root.classList.add('spinner');
-      root.append(svg('circle', { cx: '8', cy: '8', r: '6.5' }));
+      root.append(svg('circle', { cx: '8', cy: '8', r: '4.25' }));
       break;
     case 'waiting':
-      root.append(svg('circle', { cx: '8', cy: '8', r: '4.5', class: 'pulse' }));
+      root.append(svg('circle', { cx: '8', cy: '8', r: '5', class: 'pulse' }));
       break;
     case 'idle':
-      root.append(svg('circle', { cx: '8', cy: '8', r: '4', class: 'dot' }));
+      root.append(svg('circle', { cx: '8', cy: '8', r: '5', class: 'dot' }));
       break;
     default:
-      root.append(svg('circle', { cx: '8', cy: '8', r: '4', class: 'ring' }));
+      root.append(svg('circle', { cx: '8', cy: '8', r: '4.25', class: 'ring' }));
   }
   return root;
 }
 
 // ---- 行 ----
+
+function setAttention(refs: RowRefs, id: string, on: boolean) {
+  if (on) attention.add(id);
+  else attention.delete(id);
+  refs.el.toggleAttribute('data-attention', on);
+}
+
+function openRow(id: string) {
+  const refs = rows.get(id);
+  if (refs) setAttention(refs, id, false);
+  window.widget.openSession(id);
+}
 
 function getRow(s: SessionView): RowRefs {
   let refs = rows.get(s.id);
@@ -95,9 +109,9 @@ function getRow(s: SessionView): RowRefs {
       when: el.querySelector('.when')!,
     };
     const id = s.id;
-    el.addEventListener('click', () => window.widget.openSession(id));
+    el.addEventListener('click', () => openRow(id));
     el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') window.widget.openSession(id);
+      if (e.key === 'Enter' || e.key === ' ') openRow(id);
     });
     rows.set(s.id, refs);
   }
@@ -105,6 +119,7 @@ function getRow(s: SessionView): RowRefs {
   if (prev?.state !== s.state) {
     refs.status.replaceChildren(statusIcon(s.state));
     refs.el.dataset.state = s.state;
+    setAttention(refs, s.id, nextAttention(prev?.state, s.state, attention.has(s.id)));
   }
   if (prev?.title !== s.title) refs.title.textContent = s.title;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
@@ -174,7 +189,6 @@ function renderCard(card: Card): HTMLElement {
   // ワークツリーのセッションがあるときだけ、小見出しで分ける
   const groups = buildGroups(card.active);
   const useSubheads = groups.some((g) => !g.isMain);
-  refs.body.classList.toggle('has-subheads', useSubheads);
   const sections: Pick<Group, 'key' | 'sessions'>[] = useSubheads
     ? groups
     : card.active.length ? [{ key: '*', sessions: card.active }] : [];
@@ -229,6 +243,7 @@ function render(sessions: SessionView[]) {
   // なくなったものは捨てる
   const ids = new Set(sessions.map((s) => s.id));
   for (const id of rows.keys()) if (!ids.has(id)) rows.delete(id);
+  for (const id of attention) if (!ids.has(id)) attention.delete(id);
   const cardKeys = new Set(list.map((c) => c.key));
   for (const key of cards.keys()) if (!cardKeys.has(key)) cards.delete(key);
   for (const map of [subheads, lists] as Map<string, Element>[]) {
