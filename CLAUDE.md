@@ -15,7 +15,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 | `docs/` | 調査結果と計画 |
 | `prototype/` | PowerShell と WPF の試作（セッション一覧、ホットキー） |
 | `tools/` | 検証用のスクリプト |
-| `app/` | Electron 版のウィジェット（これから作る） |
+| `app/` | Electron 版のウィジェット。`cd app && npm start` で起動、`npm run typecheck` で型の確認 |
 | `.githooks/` | 公開前の検査 |
 | `local/` | 手元専用。git に入れない（生のログ、個人の語句のリスト） |
 

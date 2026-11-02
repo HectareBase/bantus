@@ -1,0 +1,17 @@
+{
+  "name": "claude-helper-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sidebar widget that shows Claude desktop session status",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "electron": "44.9.0",
+    "typescript": "7.0.2"
+  }
+}

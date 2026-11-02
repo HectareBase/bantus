@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Claude セッション</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="titlebar">
+    <span class="app-name">Claude</span>
+    <span class="spacer"></span>
+    <button id="collapse" class="icon-button" title="たたむ" aria-label="たたむ">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg>
+    </button>
+    <button id="quit" class="icon-button" title="終了" aria-label="終了">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
+  </header>
+
+  <main id="groups">
+    <section class="group" data-state="waiting">
+      <h2><span class="label">対応待ち</span><span class="count"></span></h2>
+      <ul class="rows"></ul>
+    </section>
+    <section class="group" data-state="busy">
+      <h2><span class="label">処理中</span><span class="count"></span></h2>
+      <ul class="rows"></ul>
+    </section>
+    <section class="group" data-state="idle">
+      <h2><span class="label">待機</span><span class="count"></span></h2>
+      <ul class="rows"></ul>
+    </section>
+    <section class="group" data-state="stopped">
+      <h2><span class="label">停止中</span><span class="count"></span></h2>
+      <ul class="rows"></ul>
+    </section>
+  </main>
+
+  <!-- たたんだときの表示：状態ごとの件数だけ -->
+  <aside id="mini">
+    <div class="mini-item" data-state="waiting"><span class="status"></span><span class="count"></span></div>
+    <div class="mini-item" data-state="busy"><span class="status"></span><span class="count"></span></div>
+    <div class="mini-item" data-state="idle"><span class="status"></span><span class="count"></span></div>
+  </aside>
+
+  <template id="row-template">
+    <li class="row" tabindex="0">
+      <span class="folder-color"></span>
+      <span class="status"></span>
+      <span class="text">
+        <span class="title"></span>
+        <span class="meta"><span class="folder"></span><span class="when"></span></span>
+      </span>
+    </li>
+  </template>
+
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

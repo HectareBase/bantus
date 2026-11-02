@@ -1,0 +1,176 @@
+/* Windows 11（Fluent）に合わせた見た目。背景は Mica なので透明にする。
+   アニメーションは transform と opacity だけを使う（GPU の合成だけで描かれ、CPU をほとんど使わない）。 */
+
+:root {
+  --text: #1a1a1a;
+  --text-secondary: #5d5d5d;
+  --text-tertiary: #8a8a8a;
+  --hover: rgba(0, 0, 0, 0.04);
+  --pressed: rgba(0, 0, 0, 0.07);
+  --divider: rgba(0, 0, 0, 0.08);
+  --focus: #1a1a1a;
+  --busy: #005fb8;
+  --waiting: #c27c00;
+  --idle: #8a8a8a;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #ffffff;
+    --text-secondary: #c8c8c8;
+    --text-tertiary: #9a9a9a;
+    --hover: rgba(255, 255, 255, 0.06);
+    --pressed: rgba(255, 255, 255, 0.04);
+    --divider: rgba(255, 255, 255, 0.08);
+    --focus: #ffffff;
+    --busy: #60cdff;
+    --waiting: #fce100;
+    --idle: #9a9a9a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", sans-serif;
+  user-select: none;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- タイトルバー ---- */
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 6px 0 14px;
+  flex: none;
+}
+.app-name { font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
+.spacer { flex: 1; }
+
+.icon-button {
+  width: 32px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+}
+.icon-button:hover { background: var(--hover); }
+.icon-button:active { background: var(--pressed); }
+.icon-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- 一覧 ---- */
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 4px 12px;
+}
+main::-webkit-scrollbar { width: 6px; }
+main::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 3px; }
+
+.group[hidden] { display: none; }
+.group h2 {
+  display: flex;
+  gap: 6px;
+  margin: 12px 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.group h2 .count { color: var(--text-tertiary); font-weight: 400; }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 14px;
+  border-radius: 4px;
+  cursor: default;
+  outline: none;
+}
+.row:hover { background: var(--hover); }
+.row:active { background: var(--pressed); }
+.row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+
+/* Fluent のナビゲーションの選択表示に似た、左端の細い色帯（フォルダの色） */
+.folder-color {
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--folder);
+}
+
+.text { min-width: 0; display: flex; flex-direction: column; }
+.title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; }
+.folder { overflow: hidden; text-overflow: ellipsis; }
+.when { flex: none; color: var(--text-tertiary); }
+
+/* ---- 状態の印 ---- */
+.status {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+}
+.status svg { width: 16px; height: 16px; overflow: visible; }
+
+/* 処理中：回り続けるリング */
+.spinner { animation: spin 1s linear infinite; will-change: transform; }
+.spinner circle { fill: none; stroke: var(--busy); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 26 38; }
+
+/* 対応待ち：ゆっくり点滅する点 */
+.pulse { fill: var(--waiting); animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
+
+/* 待機：中が空の円 */
+.ring circle { fill: none; stroke: var(--idle); stroke-width: 1.5; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes blink { 50% { opacity: 0.2; } }
+
+/* 見えていないとき、たたんでいるとき（一覧側）は止める */
+html.paused .spinner, html.paused .pulse { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .pulse { animation: none; }
+}
+
+/* ---- たたんだ表示 ---- */
+#mini { display: none; }
+html.collapsed main { display: none; }
+html.collapsed .app-name { display: none; }
+html.collapsed .titlebar { flex-direction: column; height: auto; padding: 6px 0; gap: 4px; }
+html.collapsed .spacer { display: none; }
+html.collapsed #quit { display: none; }
+html.collapsed #collapse svg { transform: rotate(180deg); }
+html.collapsed #mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+.mini-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--text-secondary); }
+.mini-item[hidden] { display: none; }
