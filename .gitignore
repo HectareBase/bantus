@@ -1,0 +1,18 @@
+# 手元専用（個人の設定、生のログ、検査用の個人の語句）
+/local/
+prototype/shortcuts.json
+status-log.txt
+*.log
+
+# Electron / Node.js
+node_modules/
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# エディタ・OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

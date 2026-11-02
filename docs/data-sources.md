@@ -1,0 +1,54 @@
+# Claude デスクトップから読めるデータ
+
+調査したバージョンはデスクトップアプリ 4.4212.0、Claude Code CLI 2.1.309（Windows 11、MSIX 版）です。
+**どれも公式には公開されていない形式**なので、アプリを更新したら変わる可能性があります。ウィジェットからは**読むだけ**にし、書き込みはしません。
+
+## 一覧
+| 情報 | 読み取り元 | 主な項目 |
+|---|---|---|
+| サイドバーのセッション一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\<id>\<id>\local_*.json` | タイトル、作業フォルダ、最終更新、アーカイブの有無、最後のターンのまとめ |
+| 実行中のセッションの状態 | `%USERPROFILE%\.claude\sessions\<pid>.json` | `busy` / `idle` / `waiting`、待ちの理由 → [session-status.md](session-status.md) |
+| 会話の全記録 | `%USERPROFILE%\.claude\projects\<フォルダ名>\<CLIのセッションID>.jsonl` | 発言、ツール呼び出し、タイトルの変更 |
+| ウィンドウの位置と大きさ | `%LOCALAPPDATA%\Claude-Data\claude_*\window-state.json` | `x`, `y`, `width`, `height`, `isMaximized` |
+| 画面の部品 | UIA（Windows UI Automation） | → [deep-link-and-uia.md](deep-link-and-uia.md) |
+
+`claude_*` の部分は MSIX パッケージの ID です。
+
+## `local_*.json`（デスクトップのセッション1件につき1ファイル）
+| 項目 | 例 / 意味 |
+|---|---|
+| `sessionId` | `local_xxxxxxxx-...`。`claude://` リンクやアプリのツールで使う ID |
+| `cliSessionId` | `xxxxxxxx-...`。CLI 側の ID。`~/.claude/sessions/*.json` の `sessionId`、`projects/` の jsonl のファイル名と同じ値 |
+| `title` / `titleSource` | タイトルと、付けた方法（`auto` / `tool` など） |
+| `cwd` / `originCwd` | 作業フォルダ |
+| `model` / `effort` / `permissionMode` | `claude-opus-5-5` / `medium` / `auto` |
+| `isArchived` | アーカイブ済みなら `true` |
+| `createdAt` / `lastActivityAt` / `lastFocusedAt` | Unix ミリ秒 |
+| `completedTurns` | 終わったターンの数 |
+| `postTurnSummary.status_category` | `completed` など |
+| `postTurnSummary.status_detail` | 例：「abc1234 committed; tests pass; not pushed」 |
+| `postTurnSummary.needs_action` | ユーザーの対応が必要なとき、その内容（空なら不要） |
+| `turnWrapUp.description` | 最後のターンのまとめの文章 |
+
+- **ピン留めとサイドバーのグループの情報は、このファイルには入っていません。** アプリのツール（`list_sessions` の `pinned` / `group`）からは取れます。
+- サイドバーに表示されるフォルダ名は、作業フォルダの末尾の名前とは限りません（例：作業フォルダ `my-app` が `MyApp` と表示される。リポジトリ名のようです）。
+
+## `~/.claude/sessions/<pid>.json`（実行中の CLI プロセス1つにつき1ファイル）
+| 項目 | 意味 |
+|---|---|
+| `pid` / `procStart` | プロセス ID と起動時刻。**ファイルだけが残っていることがある**ので、そのプロセスが今も動いているかを確かめる |
+| `sessionId` | CLI のセッション ID（`local_*.json` の `cliSessionId` と同じ値） |
+| `name` / `nameSource` / `formerNames` | セッション名と、付けた方法（`user` / `auto` / `derived` など）、以前の名前 |
+| `cwd` / `kind` / `entrypoint` | 作業フォルダ、`interactive`、`claude-desktop` |
+| `status` / `waitingFor` | 状態と、待ちの理由 |
+| `updatedAt` / `statusUpdatedAt` | 最後にファイルが更新された時刻と、状態が変わった時刻（Unix ミリ秒） |
+
+## 触ってはいけないもの
+次のファイルには、ログイン用のトークンやアカウント情報が入っています。ウィジェットから読み込まないでください。ログに出したり、どこかへ共有したりもしないでください。
+
+- `Claude-Data\claude_*\config.json`（`oauth:tokenCache` など）
+- `Claude-Data\claude_*\ssh-remote-server-state.json`
+- `~/.claude.json`（`oauthAccount`）
+- `~/.claude/sessions/*.key`
+
+`Claude-Data` フォルダの `README.txt` には「このフォルダの中身を消したり、動かしたり、名前を変えたりしない」と書かれています。
