@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, resolveFocus, stateOfRank, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, resolveFocus, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -126,4 +126,19 @@ describe('resolveFocus', () => {
   it('時間が過ぎたら、ファイルの値に戻す', () => assert.deepEqual(resolveFocus(sessions, pending, 2000), { id: 'a', pending: undefined }));
   it('クリックしたセッションがなくなったら、ファイルの値', () =>
     assert.deepEqual(resolveFocus([view({ id: 'a', focused: true })], pending, 1000), { id: 'a', pending: undefined }));
+});
+
+describe('statusIconName', () => {
+  it('対応待ちは理由ごとに変える', () => {
+    assert.equal(statusIconName('waiting', 'permission prompt'), 'shield');
+    assert.equal(statusIconName('waiting', 'input needed'), 'keyboard');
+    assert.equal(statusIconName('waiting', 'dialog open'), 'app-window');
+  });
+  it('知らない理由と理由なしは circle-alert', () => {
+    assert.equal(statusIconName('waiting', 'some new reason'), 'circle-alert');
+    assert.equal(statusIconName('waiting'), 'circle-alert');
+  });
+  it('ほかの状態は理由を見ない', () => {
+    assert.deepEqual((['busy', 'idle', 'stopped'] as const).map((s) => statusIconName(s, 'permission prompt')), ['progress-ring', 'message-square-more', 'circle-minus']);
+  });
 });

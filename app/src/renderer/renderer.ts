@@ -1,9 +1,10 @@
 // サイドバーの描画（カード案 B-1）。リポジトリごとのカードに、ワークツリーごとの小見出しを付ける。
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
-import type { SessionState, SessionView, WidgetLayout } from '../shared/types';
+import type { SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
+  PROGRESS_RING,
   buildCards,
   buildGroups,
   cardBadge,
@@ -11,16 +12,16 @@ import {
   nextAttention,
   resolveFocus,
   stateOfRank,
+  statusIconName,
   tooltip,
   type Card,
   type Group,
   type PendingFocus,
+  type StatusIcon,
 } from './model.js';
 import { flip } from './flip.js';
 import { fillIcons, setIcon } from './icon.js';
 import { initTooltips } from './tooltip.js';
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 interface RowRefs {
   el: HTMLLIElement;
@@ -67,12 +68,6 @@ function clone<T extends Element>(template: HTMLTemplateElement): T {
   return template.content.firstElementChild!.cloneNode(true) as T;
 }
 
-function svg(tag: string, attrs: Record<string, string>): SVGElement {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  return el;
-}
-
 /** parent の子を nodes の並びにそろえる。すでに正しい位置にある要素は動かさない */
 function syncChildren(parent: Element, nodes: Element[]) {
   nodes.forEach((node, i) => {
@@ -84,23 +79,27 @@ function syncChildren(parent: Element, nodes: Element[]) {
 
 // ---- 状態の印 ----
 
-function statusIcon(state: SessionState): SVGElement {
-  const root = svg('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' });
-  switch (state) {
-    case 'busy':
-      root.classList.add('spinner');
-      root.append(svg('circle', { cx: '8', cy: '8', r: '4.25' }));
-      break;
-    case 'waiting':
-      root.append(svg('circle', { cx: '8', cy: '8', r: '5', class: 'pulse' }));
-      break;
-    case 'idle':
-      root.append(svg('circle', { cx: '8', cy: '8', r: '5', class: 'dot' }));
-      break;
-    default:
-      root.append(svg('circle', { cx: '8', cy: '8', r: '4.25', class: 'ring' }));
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** 処理中：薄い輪の上を、伸び縮みする弧が回る（Windows 11 の ProgressRing に近い動き） */
+function progressRing(): SVGElement {
+  const root = document.createElementNS(SVG_NS, 'svg');
+  root.setAttribute('viewBox', '0 0 24 24');
+  root.setAttribute('aria-hidden', 'true');
+  root.classList.add('progress-ring');
+  for (const cls of ['track', 'arc']) {
+    const c = document.createElementNS(SVG_NS, 'circle');
+    for (const [k, v] of Object.entries({ cx: '12', cy: '12', r: '9', pathLength: '30', class: cls })) c.setAttribute(k, v);
+    root.append(c);
   }
   return root;
+}
+
+function setStatus(el: HTMLElement, name: StatusIcon) {
+  if (name !== PROGRESS_RING) return setIcon(el, name);
+  if (el.dataset.icon === name) return;
+  el.dataset.icon = name;
+  el.replaceChildren(progressRing());
 }
 
 // ---- 行 ----
@@ -148,8 +147,8 @@ function getRow(s: SessionView): RowRefs {
     rows.set(s.id, refs);
   }
   const prev = refs.data;
+  setStatus(refs.status, statusIconName(s.state, s.waitingFor));
   if (prev?.state !== s.state) {
-    refs.status.replaceChildren(statusIcon(s.state));
     refs.el.dataset.state = s.state;
     setAttention(refs, s.id, nextAttention(prev?.state, s.state, attention.has(s.id)));
   }

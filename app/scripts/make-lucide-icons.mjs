@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { icons } from 'lucide';
 
 /** lucide.dev での名前 */
-const NAMES = ['settings', 'chevron-right', 'x', 'folder', 'house', 'git-branch', 'panel-right', 'info'];
+const NAMES = [
+  'settings', 'chevron-right', 'x', 'folder', 'house', 'git-branch', 'panel-right', 'info',
+  // 状態の印（renderer/model.ts の statusIconName）
+  'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
+];
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
 

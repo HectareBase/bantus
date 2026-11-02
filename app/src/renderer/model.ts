@@ -1,6 +1,7 @@
 // 画面に出す形への組み立て（カード、小見出し、ツールチップ）。DOM を使わないので、テストから直接呼べる。
 
 import type { SessionState, SessionView } from '../shared/types';
+import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
 export const WAITING_LABELS: Record<string, string> = {
@@ -50,6 +51,24 @@ export function formatAgo(ms: number, now = Date.now()): string {
 /** 知らない waitingFor はそのまま出す（docs/session-status.md：「対応待ち（その他）」） */
 export function waitingLabel(waitingFor: string | undefined): string {
   return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
+}
+
+/** 対応待ちの理由ごとの印。ここにない理由は丸に感嘆符（「対応待ち（その他）」） */
+const WAITING_ICONS: Record<string, IconName> = {
+  'permission prompt': 'shield',
+  'sandbox request': 'shield',
+  'input needed': 'keyboard',
+  'dialog open': 'app-window',
+};
+/** 処理中の印。lucide にない動き（弧が伸び縮みする）なので、renderer.ts で自前の SVG を描く */
+export const PROGRESS_RING = 'progress-ring';
+export type StatusIcon = IconName | typeof PROGRESS_RING;
+const STATE_ICONS: Record<Exclude<SessionState, 'waiting'>, StatusIcon> = { busy: PROGRESS_RING, idle: 'message-square-more', stopped: 'circle-minus' };
+
+/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING） */
+export function statusIconName(state: SessionState, waitingFor?: string): StatusIcon {
+  if (state === 'waiting') return WAITING_ICONS[waitingFor ?? ''] ?? 'circle-alert';
+  return STATE_ICONS[state];
 }
 
 export function tooltip(s: SessionView): string {
