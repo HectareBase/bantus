@@ -17,11 +17,10 @@ import {
   type PendingFocus,
 } from './model.js';
 import { flip } from './flip.js';
+import { fillIcons, setIcon } from './icon.js';
 import { initTooltips } from './tooltip.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const ICON_FOLDER = 'M2 4.5h4l1.5 1.5H14v6.5H2z';
-const ICON_BRANCH = 'M5 2.5v11M11 7.5a1.75 1.75 0 1 0 0-3.5a1.75 1.75 0 1 0 0 3.5M11 7.5c0 3-6 2.5-6 5';
 
 interface RowRefs {
   el: HTMLLIElement;
@@ -47,6 +46,7 @@ const miniEl = document.getElementById('mini')!;
 const rowTemplate = document.getElementById('row-template') as HTMLTemplateElement;
 const cardTemplate = document.getElementById('card-template') as HTMLTemplateElement;
 const subheadTemplate = document.getElementById('subhead-template') as HTMLTemplateElement;
+fillIcons(document);
 const tooltips = initTooltips(document.getElementById('tooltip')!);
 
 const rows = new Map<string, RowRefs>();
@@ -194,7 +194,8 @@ function getSubhead(key: string, group: Group): HTMLElement {
     el = clone<HTMLElement>(subheadTemplate);
     subheads.set(key, el);
   }
-  el.querySelector('.icon-path')!.setAttribute('d', group.isMain ? ICON_FOLDER : ICON_BRANCH);
+  // カードの見出しが folder なので、メインは house にして重ねない
+  setIcon(el.querySelector('.subhead-icon')!, group.isMain ? 'house' : 'git-branch');
   el.querySelector('.subhead-label')!.textContent = group.label;
   el.dataset.tip = group.tooltip;
   return el;

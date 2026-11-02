@@ -30,14 +30,14 @@ export type CategoryId = 'display' | 'about';
 export interface Category {
   id: CategoryId;
   label: string;
-  /** 左の一覧に出すアイコン（SVG の path） */
+  /** 左の一覧に出すアイコン。lucide の名前で、renderer/icons.ts にあるもの（scripts/make-lucide-icons.mjs で足す） */
   icon: string;
 }
 
 /** 左の一覧の並び。中身のないカテゴリは画面に出さない */
 export const CATEGORIES: Category[] = [
-  { id: 'display', label: '表示', icon: 'M2.5 3.5h11v9h-11zM10 3.5v9' },
-  { id: 'about', label: '情報', icon: 'M8 14.5a6.5 6.5 0 1 0 0-13a6.5 6.5 0 1 0 0 13M8 7.5v4M8 5v.01' },
+  { id: 'display', label: '表示', icon: 'panel-right' },
+  { id: 'about', label: '情報', icon: 'info' },
 ];
 
 interface Base<K extends keyof Settings> {

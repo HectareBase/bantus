@@ -10,12 +10,14 @@
     "debug": "npm run build && node scripts/debug.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
     "icons": "electron scripts/make-icons.mjs",
+    "lucide-icons": "node scripts/make-lucide-icons.mjs",
     "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "electron": "44.9.0",
+    "lucide": "1.66.0",
     "typescript": "7.0.2"
   }
 }

@@ -48,6 +48,8 @@ npm run screenshots                # すべての見本を dist/screenshots/<名
 
 アイコンの元は `assets/icon.svg`（24px 以下は点と線を太くした `assets/icon-small.svg`）。書き換えたら `npm run icons` で `assets/icon.ico` と `assets/icon.png` を作り直す。
 
+画面の中のアイコン（設定の歯車、フォルダ、ブランチなど）は [lucide](https://lucide.dev)（ISC License）を使う。lucide は devDependencies に入れ、使うものだけを `src/renderer/icons.ts` に書き出す。アイコンを足すときは `scripts/make-lucide-icons.mjs` の `NAMES` に名前を足して `npm run lucide-icons` を実行し、HTML では `data-icon="名前"`、TypeScript では `createIcon` / `setIcon`（`src/renderer/icon.ts`）で使う。
+
 PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows がウィンドウを非表示のままにするので、付けないでください。
 
 ## できること（今の版）

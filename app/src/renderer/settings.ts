@@ -1,8 +1,9 @@
 // 設定ウィンドウ。カテゴリと項目は shared/settings.ts の定義から作る。変更はその場で反映し、保存ボタンは置かない。
 
 import { CATEGORIES, SETTING_DEFS, type CategoryId, type SettingDef, type Settings } from '../shared/settings.js';
+import { createIcon } from './icon.js';
+import type { IconName } from './icons.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 const api = window.settingsApi;
 const nav = document.getElementById('nav')!;
 const content = document.getElementById('content')!;
@@ -14,16 +15,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children);
   return node;
-}
-
-function icon(d: string): SVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 16 16');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', d);
-  svg.append(path);
-  return svg;
 }
 
 function card(label: string, description: string | undefined, control: Node): HTMLElement {
@@ -110,7 +101,7 @@ function renderNav() {
   // 項目がないカテゴリは出さない（「情報」は専用の画面があるので出す）
   const visible = CATEGORIES.filter((c) => c.id === 'about' || SETTING_DEFS.some((d) => d.category === c.id));
   nav.replaceChildren(...visible.map((c) => {
-    const b = el('button', { className: 'nav-item' }, [icon(c.icon), c.label]);
+    const b = el('button', { className: 'nav-item' }, [createIcon(c.icon as IconName), c.label]);
     if (c.id === current) b.setAttribute('aria-current', 'page');
     b.addEventListener('click', () => {
       current = c.id;
