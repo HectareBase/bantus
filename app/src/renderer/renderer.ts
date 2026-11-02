@@ -350,6 +350,22 @@ document.getElementById('collapse')!.addEventListener('click', () => setCollapse
 document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
 document.getElementById('quit')!.addEventListener('click', () => window.widget.quit());
 
+// 内側の端をドラッグして幅を変える。カーソルがウィンドウの外へ出ても、ポインターをつかんだまま追う
+const resizeHandle = document.getElementById('resize-handle')!;
+resizeHandle.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || collapsed) return;
+  resizeHandle.setPointerCapture(e.pointerId);
+  document.documentElement.classList.add('resizing');
+  window.widget.resizeStart();
+});
+resizeHandle.addEventListener('pointermove', (e) => {
+  if (resizeHandle.hasPointerCapture(e.pointerId)) window.widget.resizeMove();
+});
+resizeHandle.addEventListener('lostpointercapture', () => {
+  document.documentElement.classList.remove('resizing');
+  window.widget.resizeEnd();
+});
+
 // 背景が 0% のときは、カードやタイトルバーのない所のクリックを後ろのウィンドウへ通す
 let floating = false;
 let clickThrough = false;
@@ -360,7 +376,7 @@ function setClickThrough(value: boolean) {
 }
 document.addEventListener('mousemove', (e) => {
   if (!floating) return;
-  const solid = (e.target as Element).closest('.card, .titlebar, .mini-repo');
+  const solid = (e.target as Element).closest('.card, .titlebar, .mini-repo, .resize-handle');
   setClickThrough(!solid);
 });
 

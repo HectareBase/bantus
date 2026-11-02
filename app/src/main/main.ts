@@ -5,10 +5,9 @@ import { app, BrowserWindow, ipcMain, screen, shell, type Display } from 'electr
 import { join } from 'node:path';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
-import type { Settings } from '../shared/settings';
+import { WIDTH_MAX, WIDTH_MIN, type Settings } from '../shared/settings';
 import type { AboutInfo, DisplayOption, WidgetLayout } from '../shared/types';
 
-const WIDTH = 264;
 const COLLAPSED_WIDTH = 52;
 const SESSION_ID = /^local_[0-9a-f-]{36}$/;
 const PRELOAD = join(__dirname, '..', 'preload', 'preload.js');
@@ -17,6 +16,8 @@ const WEB = join(__dirname, '..', '..', 'web', 'renderer');
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
 let collapsed = false;
+/** ドラッグ中の幅。離すまでは保存しない */
+let dragWidth: number | undefined;
 let lastSent = '';
 
 // ---- 位置と見た目 ----
@@ -32,7 +33,7 @@ function targetDisplay(s: Settings): Display {
 function sidebarBounds() {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
-  const width = collapsed ? COLLAPSED_WIDTH : WIDTH;
+  const width = collapsed ? COLLAPSED_WIDTH : Math.min(dragWidth ?? s.width, Math.floor(area.width / 2));
   const x = s.edge === 'left' ? area.x : area.x + area.width - width;
   return { x, y: area.y, width, height: area.height };
 }
@@ -107,6 +108,15 @@ function openSettingsWindow() {
   settingsWin.on('closed', () => (settingsWin = undefined));
 }
 
+/** カーソルの位置から、内側の端がそこに来る幅を出す */
+function widthAtCursor(): number {
+  const s = getSettings();
+  const area = targetDisplay(s).workArea;
+  const cursor = screen.getCursorScreenPoint();
+  const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
+  return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
+}
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
@@ -131,6 +141,20 @@ app.whenReady().then(() => {
   ipcMain.on('set-collapsed', (_e, value: unknown) => {
     collapsed = value === true;
     win?.setBounds(sidebarBounds());
+  });
+  ipcMain.on('resize-start', () => {
+    if (!collapsed) dragWidth = getSettings().width;
+  });
+  ipcMain.on('resize-move', () => {
+    if (dragWidth === undefined) return;
+    dragWidth = widthAtCursor();
+    win?.setBounds(sidebarBounds());
+  });
+  ipcMain.on('resize-end', () => {
+    if (dragWidth === undefined) return;
+    const width = dragWidth;
+    dragWidth = undefined;
+    updateSettings({ width });
   });
   ipcMain.on('set-click-through', (_e, value: unknown) => {
     // forward: true で、クリックは通してもマウスの移動は画面側に届き続ける（カードに乗ったら戻せる）

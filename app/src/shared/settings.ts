@@ -5,6 +5,8 @@ export interface Settings {
   edge: 'left' | 'right';
   /** 置くモニター。'primary' か、モニターの ID（文字列） */
   display: string;
+  /** 広げたときのウィジェットの幅（px）。設定画面には出さず、ウィジェットの内側の端をドラッグして変える */
+  width: number;
   /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
@@ -14,9 +16,14 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   edge: 'right',
   display: 'primary',
+  width: 264,
   backgroundOpacity: 100,
   cardOpacity: 50,
 };
+
+/** ドラッグで変えられる幅の範囲（px） */
+export const WIDTH_MIN = 200;
+export const WIDTH_MAX = 480;
 
 export type CategoryId = 'display' | 'about';
 
@@ -84,5 +91,8 @@ export function normalizeSettings(input: unknown): Settings {
         break;
     }
   }
+  // 設定画面に出さない項目
+  const w = src.width;
+  if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
   return out;
 }

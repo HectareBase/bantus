@@ -16,6 +16,9 @@ const widget: WidgetApi = {
   openSession: (id) => ipcRenderer.send('open-session', id),
   setCollapsed: (collapsed) => ipcRenderer.send('set-collapsed', collapsed),
   setClickThrough: (through) => ipcRenderer.send('set-click-through', through),
+  resizeStart: () => ipcRenderer.send('resize-start'),
+  resizeMove: () => ipcRenderer.send('resize-move'),
+  resizeEnd: () => ipcRenderer.send('resize-end'),
   openSettings: () => ipcRenderer.send('open-settings'),
   quit: () => ipcRenderer.send('quit'),
 };
