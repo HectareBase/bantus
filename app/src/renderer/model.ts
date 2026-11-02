@@ -160,6 +160,34 @@ export function buildGroups(active: SessionView[]): Group[] {
   return [...map.values()].sort(byUrgency);
 }
 
+/** カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける */
+export function cardSections(card: Card): { useSubheads: boolean; sections: Pick<Group, 'key' | 'sessions'>[] } {
+  const groups = buildGroups(card.active);
+  const useSubheads = groups.some((g) => !g.isMain);
+  const sections = useSubheads ? groups : card.active.length ? [{ key: '*', sessions: card.active }] : [];
+  return { useSubheads, sections };
+}
+
+/** 画面に並んでいる順（上から）の、停止中でないセッション */
+export function displayOrder(sessions: SessionView[]): SessionView[] {
+  return buildCards(sessions).flatMap((card) => cardSections(card).sections.flatMap((g) => g.sessions));
+}
+
+/**
+ * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない
+ * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの
+ * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）
+ */
+export function nextCycleTarget(sessions: SessionView[], attention: ReadonlySet<string>, currentId: string | undefined): string | undefined {
+  const ids = displayOrder(sessions).map((s) => s.id);
+  const flagged = ids.find((id) => id !== currentId && attention.has(id));
+  if (flagged) return flagged;
+  // 今開いているものの次から探す。一覧にない（停止中など）ときは indexOf が -1 なので先頭から
+  const at = currentId ? ids.indexOf(currentId) : -1;
+  const next = ids[(at + 1) % ids.length];
+  return next === currentId ? undefined : next;
+}
+
 /** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
 export function cardBadge(card: Card): { state: '' | 'waiting' | 'busy'; text: string } {
   const waiting = card.active.filter((s) => s.state === 'waiting').length;

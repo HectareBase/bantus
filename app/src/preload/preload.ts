@@ -13,6 +13,9 @@ const widget: WidgetApi = {
     ipcRenderer.on('layout', (_e, layout: WidgetLayout) => listener(layout));
   },
   getLayout: () => ipcRenderer.invoke('layout:get'),
+  onCycle: (listener) => {
+    ipcRenderer.on('cycle', () => listener());
+  },
   openSession: (id) => ipcRenderer.send('open-session', id),
   setCollapsed: (collapsed) => ipcRenderer.send('set-collapsed', collapsed),
   setClickThrough: (through) => ipcRenderer.send('set-click-through', through),

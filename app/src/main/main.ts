@@ -1,7 +1,7 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
@@ -15,6 +15,8 @@ const PRELOAD = join(__dirname, '..', 'preload', 'preload.js');
 const WEB = join(__dirname, '..', '..', 'web', 'renderer');
 /** アプリのアイコン（npm run icons で assets/icon.svg から作る） */
 const ICON = join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
+/** 未確認のセッションを表示順に開くショートカット（Ctrl+Alt+Space はほかのアプリが使っていた） */
+const CYCLE_SHORTCUT = 'Control+Alt+N';
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
@@ -190,6 +192,11 @@ app.whenReady().then(() => {
   win = createWidget();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
+  // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
+  if (!process.env.WIDGET_SCREENSHOT) {
+    const ok = globalShortcut.register(CYCLE_SHORTCUT, () => win?.webContents.send('cycle'));
+    if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
+  }
 
   ipcMain.on('open-session', (_e, id: unknown) => {
     if (typeof id === 'string' && SESSION_ID.test(id)) {
@@ -246,6 +253,7 @@ app.whenReady().then(() => {
 
   app.on('before-quit', () => {
     stopWatching();
+    globalShortcut.unregisterAll();
     tray?.destroy();
   });
 });

@@ -6,10 +6,11 @@ import {
   PENDING_FOCUS_MS,
   PROGRESS_RING,
   buildCards,
-  buildGroups,
   cardBadge,
+  cardSections,
   formatAgo,
   nextAttention,
+  nextCycleTarget,
   resolveFocus,
   stateOfRank,
   statusIconName,
@@ -110,11 +111,18 @@ function setAttention(refs: RowRefs, id: string, on: boolean) {
   refs.el.toggleAttribute('data-attention', on);
 }
 
-/** 今開いているセッションの行だけ背景を塗る */
-function applyFocus() {
+/** 今開いているセッションの行だけ背景を塗る。塗った行の ID を返す */
+function applyFocus(): string | undefined {
   const resolved = resolveFocus(latest, pendingFocus);
   pendingFocus = resolved.pending;
   for (const [id, refs] of rows) refs.el.toggleAttribute('data-focused', id === resolved.id);
+  return resolved.id;
+}
+
+/** ショートカット：未確認の行を表示順に開く。なければ表示順で次の行 */
+function openNext() {
+  const id = nextCycleTarget(latest, attention, applyFocus());
+  if (id) openRow(id);
 }
 
 function openRow(id: string) {
@@ -218,12 +226,7 @@ function renderCard(card: Card): HTMLElement {
   refs.badge.dataset.state = badge.state;
   refs.badge.textContent = badge.text;
 
-  // ワークツリーのセッションがあるときだけ、小見出しで分ける
-  const groups = buildGroups(card.active);
-  const useSubheads = groups.some((g) => !g.isMain);
-  const sections: Pick<Group, 'key' | 'sessions'>[] = useSubheads
-    ? groups
-    : card.active.length ? [{ key: '*', sessions: card.active }] : [];
+  const { useSubheads, sections } = cardSections(card);
   const bodyNodes: Element[] = [];
   for (const g of sections) {
     const key = `${card.key}|${g.key}`;
@@ -362,3 +365,4 @@ function applyLayout({ edge, backgroundOpacity, cardOpacity }: WidgetLayout) {
 window.widget.onLayout(applyLayout);
 window.widget.getLayout().then(applyLayout);
 window.widget.onSessions(render);
+window.widget.onCycle(openNext);

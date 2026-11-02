@@ -42,6 +42,8 @@ export interface WidgetApi {
   onLayout(listener: (layout: WidgetLayout) => void): void;
   /** 起動時に今の見た目の設定を取りに行く（起動直後に送られた onLayout を取りこぼさないため） */
   getLayout(): Promise<WidgetLayout>;
+  /** 巡回のショートカットが押されたとき。開く先は画面側が決める（未確認の帯を画面側で覚えているため） */
+  onCycle(listener: () => void): void;
   openSession(id: string): void;
   setCollapsed(collapsed: boolean): void;
   /** true にすると、ウィジェットへのクリックを後ろのウィンドウへ通す（背景が 0% のとき、何もない所の上で使う） */

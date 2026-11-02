@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, resolveFocus, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -140,5 +140,36 @@ describe('statusIconName', () => {
   });
   it('ほかの状態は理由を見ない', () => {
     assert.deepEqual((['busy', 'idle', 'stopped'] as const).map((s) => statusIconName(s, 'permission prompt')), ['progress-ring', 'message-square-more', 'circle-minus']);
+  });
+});
+
+describe('displayOrder と nextCycleTarget', () => {
+  // 画面の並び：カード waiting（w1）→ カード main（m1 処理中、m2 待機。ワークツリーなし）→ カード wt（メイン t1、ワークツリー t2）
+  const wt = { key: 'wt|x', label: 'x', branch: 'claude/x-123abc' };
+  const sessions: SessionView[] = [
+    view({ id: 'm2', repoKey: 'main', state: 'idle', lastActivityAt: 30 }),
+    view({ id: 'm1', repoKey: 'main', state: 'busy', lastActivityAt: 20 }),
+    view({ id: 't1', repoKey: 'wt', state: 'idle', lastActivityAt: 5 }),
+    view({ id: 't2', repoKey: 'wt', state: 'idle', lastActivityAt: 10, worktree: wt }),
+    view({ id: 's1', repoKey: 'main', state: 'stopped', lastActivityAt: 99 }),
+    view({ id: 'w1', repoKey: 'waiting', state: 'waiting', lastActivityAt: 1 }),
+  ];
+
+  it('画面の上から順に並べ、停止中は入れない', () =>
+    assert.deepEqual(displayOrder(sessions).map((s) => s.id), ['w1', 'm2', 'm1', 't2', 't1']));
+
+  it('未確認があれば、表示順でいちばん上のもの', () =>
+    assert.equal(nextCycleTarget(sessions, new Set(['t1', 'm1']), 'w1'), 'm1'));
+  it('今開いている行は、未確認でも選ばない', () =>
+    assert.equal(nextCycleTarget(sessions, new Set(['w1', 't2']), 'w1'), 't2'));
+  it('未確認がなければ、今開いている行の次', () => assert.equal(nextCycleTarget(sessions, new Set(), 'm1'), 't2'));
+  it('最後の行の次は先頭に戻る', () => assert.equal(nextCycleTarget(sessions, new Set(), 't1'), 'w1'));
+  it('今開いている行が一覧にない（停止中）か、わからなければ先頭', () => {
+    assert.equal(nextCycleTarget(sessions, new Set(), 's1'), 'w1');
+    assert.equal(nextCycleTarget(sessions, new Set(), undefined), 'w1');
+  });
+  it('ほかに行がなければ何もしない', () => {
+    assert.equal(nextCycleTarget([view({ id: 'a' })], new Set(['a']), 'a'), undefined);
+    assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
   });
 });
