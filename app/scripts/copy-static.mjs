@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const from = join(root, 'src', 'renderer');
-const to = join(root, 'dist', 'renderer');
+const to = join(root, 'dist', 'web', 'renderer');
 mkdirSync(to, { recursive: true });
 for (const name of readdirSync(from)) {
   if (/\.(html|css)$/.test(name)) cpSync(join(from, name), join(to, name));

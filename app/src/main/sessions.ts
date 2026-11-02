@@ -72,6 +72,11 @@ function toState(running: { status?: string } | undefined): SessionState {
   }
 }
 
+/** 読み取っているフォルダ（設定画面の「情報」用） */
+export function sessionDataFolders(): string[] {
+  return [RUNNING_DIR, ...claudeDataDirs()];
+}
+
 /** local_*.json が入っているフォルダ（アカウントごと） */
 function sessionDirs(): string[] {
   const dirs: string[] = [];

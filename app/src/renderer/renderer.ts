@@ -1,7 +1,7 @@
 // サイドバーの描画（カード案 B-1）。リポジトリごとのカードに、ワークツリーごとの小見出しを付ける。
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
-import type { SessionState, SessionView } from '../shared/types';
+import type { SessionState, SessionView, WidgetLayout } from '../shared/types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
@@ -347,6 +347,32 @@ function setCollapsed(value: boolean) {
   window.widget.setCollapsed(collapsed);
 }
 document.getElementById('collapse')!.addEventListener('click', () => setCollapsed(!collapsed));
+document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
 document.getElementById('quit')!.addEventListener('click', () => window.widget.quit());
 
+// 背景が 0% のときは、カードやタイトルバーのない所のクリックを後ろのウィンドウへ通す
+let floating = false;
+let clickThrough = false;
+function setClickThrough(value: boolean) {
+  if (value === clickThrough) return;
+  clickThrough = value;
+  window.widget.setClickThrough(value);
+}
+document.addEventListener('mousemove', (e) => {
+  if (!floating) return;
+  const solid = (e.target as Element).closest('.card, .titlebar, .mini-repo');
+  setClickThrough(!solid);
+});
+
+function applyLayout({ edge, backgroundOpacity, cardOpacity }: WidgetLayout) {
+  const root = document.documentElement;
+  root.dataset.edge = edge;
+  root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
+  root.style.setProperty('--card-alpha', String(cardOpacity / 100));
+  floating = backgroundOpacity === 0;
+  root.classList.toggle('floating', floating);
+  if (!floating) clickThrough = false;
+}
+window.widget.onLayout(applyLayout);
+window.widget.getLayout().then(applyLayout);
 window.widget.onSessions(render);

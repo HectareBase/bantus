@@ -1,5 +1,7 @@
 // メインプロセスと画面の両方で使う型
 
+import type { Settings } from './settings';
+
 /** 表示上の状態。並び順もこの順（docs/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
 
@@ -34,13 +36,42 @@ export interface SessionView {
 
 export interface WidgetApi {
   onSessions(listener: (sessions: SessionView[]) => void): void;
+  /** ウィジェットの見た目に関わる設定（置く側、背景とカードの不透明度）が変わったとき */
+  onLayout(listener: (layout: WidgetLayout) => void): void;
+  /** 起動時に今の見た目の設定を取りに行く（起動直後に送られた onLayout を取りこぼさないため） */
+  getLayout(): Promise<WidgetLayout>;
   openSession(id: string): void;
   setCollapsed(collapsed: boolean): void;
+  /** true にすると、ウィジェットへのクリックを後ろのウィンドウへ通す（背景が 0% のとき、何もない所の上で使う） */
+  setClickThrough(through: boolean): void;
+  openSettings(): void;
   quit(): void;
+}
+
+export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity'>;
+
+export interface DisplayOption {
+  id: string;
+  label: string;
+}
+
+export interface AboutInfo {
+  version: string;
+  settingsFile: string;
+  dataFolders: string[];
+}
+
+export interface SettingsApi {
+  get(): Promise<Settings>;
+  set(patch: Partial<Settings>): void;
+  onChange(listener: (settings: Settings) => void): void;
+  displays(): Promise<DisplayOption[]>;
+  about(): Promise<AboutInfo>;
 }
 
 declare global {
   interface Window {
     widget: WidgetApi;
+    settingsApi: SettingsApi;
   }
 }

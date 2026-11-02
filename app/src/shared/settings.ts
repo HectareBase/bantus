@@ -1,0 +1,88 @@
+// 設定項目の定義。項目やカテゴリを足すときは、ここに足すだけで設定画面にも出る。
+
+export interface Settings {
+  /** ウィジェットを置く画面の端 */
+  edge: 'left' | 'right';
+  /** 置くモニター。'primary' か、モニターの ID（文字列） */
+  display: string;
+  /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
+  backgroundOpacity: number;
+  /** カードとタイトルバーの塗りの不透明度（%） */
+  cardOpacity: number;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  edge: 'right',
+  display: 'primary',
+  backgroundOpacity: 100,
+  cardOpacity: 50,
+};
+
+export type CategoryId = 'display' | 'about';
+
+export interface Category {
+  id: CategoryId;
+  label: string;
+  /** 左の一覧に出すアイコン（SVG の path） */
+  icon: string;
+}
+
+/** 左の一覧の並び。中身のないカテゴリは画面に出さない */
+export const CATEGORIES: Category[] = [
+  { id: 'display', label: '表示', icon: 'M2.5 3.5h11v9h-11zM10 3.5v9' },
+  { id: 'about', label: '情報', icon: 'M8 14.5a6.5 6.5 0 1 0 0-13a6.5 6.5 0 1 0 0 13M8 7.5v4M8 5v.01' },
+];
+
+interface Base<K extends keyof Settings> {
+  key: K;
+  category: CategoryId;
+  /** カテゴリの中の見出し */
+  group: string;
+  label: string;
+  description?: string;
+}
+
+export type SettingDef =
+  | (Base<'edge'> & { type: 'segmented'; options: { value: string; label: string }[] })
+  | (Base<'display'> & { type: 'display' })
+  | (Base<'backgroundOpacity' | 'cardOpacity'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+
+export const SETTING_DEFS: SettingDef[] = [
+  {
+    key: 'edge', category: 'display', group: '位置', type: 'segmented',
+    label: '画面の端', description: 'ウィジェットを置く側',
+    options: [{ value: 'left', label: '左' }, { value: 'right', label: '右' }],
+  },
+  { key: 'display', category: 'display', group: '位置', type: 'display', label: 'モニター' },
+  {
+    key: 'backgroundOpacity', category: 'display', group: '見た目', type: 'slider',
+    label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
+    min: 0, max: 100, step: 5, unit: '%',
+  },
+  {
+    key: 'cardOpacity', category: 'display', group: '見た目', type: 'slider',
+    label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
+    min: 0, max: 100, step: 5, unit: '%',
+  },
+];
+
+/** 保存されていた値や画面から届いた値を、定義に合う値にそろえる。合わないものは既定値に戻す */
+export function normalizeSettings(input: unknown): Settings {
+  const src = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const out: Settings = { ...DEFAULT_SETTINGS };
+  for (const def of SETTING_DEFS) {
+    const v = src[def.key];
+    switch (def.type) {
+      case 'segmented':
+        if (def.options.some((o) => o.value === v)) (out as any)[def.key] = v;
+        break;
+      case 'display':
+        if (typeof v === 'string' && v) out.display = v;
+        break;
+      case 'slider':
+        if (typeof v === 'number' && Number.isFinite(v)) out[def.key] = Math.min(def.max, Math.max(def.min, Math.round(v)));
+        break;
+    }
+  }
+  return out;
+}

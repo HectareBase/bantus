@@ -1,11 +1,17 @@
-/* Windows 11（Fluent）に合わせた見た目。背景は Mica なので透明にする。
+/* Windows 11（Fluent）に合わせた見た目。ウィンドウは透明で、テーマの背景色を --bg-alpha の不透明度で塗る。
+   カードとタイトルバーの塗りは --card-alpha。どちらも設定画面から変えられる（renderer.ts が値を入れる）。
+   --bg-alpha が 0 のときは、カードとタイトルバーだけが浮かんで見える。
    色は状態だけを表す。アニメーションは transform と opacity だけを使う（GPU の合成だけで描かれ、CPU をほとんど使わない）。 */
 
 :root {
   --text: #1a1a1a;
   --text-secondary: #5d5d5d;
   --text-tertiary: #8a8a8a;
-  --card: rgba(255, 255, 255, 0.7);
+  --bg-rgb: 243, 243, 243;
+  --card-rgb: 249, 249, 249;
+  --bg-alpha: 1;
+  --card-alpha: 0.5;
+  --card: rgba(var(--card-rgb), var(--card-alpha));
   --card-stroke: rgba(0, 0, 0, 0.06);
   --hover: rgba(0, 0, 0, 0.04);
   --pressed: rgba(0, 0, 0, 0.07);
@@ -24,7 +30,8 @@
     --text: #ffffff;
     --text-secondary: #c8c8c8;
     --text-tertiary: #9a9a9a;
-    --card: rgba(255, 255, 255, 0.05);
+    --bg-rgb: 32, 32, 32;
+    --card-rgb: 40, 40, 40;
     --card-stroke: rgba(0, 0, 0, 0.1);
     --hover: rgba(255, 255, 255, 0.06);
     --pressed: rgba(255, 255, 255, 0.04);
@@ -44,6 +51,11 @@ html, body {
   margin: 0;
   height: 100%;
   background: transparent;
+}
+
+html { background: rgba(var(--bg-rgb), var(--bg-alpha)); }
+
+body {
   color: var(--text);
   font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", sans-serif;
   user-select: none;
@@ -54,14 +66,18 @@ body { display: flex; flex-direction: column; }
 
 button { font: inherit; color: inherit; }
 
-/* ---- タイトルバー ---- */
+/* ---- タイトルバー（カードと同じ塗りで、背景が消えても浮かんで見える） ---- */
 .titlebar {
   display: flex;
   align-items: center;
   gap: 2px;
   height: 40px;
-  padding: 0 6px 0 14px;
+  margin: 8px 8px 8px;
+  padding: 0 4px 0 12px;
   flex: none;
+  background: var(--card);
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
 }
 .app-name { font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
 .spacer { flex: 1; }
@@ -219,6 +235,9 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 /* 停止中：中が空の円 */
 .ring { fill: none; stroke: var(--stopped); stroke-width: 1.5; }
 
+/* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
+html.floating .card, html.floating .titlebar, html.floating .mini-repo { border-color: rgba(128, 128, 128, 0.35); }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes blink { 50% { opacity: 0.2; } }
 
@@ -233,10 +252,13 @@ html.paused .spinner, html.paused .pulse, html.paused .mini-ring.blink { animati
 #mini { display: none; }
 html.collapsed main { display: none; }
 html.collapsed .app-name { display: none; }
-html.collapsed .titlebar { flex-direction: column; height: auto; padding: 6px 0; gap: 4px; }
+html.collapsed .titlebar { flex-direction: column; height: auto; margin: 8px 6px; padding: 4px 0; gap: 4px; }
 html.collapsed .spacer { display: none; }
-html.collapsed #quit { display: none; }
+html.collapsed #quit, html.collapsed #settings { display: none; }
+/* たたむボタンの矢印は、置いている端の向き。たたんだら反対を向く */
+html[data-edge="left"] #collapse svg { transform: rotate(180deg); }
 html.collapsed #collapse svg { transform: rotate(180deg); }
+html.collapsed[data-edge="left"] #collapse svg { transform: none; }
 html.collapsed #mini {
   display: flex;
   flex-direction: column;

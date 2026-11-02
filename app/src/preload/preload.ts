@@ -1,15 +1,34 @@
 // 画面に公開する API。Node や Electron の機能は、これ以外は画面から使えない。
+// sandbox の preload は自分のファイル以外を読み込めないので、shared からは型だけを使う。
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { SessionView, WidgetApi } from '../shared/types';
+import type { Settings } from '../shared/settings';
+import type { SessionView, SettingsApi, WidgetApi, WidgetLayout } from '../shared/types';
 
-const api: WidgetApi = {
+const widget: WidgetApi = {
   onSessions: (listener) => {
     ipcRenderer.on('sessions', (_e, sessions: SessionView[]) => listener(sessions));
   },
+  onLayout: (listener) => {
+    ipcRenderer.on('layout', (_e, layout: WidgetLayout) => listener(layout));
+  },
+  getLayout: () => ipcRenderer.invoke('layout:get'),
   openSession: (id) => ipcRenderer.send('open-session', id),
   setCollapsed: (collapsed) => ipcRenderer.send('set-collapsed', collapsed),
+  setClickThrough: (through) => ipcRenderer.send('set-click-through', through),
+  openSettings: () => ipcRenderer.send('open-settings'),
   quit: () => ipcRenderer.send('quit'),
 };
 
-contextBridge.exposeInMainWorld('widget', api);
+const settingsApi: SettingsApi = {
+  get: () => ipcRenderer.invoke('settings:get'),
+  set: (patch) => ipcRenderer.send('settings:set', patch),
+  onChange: (listener) => {
+    ipcRenderer.on('settings:changed', (_e, settings: Settings) => listener(settings));
+  },
+  displays: () => ipcRenderer.invoke('settings:displays'),
+  about: () => ipcRenderer.invoke('settings:about'),
+};
+
+contextBridge.exposeInMainWorld('widget', widget);
+contextBridge.exposeInMainWorld('settingsApi', settingsApi);

@@ -8,7 +8,7 @@ cd app
 npm install
 npm start
 ```
-`npm start` は、TypeScript をビルドしてから Electron を起動します。型だけを調べるときは `npm run typecheck` です。
+`npm start` は、TypeScript をビルドしてから Electron を起動します。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
 
 ### 見本データで表示を確かめる
 環境変数 `WIDGET_FIXTURE` に見本データのファイルを指定すると、実データの代わりにそれを表示します。対応待ちやワークツリーのセッションが今なくても、表示を確かめられます。見本データの ID は `local_sample-1` の形なので、クリックしても何も開きません。
@@ -18,7 +18,7 @@ $env:WIDGET_FIXTURE = "$PWD\fixtures\sessions.sample.json"; npx electron .
 PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows がウィンドウを非表示のままにするので、付けないでください。
 
 ## できること（今の版）
-- 背景は Mica。ライト / ダークは Windows の設定に従う
+- 透明なウィンドウに、テーマの背景色を設定した不透明度で塗る。背景を 0% にすると、カードとタイトルバーだけが浮かんで見え、何もない所のクリックは後ろのウィンドウに届く。ライト / ダークは Windows の設定に従う
 - リポジトリごとのカード。見出しの右に「要対応 n」「処理中 n」のバッジ
 - カードの中にワークツリーのセッションがあれば、「メイン（ブランチ名）」と各ワークツリーの小見出しで分ける
 - 状態の色：対応待ちは黄の点滅、処理中は青の回るリング、待機は緑の点、停止中はグレーの空の円。対応待ちと処理中の行には左端に色の帯
@@ -26,16 +26,34 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 - 行をクリック（または Enter）すると、`claude://` リンクでそのセッションを開く
 - マウスを乗せると、ワークツリーのブランチ名、対応待ちの理由、最後のターンのまとめを表示
 - 右上の `>` でたたむと、リポジトリの頭文字の丸だけの細いバーになる（縁がいちばん急ぐ状態の色）。`×` で終了
+- 歯車のボタンで設定ウィンドウが開く。変更はその場で反映され、保存ボタンはない
+
+## 設定
+| カテゴリ | 項目 |
+|---|---|
+| 表示 | 画面の端（左 / 右）、モニター、背景の不透明度（0〜100%）、カードの不透明度（0〜100%） |
+| 情報 | バージョン、読み取っているフォルダ、設定の保存先 |
+
+- **背景の不透明度**：テーマの背景色（ダークなら濃い灰色）の塗り。0% で背景が消え、カードとタイトルバーだけが浮かぶ。透明なウィンドウには Mica を使えないので、100% でも Mica ではなく塗りつぶし
+- **カードの不透明度**：カードとタイトルバーの塗り。0% で枠だけ。後ろが明るいと文字が読みにくくなるので、背景を 0% にするなら 80% 以上がおすすめ
+- ウィンドウ全体（文字も含む）の不透明度は 100% で固定。文字は常にはっきり表示する
+
+設定は `%APPDATA%\claude-helper-widget\settings.json` に保存します（リポジトリには入りません）。
+
+項目を足すときは、`src/shared/settings.ts` の `Settings`（型）、`DEFAULT_SETTINGS`（既定値）、`SETTING_DEFS`（画面に出す定義）に足します。種類は `segmented`（切り替えボタン）、`display`（モニターの選択）、`slider` です。オン / オフの項目が必要になったら、種類を足します。新しいカテゴリは `CATEGORIES` に足すと、項目が 1 つ以上あるときだけ左の一覧に出ます。
 
 ## ファイル
 | ファイル | 内容 |
 |---|---|
-| `src/main/main.ts` | ウィンドウを作り、画面の右端に置く。IPC の受け口 |
+| `src/main/main.ts` | ウィジェットと設定ウィンドウを作り、設定に合わせて位置・背景・不透明度を変える。IPC の受け口 |
+| `src/main/settings-store.ts` | 設定の読み書き |
 | `src/main/sessions.ts` | セッションの読み取りと、フォルダの見張り（`fs.watch`、30 秒ごとの読み直し） |
 | `src/preload/preload.ts` | 画面に公開する API（`window.widget`） |
-| `src/renderer/` | 画面（HTML、CSS、TypeScript）。変わったところだけを書き換える |
+| `src/renderer/index.html` ほか | ウィジェットの画面。変わったところだけを書き換える |
+| `src/renderer/settings.html` ほか | 設定ウィンドウの画面。`SETTING_DEFS` から作る |
 | `src/shared/types.ts` | メインプロセスと画面で共通の型 |
-| `scripts/copy-static.mjs` | HTML と CSS を `dist/` にコピーする |
+| `src/shared/settings.ts` | 設定項目の定義（カテゴリ、種類、既定値、値の検査） |
+| `scripts/copy-static.mjs` | HTML と CSS を `dist/web/` にコピーする |
 | `fixtures/sessions.sample.json` | 表示を確かめるための見本データ（一般的な名前だけ） |
 
 ## 測った数値
