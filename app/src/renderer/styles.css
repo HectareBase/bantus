@@ -13,6 +13,7 @@
   --card-alpha: 0.5;
   --card: rgba(var(--card-rgb), var(--card-alpha));
   --card-stroke: rgba(0, 0, 0, 0.06);
+  --divider: rgba(0, 0, 0, 0.08);
   --hover: rgba(0, 0, 0, 0.04);
   --pressed: rgba(0, 0, 0, 0.07);
   --selected: rgba(0, 0, 0, 0.08);
@@ -35,6 +36,7 @@
     --bg-rgb: 32, 32, 32;
     --card-rgb: 40, 40, 40;
     --card-stroke: rgba(0, 0, 0, 0.1);
+    --divider: rgba(255, 255, 255, 0.08);
     --hover: rgba(255, 255, 255, 0.06);
     --pressed: rgba(255, 255, 255, 0.04);
     --selected: rgba(255, 255, 255, 0.09);
@@ -124,11 +126,11 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   align-items: center;
   gap: 6px;
   margin: 0;
-  padding: 6px 10px 4px 12px;
+  padding: 6px 10px 8px 12px;
   font-size: 13px;
   font-weight: 600;
 }
-/* 印の列（16px）にそろえ、名前が行の文字と同じ位置から始まるようにする */
+/* 印の列（16px）にそろえ、名前が小見出しの文字と同じ位置から始まるようにする */
 .card-icon { flex: none; display: flex; justify-content: center; width: 16px; margin-right: 2px; color: var(--text-secondary); }
 .card-icon svg { width: 14px; height: 14px; }
 .repo-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -146,23 +148,36 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .badge[data-state="busy"] { background: var(--busy-bg); color: var(--busy); }
 
 /* ---- 小見出し（ワークツリー） ---- */
-/* 小見出し、行、「停止中 n」は、どれも「16px の印の列 + 8px + 文字」の並び。ワークツリーのあるなしで字下げを変えない */
+/* 見出し、小見出し、行、「停止中 n」は、どれも「16px の印の列 + 8px + 文字」の並び。
+   見出しの類は左の列にそろえ、セッションの行はいつも 1 段（12px）下げる。ワークツリーのあるなしで字下げを変えない */
 .subhead {
+  position: relative;
   display: grid;
   grid-template-columns: 16px 1fr;
   align-items: center;
   gap: 8px;
   margin: 0 4px;
-  padding: 6px 8px 2px;
+  padding: 2px 8px;
   font-size: 11px;
   color: var(--text-secondary);
+}
+/* ワークツリーの間の区切り線。最初の小見出しは見出しのすぐ下なので引かない */
+.subhead:not(:first-child) { margin-top: 6px; padding-top: 8px; }
+.subhead:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--divider);
 }
 .subhead-icon { justify-self: center; display: flex; }
 .subhead-icon svg { width: 12px; height: 12px; }
 .subhead-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- 行 ---- */
-.rows { list-style: none; margin: 0; padding: 0; }
+.rows { list-style: none; margin: 0; padding: 0 0 0 12px; }
 
 .row {
   position: relative;
@@ -171,7 +186,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   align-items: center;
   gap: 8px;
   margin: 0 4px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border-radius: 4px;
   cursor: default;
   outline: none;
@@ -198,7 +213,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row[data-attention][data-state="waiting"]::before { background: var(--waiting); }
 .row[data-attention][data-state="idle"]::before { background: var(--idle); }
 
-.text { min-width: 0; display: flex; flex-direction: column; }
+.text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .branch { overflow: hidden; text-overflow: ellipsis; }
