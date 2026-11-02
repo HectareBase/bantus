@@ -16,6 +16,8 @@ import {
   type Group,
   type PendingFocus,
 } from './model.js';
+import { flip } from './flip.js';
+import { initTooltips } from './tooltip.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const ICON_FOLDER = 'M2 4.5h4l1.5 1.5H14v6.5H2z';
@@ -45,6 +47,7 @@ const miniEl = document.getElementById('mini')!;
 const rowTemplate = document.getElementById('row-template') as HTMLTemplateElement;
 const cardTemplate = document.getElementById('card-template') as HTMLTemplateElement;
 const subheadTemplate = document.getElementById('subhead-template') as HTMLTemplateElement;
+const tooltips = initTooltips(document.getElementById('tooltip')!);
 
 const rows = new Map<string, RowRefs>();
 const cards = new Map<string, CardRefs>();
@@ -152,7 +155,7 @@ function getRow(s: SessionView): RowRefs {
   }
   if (prev?.title !== s.title) refs.title.textContent = s.title;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
-  refs.el.title = tooltip(s);
+  refs.el.dataset.tip = tooltip(s);
   refs.data = s;
   return refs;
 }
@@ -193,7 +196,7 @@ function getSubhead(key: string, group: Group): HTMLElement {
   }
   el.querySelector('.icon-path')!.setAttribute('d', group.isMain ? ICON_FOLDER : ICON_BRANCH);
   el.querySelector('.subhead-label')!.textContent = group.label;
-  el.title = group.tooltip;
+  el.dataset.tip = group.tooltip;
   return el;
 }
 
@@ -250,7 +253,7 @@ function renderMini(list: Card[]) {
   const nodes = list.map((card) => {
     const item = document.createElement('div');
     item.className = 'mini-repo';
-    item.title = card.name;
+    item.dataset.tip = card.name;
     item.textContent = [...card.name][0]?.toUpperCase() ?? '?';
     const ring = document.createElement('span');
     ring.className = 'mini-ring';
@@ -264,11 +267,21 @@ function renderMini(list: Card[]) {
   miniEl.replaceChildren(...nodes);
 }
 
+/** 並べ替えで動かす要素。親（カード）を子より先に */
+function* animatedElements(): Iterable<HTMLElement> {
+  for (const c of cards.values()) yield c.el;
+  yield* subheads.values();
+  for (const r of rows.values()) yield r.el;
+}
+
 function render(sessions: SessionView[]) {
   latest = sessions;
   const list = buildCards(sessions);
-  syncChildren(cardsEl, list.map(renderCard));
-  renderMini(list);
+  // 並びが変わった行・小見出し・カードを、前の位置からすべらせる
+  flip(animatedElements, () => {
+    syncChildren(cardsEl, list.map(renderCard));
+    renderMini(list);
+  });
 
   // なくなったものは捨てる
   const ids = new Set(sessions.map((s) => s.id));
@@ -280,6 +293,7 @@ function render(sessions: SessionView[]) {
     for (const [key, el] of map) if (!el.isConnected) map.delete(key);
   }
   applyFocus();
+  tooltips.prune();
 }
 
 // ---- 画面の操作 ----

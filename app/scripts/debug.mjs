@@ -1,5 +1,6 @@
 // 開発用：見本データ（fixtures/*.json）でウィジェットを起動する。実データは読まない。
-//   node scripts/debug.mjs [見本の名前] [--cycle 秒] [--screenshot 保存先.png]
+//   node scripts/debug.mjs [見本の名前] [--cycle 秒] [--screenshot 保存先.png] [--focus セレクター]
+//   --focus：撮る前にその要素へフォーカスする（ツールチップを写す）
 // 見本の名前の既定は all-states。ファイルを書き換えると、すぐ表示に出る。
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { parseArgs } from 'node:util';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { cycle: { type: 'string' }, screenshot: { type: 'string' } },
+  options: { cycle: { type: 'string' }, screenshot: { type: 'string' }, focus: { type: 'string' } },
 });
 
 const name = positionals[0] ?? 'all-states';
@@ -27,6 +28,7 @@ if (values.screenshot) {
   env.WIDGET_SCREENSHOT = resolve(values.screenshot);
   mkdirSync(dirname(env.WIDGET_SCREENSHOT), { recursive: true });
 }
+if (values.focus) env.WIDGET_SCREENSHOT_FOCUS = values.focus;
 
 const electron = createRequire(import.meta.url)('electron');
 const child = spawn(electron, ['.'], { cwd: root, env, stdio: 'inherit' });

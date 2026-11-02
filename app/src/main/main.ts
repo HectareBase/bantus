@@ -99,6 +99,9 @@ async function captureAndQuit(w: BrowserWindow, path: string) {
   );
   // 点滅や回転の途中で撮らないよう、アニメーションを止める
   await w.webContents.insertCSS('*, *::before, *::after { animation: none !important; }');
+  // ツールチップを見たいときは、その要素にフォーカスして出す（WIDGET_SCREENSHOT_FOCUS に CSS セレクター）
+  const focus = process.env.WIDGET_SCREENSHOT_FOCUS;
+  if (focus) await w.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(focus)})?.focus()`);
   // 画面に収まらない分も撮れるよう、ウィンドウを中身の高さまで伸ばす（スクロールする要素のいちばん大きな高さ）
   const overflow: number = await w.webContents.executeJavaScript(
     "Math.max(0, ...[...document.querySelectorAll('*')].map((e) => e.scrollHeight - e.clientHeight))",

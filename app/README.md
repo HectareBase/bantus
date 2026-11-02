@@ -30,7 +30,8 @@ npm test
 ```bash
 npm run debug                      # all-states（すべての状態と分岐）
 npm run debug -- empty             # 見本の名前（fixtures/<名前>.json）か、ファイルのパス
-npm run debug -- all-states --cycle 3   # 3 秒ごとに全セッションの状態を 1 つ進める
+npm run debug -- all-states --cycle 3   # 3 秒ごとに全セッションの状態を 1 つ進める（並べ替えのアニメーションも見られる）
+node scripts/debug.mjs all-states --screenshot out.png --focus "#quit"   # その要素にフォーカスし、ツールチップを出して撮る
 npm run screenshots                # すべての見本を dist/screenshots/<名前>.png に撮る
 ```
 | 見本 | 中身 |
@@ -43,7 +44,7 @@ npm run screenshots                # すべての見本を dist/screenshots/<名
 - 見本データで起動したときは、設定とデータのフォルダを `claude-helper-widget-debug` に分ける。いつものウィジェットと同時に起動でき、設定も別になる（片方を左に置くと比べやすい）
 - 撮影では、停止中をすべて開き、アニメーションを止め、画面に収まらない分までウィンドウを伸ばしてから撮る
 - 見本データの ID は `local_all-01` の形なので、クリックしても何も開かない。`minutesAgo` は「何分前に動きがあったか」
-- 中身は環境変数で決まる：`WIDGET_FIXTURE`（見本のパス）、`WIDGET_FIXTURE_CYCLE`（巡回の秒数）、`WIDGET_SCREENSHOT`（撮って終わる。保存先）
+- 中身は環境変数で決まる：`WIDGET_FIXTURE`（見本のパス）、`WIDGET_FIXTURE_CYCLE`（巡回の秒数）、`WIDGET_SCREENSHOT`（撮って終わる。保存先）、`WIDGET_SCREENSHOT_FOCUS`（撮る前にフォーカスする要素のセレクター）
 
 PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows がウィンドウを非表示のままにするので、付けないでください。
 
@@ -54,7 +55,8 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 - 状態の色：対応待ちは黄の点滅、処理中は青の回るリング、待機は緑の点、停止中はグレーの空の円。対応待ちと処理中の行には左端に色の帯
 - 停止中はカードの下に「停止中 n」とたたむ。開くとワークツリー名を添えて並ぶ
 - 行をクリック（または Enter）すると、`claude://` リンクでそのセッションを開く
-- マウスを乗せると、ワークツリーのブランチ名、対応待ちの理由、最後のターンのまとめを表示
+- マウスを乗せると（またはキーボードでフォーカスすると）、ワークツリーのブランチ名、対応待ちの理由、最後のターンのまとめをツールチップで表示。ツールチップは自前で描き、行の下（入らなければ上）にフェードインする。たたんだ表示ではウィンドウに収まらないので、OS のツールチップを使う
+- 並びが変わると、行・小見出し・カードが前の位置からすべって動き、新しく出たものはフェードインする。アニメーションを減らす設定のときと、ウィンドウが見えていないときは動かさない
 - 右上の `>` でたたむと、リポジトリの頭文字の丸だけの細いバーになる（縁がいちばん急ぐ状態の色）。`×` で終了
 - 歯車のボタンで設定ウィンドウが開く。変更はその場で反映され、保存ボタンはない
 
@@ -80,6 +82,8 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | `src/main/sessions.ts` | セッションの読み取りと、フォルダの見張り（`fs.watch`、30 秒ごとの読み直し） |
 | `src/preload/preload.ts` | 画面に公開する API（`window.widget`） |
 | `src/renderer/index.html` ほか | ウィジェットの画面。変わったところだけを書き換える |
+| `src/renderer/tooltip.ts` | ツールチップ（`data-tip` を持つ要素。`popover="hint"` と CSS anchor positioning） |
+| `src/renderer/flip.ts` | 並べ替えのアニメーション（FLIP。View Transitions はスクロールの枠からはみ出すので使わない） |
 | `src/renderer/model.ts` | 画面に出す形への組み立て（カード、小見出し、バッジ、ツールチップ）。DOM を使わない |
 | `src/renderer/settings.html` ほか | 設定ウィンドウの画面。`SETTING_DEFS` から作る |
 | `src/shared/types.ts` | メインプロセスと画面で共通の型 |
