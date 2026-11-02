@@ -1,3 +1,5 @@
 #!/bin/sh
-# コミットメッセージに、公開してはいけない情報が入っていないか調べる
-exec "$(git rev-parse --show-toplevel)/.githooks/check-private.sh" --message "$1"
+# コミットメッセージに、公開してはいけない情報が入っていないか、決まり（docs/commit-messages.md）に合っているかを調べる
+root=$(git rev-parse --show-toplevel)
+"$root/.githooks/check-private.sh" --message "$1" || exit 1
+exec "$root/.githooks/check-commit-msg.sh" "$1"

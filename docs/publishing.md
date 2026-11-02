@@ -8,7 +8,7 @@
 | 漏れる場所 | 対策 | 仕組み |
 |---|---|---|
 | ファイルの中身 | コミットのときに検査し、見つかったらコミットを止める | `.githooks/pre-commit` |
-| コミットメッセージ | 同じ検査 | `.githooks/commit-msg` |
+| コミットメッセージ | 同じ検査。あわせて書き方の決まり（[commit-messages.md](commit-messages.md)）も調べる | `.githooks/commit-msg` |
 | 作者の名前とメールアドレス | このリポジトリ専用の設定を使う。push のときに確認する | `.githooks/pre-push` |
 | 個人の設定、生のログ | git に入れない | `.gitignore`（`local/`、`prototype/shortcuts.json`） |
 

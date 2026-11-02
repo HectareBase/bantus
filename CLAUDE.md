@@ -7,6 +7,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 - 認証情報を含むファイル（`config.json`、`ssh-remote-server-state.json`、`~/.claude.json`、`sessions/*.key`）は読まない。一覧は [docs/data-sources.md](docs/data-sources.md)
 - セッションを開くときは `claude://claude.ai/epitaxy/<local_ID>` を使う。UIA のクリックは補助としてだけ使う
 - 公開を前提にしている。個人情報と日付を書かない。コミットは git フック（`.githooks/`）が検査する。コミットの日時は書き換えない。詳しくは [docs/publishing.md](docs/publishing.md)
+- コミットメッセージは日本語で、1 行目を `<種別>(<範囲>): <要約>` にする（例：`feat(app): ツールチップを自前で描く`）。`commit-msg` フックが検査する。詳しくは [docs/commit-messages.md](docs/commit-messages.md)
 - 状態の判定は [docs/session-status.md](docs/session-status.md) に従う。知らない `waitingFor` の値は「対応待ち（その他）」として扱う
 
 ## フォルダ
