@@ -6,10 +6,22 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { SessionState, SessionView } from '../shared/types';
 
-const RUNNING_DIR = join(homedir(), '.claude', 'sessions');
+/** 読み取るフォルダ。テストでは偽のフォルダを渡す */
+export interface DataPaths {
+  /** CLI が動いているセッションの状態（`~/.claude/sessions`） */
+  runningDir: string;
+  /** デスクトップのデータ（`%LOCALAPPDATA%\Claude-Data`） */
+  dataBase: string;
+}
 
-function claudeDataDirs(): string[] {
-  const base = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Claude-Data');
+export function defaultPaths(): DataPaths {
+  return {
+    runningDir: join(homedir(), '.claude', 'sessions'),
+    dataBase: join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Claude-Data'),
+  };
+}
+
+function claudeDataDirs(base: string): string[] {
   return listDirs(base)
     .filter((name) => name.startsWith('claude_'))
     .map((name) => join(base, name, 'claude-code-sessions'));
@@ -52,9 +64,9 @@ function isAlive(pid: unknown): boolean {
 }
 
 /** CLI のセッション ID → { status, waitingFor }。ファイルだけが残っているものは除く */
-function readRunning(): Map<string, { status?: string; waitingFor?: string }> {
+function readRunning(runningDir: string): Map<string, { status?: string; waitingFor?: string }> {
   const map = new Map<string, { status?: string; waitingFor?: string }>();
-  for (const file of listFiles(RUNNING_DIR, /^\d+\.json$/)) {
+  for (const file of listFiles(runningDir, /^\d+\.json$/)) {
     const d = readJson(file);
     if (!d?.sessionId || !isAlive(d.pid)) continue;
     map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor });
@@ -62,7 +74,7 @@ function readRunning(): Map<string, { status?: string; waitingFor?: string }> {
   return map;
 }
 
-function toState(running: { status?: string } | undefined): SessionState {
+export function toState(running: { status?: string } | undefined): SessionState {
   if (!running) return 'stopped';
   switch (running.status) {
     case 'waiting': return 'waiting';
@@ -73,14 +85,15 @@ function toState(running: { status?: string } | undefined): SessionState {
 }
 
 /** 読み取っているフォルダ（設定画面の「情報」用） */
-export function sessionDataFolders(): string[] {
-  return [RUNNING_DIR, ...claudeDataDirs()];
+export function sessionDataFolders(paths = defaultPaths()): string[] {
+  if (process.env.WIDGET_FIXTURE) return [process.env.WIDGET_FIXTURE];
+  return [paths.runningDir, ...claudeDataDirs(paths.dataBase)];
 }
 
 /** local_*.json が入っているフォルダ（アカウントごと） */
-function sessionDirs(): string[] {
+function sessionDirs(dataBase: string): string[] {
   const dirs: string[] = [];
-  for (const root of claudeDataDirs()) {
+  for (const root of claudeDataDirs(dataBase)) {
     for (const a of listDirs(root)) {
       for (const b of listDirs(join(root, a))) dirs.push(join(root, a, b));
     }
@@ -107,23 +120,43 @@ export function shortBranch(branch: string): string {
   return branch.replace(/^claude\//, '').replace(/-[0-9a-f]{6}$/, '');
 }
 
+const ORDER: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
+const STATES = Object.keys(ORDER) as SessionState[];
+
+function sortSessions(views: SessionView[]): SessionView[] {
+  return views.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.lastActivityAt - a.lastActivityAt);
+}
+
+/** 開発用の巡回の間隔（ミリ秒）。WIDGET_FIXTURE_CYCLE（秒）がなければ 0 */
+function cycleMs(): number {
+  return Math.max(0, Number(process.env.WIDGET_FIXTURE_CYCLE) || 0) * 1000;
+}
+
 /**
  * 開発用：環境変数 WIDGET_FIXTURE に見本データ（app/fixtures/*.json）を指定すると、実データの代わりに表示する。
  * 見本データの minutesAgo は「何分前に動きがあったか」。
+ * WIDGET_FIXTURE_CYCLE（秒）を付けると、その間隔ですべてのセッションの状態を 1 つずつ進める（状態の変化と並べ替えを確かめる）。
  */
-function readFixture(path: string): SessionView[] {
+export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): SessionView[] {
   const items = readJson(path);
   if (!Array.isArray(items)) return [];
-  const now = Date.now();
-  return items.map(({ minutesAgo, ...s }) => ({ ...s, lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000 }));
+  const step = cycle ? Math.floor(now / cycle) : 0;
+  return sortSessions(items.map(({ minutesAgo, ...s }) => {
+    const view: SessionView = { ...s, lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000 };
+    if (!step) return view;
+    const state = STATES[(STATES.indexOf(view.state) + step) % STATES.length]!;
+    // 実データと同じく、waitingFor は対応待ちのときだけ
+    const waitingFor = state === 'waiting' ? view.waitingFor ?? 'input needed' : undefined;
+    return { ...view, state, waitingFor };
+  }));
 }
 
-export function readSessions(): SessionView[] {
+export function readSessions(paths = defaultPaths()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
-  const running = readRunning();
+  const running = readRunning(paths.runningDir);
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
-  for (const dir of sessionDirs()) {
+  for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
       if (!d?.sessionId || d.isArchived) continue;
@@ -150,30 +183,32 @@ export function readSessions(): SessionView[] {
       });
     }
   }
-  const order: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
-  return views.sort((a, b) => order[a.state] - order[b.state] || b.lastActivityAt - a.lastActivityAt);
+  return sortSessions(views);
 }
 
 /**
  * 2 種類のフォルダを見張り、変化があったら（まとめて）onChange を呼ぶ。
  * fs.watch は取りこぼすことがあるので、低い頻度の読み直しも続ける。
  */
-export function watchSessions(onChange: () => void, fallbackMs = 30_000): () => void {
+export function watchSessions(onChange: () => void, fallbackMs = 30_000, paths = defaultPaths()): () => void {
   let timer: NodeJS.Timeout | undefined;
   const schedule = () => {
     clearTimeout(timer);
     timer = setTimeout(onChange, 250);
   };
 
+  // 見本データのときは、そのファイルを見張る（書き換えるとすぐ表示に出る）
+  const fixture = process.env.WIDGET_FIXTURE;
+  const targets = fixture ? [fixture] : [paths.runningDir, ...claudeDataDirs(paths.dataBase)];
   const watchers: FSWatcher[] = [];
-  for (const dir of [RUNNING_DIR, ...claudeDataDirs()]) {
+  for (const target of targets) {
     try {
-      watchers.push(watch(dir, { recursive: true }, schedule));
+      watchers.push(watch(target, { recursive: !fixture }, schedule));
     } catch {
       // フォルダがまだない場合は、低い頻度の読み直しに任せる
     }
   }
-  const interval = setInterval(onChange, fallbackMs);
+  const interval = setInterval(onChange, (fixture && cycleMs()) || fallbackMs);
 
   return () => {
     clearTimeout(timer);

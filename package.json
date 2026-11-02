@@ -1,0 +1,13 @@
+{
+  "name": "claude-helper",
+  "private": true,
+  "description": "Runs the app/ scripts from the repository root",
+  "scripts": {
+    "setup": "npm --prefix app install",
+    "start": "npm --prefix app start --",
+    "debug": "npm --prefix app run debug --",
+    "screenshots": "npm --prefix app run screenshots --",
+    "test": "npm --prefix app test --",
+    "typecheck": "npm --prefix app run typecheck --"
+  }
+}

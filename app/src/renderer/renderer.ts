@@ -2,17 +2,9 @@
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
 import type { SessionState, SessionView, WidgetLayout } from '../shared/types';
+import { buildCards, buildGroups, cardBadge, formatAgo, stateOfRank, tooltip, type Card, type Group } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
-const WAITING_LABELS: Record<string, string> = {
-  'permission prompt': '許可待ち',
-  'input needed': '回答待ち',
-  'dialog open': '画面を表示中',
-  'sandbox request': 'サンドボックスの許可待ち',
-  'worker request': 'ワーカーの要求待ち',
-  'goal proposal': 'ゴールの確認待ち',
-};
 const ICON_FOLDER = 'M2 4.5h4l1.5 1.5H14v6.5H2z';
 const ICON_BRANCH = 'M5 2.5v11M11 7.5a1.75 1.75 0 1 0 0-3.5a1.75 1.75 0 1 0 0 3.5M11 7.5c0 3-6 2.5-6 5';
 
@@ -33,23 +25,6 @@ interface CardRefs {
   stopped: HTMLElement;
   stoppedLabel: HTMLElement;
   stoppedRows: HTMLUListElement;
-}
-
-interface Group {
-  key: string;
-  label: string;
-  tooltip: string;
-  isMain: boolean;
-  sessions: SessionView[];
-}
-
-interface Card {
-  key: string;
-  name: string;
-  active: SessionView[];
-  stopped: SessionView[];
-  rank: number;
-  latest: number;
 }
 
 const cardsEl = document.getElementById('cards')!;
@@ -85,20 +60,6 @@ function syncChildren(parent: Element, nodes: Element[]) {
   while (parent.children.length > nodes.length) parent.lastElementChild!.remove();
 }
 
-function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
-  return a.rank - b.rank || b.latest - a.latest;
-}
-
-function formatAgo(ms: number): string {
-  if (!ms) return '';
-  const min = Math.floor((Date.now() - ms) / 60_000);
-  if (min < 1) return 'たった今';
-  if (min < 60) return `${min} 分前`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 時間前`;
-  return `${Math.floor(h / 24)} 日前`;
-}
-
 // ---- 状態の印 ----
 
 function statusIcon(state: SessionState): SVGElement {
@@ -118,15 +79,6 @@ function statusIcon(state: SessionState): SVGElement {
       root.append(svg('circle', { cx: '8', cy: '8', r: '4', class: 'ring' }));
   }
   return root;
-}
-
-function tooltip(s: SessionView): string {
-  const lines = [s.title];
-  if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
-  if (s.state === 'waiting') lines.push(`対応待ち：${WAITING_LABELS[s.waitingFor ?? ''] ?? s.waitingFor ?? '不明'}`);
-  if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
-  if (s.detail) lines.push(s.detail);
-  return lines.join('\n');
 }
 
 // ---- 行 ----
@@ -211,55 +163,13 @@ function getList(key: string): HTMLUListElement {
   return ul;
 }
 
-function buildCards(sessions: SessionView[]): Card[] {
-  const map = new Map<string, Card>();
-  for (const s of sessions) {
-    let card = map.get(s.repoKey);
-    if (!card) {
-      card = { key: s.repoKey, name: s.repoName, active: [], stopped: [], rank: 3, latest: 0 };
-      map.set(s.repoKey, card);
-    }
-    (s.state === 'stopped' ? card.stopped : card.active).push(s);
-    card.rank = Math.min(card.rank, RANK[s.state]);
-    card.latest = Math.max(card.latest, s.lastActivityAt);
-  }
-  return [...map.values()].sort(byUrgency);
-}
-
-function buildGroups(active: SessionView[]): Group[] {
-  const map = new Map<string, Group & { rank: number; latest: number }>();
-  for (const s of active) {
-    const key = s.worktree?.key ?? '';
-    let g = map.get(key);
-    if (!g) {
-      g = s.worktree
-        ? { key, label: s.worktree.label, tooltip: s.worktree.branch, isMain: false, sessions: [], rank: 3, latest: 0 }
-        : {
-            key,
-            label: s.mainBranch ? `メイン（${s.mainBranch}）` : 'メイン',
-            tooltip: 'リポジトリのフォルダで作業しているセッション',
-            isMain: true,
-            sessions: [],
-            rank: 3,
-            latest: 0,
-          };
-      map.set(key, g);
-    }
-    g.sessions.push(s);
-    g.rank = Math.min(g.rank, RANK[s.state]);
-    g.latest = Math.max(g.latest, s.lastActivityAt);
-  }
-  return [...map.values()].sort(byUrgency);
-}
-
 function renderCard(card: Card): HTMLElement {
   const refs = getCard(card);
   refs.name.textContent = card.name;
 
-  const waiting = card.active.filter((s) => s.state === 'waiting').length;
-  const busy = card.active.filter((s) => s.state === 'busy').length;
-  refs.badge.dataset.state = waiting ? 'waiting' : busy ? 'busy' : '';
-  refs.badge.textContent = waiting ? `要対応 ${waiting}` : busy ? `処理中 ${busy}` : '';
+  const badge = cardBadge(card);
+  refs.badge.dataset.state = badge.state;
+  refs.badge.textContent = badge.text;
 
   // ワークツリーのセッションがあるときだけ、小見出しで分ける
   const groups = buildGroups(card.active);
@@ -301,7 +211,7 @@ function renderMini(list: Card[]) {
     item.textContent = [...card.name][0]?.toUpperCase() ?? '?';
     const ring = document.createElement('span');
     ring.className = 'mini-ring';
-    const state = (Object.keys(RANK) as SessionState[]).find((k) => RANK[k] === card.rank)!;
+    const state = stateOfRank(card.rank);
     ring.dataset.state = state;
     ring.classList.toggle('blink', state === 'waiting');
     item.append(ring);

@@ -8,13 +8,43 @@ cd app
 npm install
 npm start
 ```
+リポジトリの一番上からでも動かせます。一番上の `package.json` は、同じ名前のコマンドを `app/` に渡すだけです（`npm install` の代わりは `npm run setup`）。
+```bash
+npm run setup
+npm start
+npm run debug -- empty --cycle 3
+```
 `npm start` は、TypeScript をビルドしてから Electron を起動します。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
 
-### 見本データで表示を確かめる
-環境変数 `WIDGET_FIXTURE` に見本データのファイルを指定すると、実データの代わりにそれを表示します。対応待ちやワークツリーのセッションが今なくても、表示を確かめられます。見本データの ID は `local_sample-1` の形なので、クリックしても何も開きません。
-```powershell
-$env:WIDGET_FIXTURE = "$PWD\fixtures\sessions.sample.json"; npx electron .
+### テスト
+```bash
+npm test
 ```
+`node:test` で動きます（追加のパッケージなし）。`tsconfig.test.json` で `dist/test/` にビルドしてから実行します。
+- `test/sessions.test.ts`：セッションの読み取り。一時フォルダに偽の `~/.claude/sessions` と `Claude-Data` を作って読ませる（本物のデータには触れない）。状態の判定、並び順、ワークツリーのまとめ方、壊れたファイルやアーカイブ済みの除外
+- `test/model.test.ts`：画面に出す形への組み立て（`src/renderer/model.ts`）。カードと小見出しの並び、バッジ、ツールチップ、「◯分前」
+- `test/fixtures.test.ts`：見本データの形。`all-states.json` がすべての状態・理由・分岐を含んでいるか
+
+### 見本データで表示を確かめる（デバッグ）
+実データの代わりに `fixtures/` の見本データを表示します。対応待ちやワークツリーのセッションが今なくても、すべての表示を確かめられます。
+```bash
+npm run debug                      # all-states（すべての状態と分岐）
+npm run debug -- empty             # 見本の名前（fixtures/<名前>.json）か、ファイルのパス
+npm run debug -- all-states --cycle 3   # 3 秒ごとに全セッションの状態を 1 つ進める
+npm run screenshots                # すべての見本を dist/screenshots/<名前>.png に撮る
+```
+| 見本 | 中身 |
+|---|---|
+| `all-states.json` | 4 つの状態すべて、対応待ちの理由すべて（知らない理由と理由なしも）、対応が必要・まとめ、メインとワークツリー、同じワークツリーに複数、ワークツリーだけのカード、停止中だけのカード、ブランチ不明、フォルダなし、長い名前、日本語の名前、時刻の表示すべて |
+| `sessions.sample.json` | ふだんの使い方に近い少なめの例 |
+| `empty.json` | セッションが 1 つもないとき |
+
+- 見本データのファイルを書き換えると、すぐ表示に出る
+- 見本データで起動したときは、設定とデータのフォルダを `claude-helper-widget-debug` に分ける。いつものウィジェットと同時に起動でき、設定も別になる（片方を左に置くと比べやすい）
+- 撮影では、停止中をすべて開き、アニメーションを止め、画面に収まらない分までウィンドウを伸ばしてから撮る
+- 見本データの ID は `local_all-01` の形なので、クリックしても何も開かない。`minutesAgo` は「何分前に動きがあったか」
+- 中身は環境変数で決まる：`WIDGET_FIXTURE`（見本のパス）、`WIDGET_FIXTURE_CYCLE`（巡回の秒数）、`WIDGET_SCREENSHOT`（撮って終わる。保存先）
+
 PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows がウィンドウを非表示のままにするので、付けないでください。
 
 ## できること（今の版）
@@ -50,11 +80,14 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | `src/main/sessions.ts` | セッションの読み取りと、フォルダの見張り（`fs.watch`、30 秒ごとの読み直し） |
 | `src/preload/preload.ts` | 画面に公開する API（`window.widget`） |
 | `src/renderer/index.html` ほか | ウィジェットの画面。変わったところだけを書き換える |
+| `src/renderer/model.ts` | 画面に出す形への組み立て（カード、小見出し、バッジ、ツールチップ）。DOM を使わない |
 | `src/renderer/settings.html` ほか | 設定ウィンドウの画面。`SETTING_DEFS` から作る |
 | `src/shared/types.ts` | メインプロセスと画面で共通の型 |
 | `src/shared/settings.ts` | 設定項目の定義（カテゴリ、種類、既定値、値の検査） |
 | `scripts/copy-static.mjs` | HTML と CSS を `dist/web/` にコピーする |
-| `fixtures/sessions.sample.json` | 表示を確かめるための見本データ（一般的な名前だけ） |
+| `fixtures/*.json` | 表示を確かめるための見本データ（一般的な名前だけ） |
+| `scripts/debug.mjs`、`scripts/screenshots.mjs` | 見本データでの起動と撮影 |
+| `test/` | テスト（`npm test`） |
 
 ## 測った数値
 4K（3840×2160）の画面で、それぞれ 15 秒間測りました。

@@ -2,6 +2,7 @@
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
 import { app, BrowserWindow, ipcMain, screen, shell, type Display } from 'electron';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
@@ -19,6 +20,9 @@ let collapsed = false;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
+
+// 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
+if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
 
 // ---- 位置と見た目 ----
 
@@ -82,8 +86,33 @@ function createWidget(): BrowserWindow {
     applySettings(getSettings());
     w.show();
     sendSessions(true);
+    if (process.env.WIDGET_SCREENSHOT) void captureAndQuit(w, process.env.WIDGET_SCREENSHOT);
   });
   return w;
+}
+
+/** 開発用：停止中もすべて開いた画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
+async function captureAndQuit(w: BrowserWindow, path: string) {
+  await new Promise((r) => setTimeout(r, 500));
+  await w.webContents.executeJavaScript(
+    "document.querySelectorAll('.stopped:not([hidden]) .stopped-toggle').forEach((b) => b.click())",
+  );
+  // 点滅や回転の途中で撮らないよう、アニメーションを止める
+  await w.webContents.insertCSS('*, *::before, *::after { animation: none !important; }');
+  // 画面に収まらない分も撮れるよう、ウィンドウを中身の高さまで伸ばす（スクロールする要素のいちばん大きな高さ）
+  const overflow: number = await w.webContents.executeJavaScript(
+    "Math.max(0, ...[...document.querySelectorAll('*')].map((e) => e.scrollHeight - e.clientHeight))",
+  );
+  if (overflow > 0) w.setBounds({ ...w.getBounds(), height: w.getBounds().height + overflow });
+  await new Promise((r) => setTimeout(r, 300));
+  try {
+    const image = await w.webContents.capturePage();
+    writeFileSync(path, image.toPNG());
+  } catch (e) {
+    console.error('画面を保存できませんでした：', e);
+    app.exit(1);
+  }
+  app.quit();
 }
 
 function openSettingsWindow() {
@@ -192,4 +221,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit());
 
 // 二重起動を防ぐ
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) {
+  if (process.env.WIDGET_FIXTURE) console.error('同じデータフォルダのウィジェットがもう動いています');
+  app.quit();
+}

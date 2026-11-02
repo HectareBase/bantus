@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.main.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist/test",
+    "sourceMap": false
+  },
+  "include": ["test/**/*.ts", "src/main/sessions.ts", "src/renderer/model.ts", "src/shared/**/*.ts"]
+}

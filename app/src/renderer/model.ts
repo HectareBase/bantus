@@ -1,0 +1,112 @@
+// 画面に出す形への組み立て（カード、小見出し、ツールチップ）。DOM を使わないので、テストから直接呼べる。
+
+import type { SessionState, SessionView } from '../shared/types';
+
+export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
+export const WAITING_LABELS: Record<string, string> = {
+  'permission prompt': '許可待ち',
+  'input needed': '回答待ち',
+  'dialog open': '画面を表示中',
+  'sandbox request': 'サンドボックスの許可待ち',
+  'worker request': 'ワーカーの要求待ち',
+  'goal proposal': 'ゴールの確認待ち',
+};
+
+export interface Group {
+  key: string;
+  label: string;
+  tooltip: string;
+  isMain: boolean;
+  sessions: SessionView[];
+}
+
+export interface Card {
+  key: string;
+  name: string;
+  active: SessionView[];
+  stopped: SessionView[];
+  rank: number;
+  latest: number;
+}
+
+function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
+  return a.rank - b.rank || b.latest - a.latest;
+}
+
+export function stateOfRank(rank: number): SessionState {
+  return (Object.keys(RANK) as SessionState[]).find((k) => RANK[k] === rank) ?? 'stopped';
+}
+
+export function formatAgo(ms: number, now = Date.now()): string {
+  if (!ms) return '';
+  const min = Math.floor((now - ms) / 60_000);
+  if (min < 1) return 'たった今';
+  if (min < 60) return `${min} 分前`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} 時間前`;
+  return `${Math.floor(h / 24)} 日前`;
+}
+
+/** 知らない waitingFor はそのまま出す（docs/session-status.md：「対応待ち（その他）」） */
+export function waitingLabel(waitingFor: string | undefined): string {
+  return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
+}
+
+export function tooltip(s: SessionView): string {
+  const lines = [s.title];
+  if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
+  if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
+  if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
+  if (s.detail) lines.push(s.detail);
+  return lines.join('\n');
+}
+
+export function buildCards(sessions: SessionView[]): Card[] {
+  const map = new Map<string, Card>();
+  for (const s of sessions) {
+    let card = map.get(s.repoKey);
+    if (!card) {
+      card = { key: s.repoKey, name: s.repoName, active: [], stopped: [], rank: 3, latest: 0 };
+      map.set(s.repoKey, card);
+    }
+    (s.state === 'stopped' ? card.stopped : card.active).push(s);
+    card.rank = Math.min(card.rank, RANK[s.state]);
+    card.latest = Math.max(card.latest, s.lastActivityAt);
+  }
+  return [...map.values()].sort(byUrgency);
+}
+
+export function buildGroups(active: SessionView[]): Group[] {
+  const map = new Map<string, Group & { rank: number; latest: number }>();
+  for (const s of active) {
+    const key = s.worktree?.key ?? '';
+    let g = map.get(key);
+    if (!g) {
+      g = s.worktree
+        ? { key, label: s.worktree.label, tooltip: s.worktree.branch, isMain: false, sessions: [], rank: 3, latest: 0 }
+        : {
+            key,
+            label: s.mainBranch ? `メイン（${s.mainBranch}）` : 'メイン',
+            tooltip: 'リポジトリのフォルダで作業しているセッション',
+            isMain: true,
+            sessions: [],
+            rank: 3,
+            latest: 0,
+          };
+      map.set(key, g);
+    }
+    g.sessions.push(s);
+    g.rank = Math.min(g.rank, RANK[s.state]);
+    g.latest = Math.max(g.latest, s.lastActivityAt);
+  }
+  return [...map.values()].sort(byUrgency);
+}
+
+/** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
+export function cardBadge(card: Card): { state: '' | 'waiting' | 'busy'; text: string } {
+  const waiting = card.active.filter((s) => s.state === 'waiting').length;
+  const busy = card.active.filter((s) => s.state === 'busy').length;
+  if (waiting) return { state: 'waiting', text: `要対応 ${waiting}` };
+  if (busy) return { state: 'busy', text: `処理中 ${busy}` };
+  return { state: '', text: '' };
+}
