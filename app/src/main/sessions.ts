@@ -83,8 +83,40 @@ function sessionDirs(): string[] {
   return dirs;
 }
 
+/** `.git/HEAD` から今のブランチ名を読む。読み終えた結果は heads に入れて使い回す */
+function readHeadBranch(commonDir: string, heads: Map<string, string | undefined>): string | undefined {
+  if (heads.has(commonDir)) return heads.get(commonDir);
+  let branch: string | undefined;
+  try {
+    const m = /^ref: refs\/heads\/(.+)$/m.exec(readFileSync(join(commonDir, 'HEAD'), 'utf8'));
+    branch = m?.[1]?.trim();
+  } catch {
+    branch = undefined;
+  }
+  heads.set(commonDir, branch);
+  return branch;
+}
+
+/** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
+export function shortBranch(branch: string): string {
+  return branch.replace(/^claude\//, '').replace(/-[0-9a-f]{6}$/, '');
+}
+
+/**
+ * 開発用：環境変数 WIDGET_FIXTURE に見本データ（app/fixtures/*.json）を指定すると、実データの代わりに表示する。
+ * 見本データの minutesAgo は「何分前に動きがあったか」。
+ */
+function readFixture(path: string): SessionView[] {
+  const items = readJson(path);
+  if (!Array.isArray(items)) return [];
+  const now = Date.now();
+  return items.map(({ minutesAgo, ...s }) => ({ ...s, lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000 }));
+}
+
 export function readSessions(): SessionView[] {
+  if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning();
+  const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
   for (const dir of sessionDirs()) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
@@ -93,10 +125,18 @@ export function readSessions(): SessionView[] {
       const r = running.get(d.cliSessionId);
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
+      const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
+      const root: string = anchor?.gitRoot || d.originCwd || d.cwd || '';
       views.push({
         id: d.sessionId,
         title: d.title || '(無題)',
-        folder: d.cwd ? basename(d.cwd) : '',
+        // gitRoot はワークツリーでも元のリポジトリを指す。git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
+        repoKey: root.replace(/[\\/]+$/, '').toLowerCase(),
+        repoName: root ? basename(root) : '(フォルダなし)',
+        mainBranch: anchor?.commonDir ? readHeadBranch(anchor.commonDir, heads) : undefined,
+        worktree: d.worktreeName
+          ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
+          : undefined,
         state,
         waitingFor: state === 'waiting' ? r?.waitingFor : undefined,
         needsAction: summary.needs_action || undefined,

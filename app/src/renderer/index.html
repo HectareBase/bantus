@@ -18,39 +18,42 @@
     </button>
   </header>
 
-  <main id="groups">
-    <section class="group" data-state="waiting">
-      <h2><span class="label">対応待ち</span><span class="count"></span></h2>
-      <ul class="rows"></ul>
-    </section>
-    <section class="group" data-state="busy">
-      <h2><span class="label">処理中</span><span class="count"></span></h2>
-      <ul class="rows"></ul>
-    </section>
-    <section class="group" data-state="idle">
-      <h2><span class="label">待機</span><span class="count"></span></h2>
-      <ul class="rows"></ul>
-    </section>
-    <section class="group" data-state="stopped">
-      <h2><span class="label">停止中</span><span class="count"></span></h2>
-      <ul class="rows"></ul>
-    </section>
-  </main>
+  <!-- リポジトリごとのカード -->
+  <main id="cards"></main>
 
-  <!-- たたんだときの表示：状態ごとの件数だけ -->
-  <aside id="mini">
-    <div class="mini-item" data-state="waiting"><span class="status"></span><span class="count"></span></div>
-    <div class="mini-item" data-state="busy"><span class="status"></span><span class="count"></span></div>
-    <div class="mini-item" data-state="idle"><span class="status"></span><span class="count"></span></div>
-  </aside>
+  <!-- たたんだときの表示：リポジトリの頭文字の丸 -->
+  <aside id="mini"></aside>
+
+  <template id="card-template">
+    <section class="card">
+      <h2 class="card-header">
+        <span class="repo-name"></span>
+        <span class="badge"></span>
+      </h2>
+      <div class="card-body"></div>
+      <div class="stopped">
+        <button class="stopped-toggle">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4"/></svg>
+          <span class="stopped-label"></span>
+        </button>
+        <ul class="rows stopped-rows"></ul>
+      </div>
+    </section>
+  </template>
+
+  <template id="subhead-template">
+    <div class="subhead">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path class="icon-path"/></svg>
+      <span class="subhead-label"></span>
+    </div>
+  </template>
 
   <template id="row-template">
     <li class="row" tabindex="0">
-      <span class="folder-color"></span>
       <span class="status"></span>
       <span class="text">
         <span class="title"></span>
-        <span class="meta"><span class="folder"></span><span class="when"></span></span>
+        <span class="meta"><span class="branch"></span><span class="when"></span></span>
       </span>
     </li>
   </template>

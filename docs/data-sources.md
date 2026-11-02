@@ -9,6 +9,7 @@
 | サイドバーのセッション一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\<id>\<id>\local_*.json` | タイトル、作業フォルダ、最終更新、アーカイブの有無、最後のターンのまとめ |
 | 実行中のセッションの状態 | `%USERPROFILE%\.claude\sessions\<pid>.json` | `busy` / `idle` / `waiting`、待ちの理由 → [session-status.md](session-status.md) |
 | 会話の全記録 | `%USERPROFILE%\.claude\projects\<フォルダ名>\<CLIのセッションID>.jsonl` | 発言、ツール呼び出し、タイトルの変更 |
+| ワークツリーの一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\git-worktrees.json` | ワークツリーの名前、場所、ブランチ、使っているセッション（`leasedBy`） |
 | ウィンドウの位置と大きさ | `%LOCALAPPDATA%\Claude-Data\claude_*\window-state.json` | `x`, `y`, `width`, `height`, `isMaximized` |
 | 画面の部品 | UIA（Windows UI Automation） | → [deep-link-and-uia.md](deep-link-and-uia.md) |
 
@@ -20,7 +21,10 @@
 | `sessionId` | `local_xxxxxxxx-...`。`claude://` リンクやアプリのツールで使う ID |
 | `cliSessionId` | `xxxxxxxx-...`。CLI 側の ID。`~/.claude/sessions/*.json` の `sessionId`、`projects/` の jsonl のファイル名と同じ値 |
 | `title` / `titleSource` | タイトルと、付けた方法（`auto` / `tool` など） |
-| `cwd` / `originCwd` | 作業フォルダ |
+| `cwd` / `originCwd` | 作業フォルダと、元のリポジトリのフォルダ（ワークツリーのときに違う値になる） |
+| `worktreeName` / `worktreePath` | ワークツリーの名前と場所（ワークツリーのときだけ） |
+| `branch` / `sourceBranch` | ワークツリーのブランチと、作成元のブランチ（ワークツリーのときだけ。例：`claude/xxxx-xxxx-1a2b3c`、`main`） |
+| `gitAnchors[]` | `gitRoot`（リポジトリのフォルダ）と `commonDir`（`.git` の場所）。`commonDir` はワークツリーでも同じ値なので、リポジトリの目印になる。git 管理でないフォルダでは空 |
 | `model` / `effort` / `permissionMode` | `claude-opus-5-5` / `medium` / `auto` |
 | `isArchived` | アーカイブ済みなら `true` |
 | `createdAt` / `lastActivityAt` / `lastFocusedAt` | Unix ミリ秒 |

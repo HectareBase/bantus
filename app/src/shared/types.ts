@@ -7,8 +7,20 @@ export interface SessionView {
   /** `local_` から始まる ID。claude:// リンクに使う */
   id: string;
   title: string;
-  /** 作業フォルダの末尾の名前 */
-  folder: string;
+  /** カードの目印。リポジトリのフォルダ（git の情報がなければ元の作業フォルダ）を小文字にしたもの */
+  repoKey: string;
+  /** カードの名前（リポジトリのフォルダ名） */
+  repoName: string;
+  /** メインの作業場所のブランチ名（`.git/HEAD` から。わからなければ undefined） */
+  mainBranch?: string;
+  /** ワークツリーのときだけ。小見出しの目印と表示名 */
+  worktree?: {
+    key: string;
+    /** 短くした表示名（`claude/` と末尾の英数字を省く） */
+    label: string;
+    /** 元のブランチ名（ツールチップ用） */
+    branch: string;
+  };
   state: SessionState;
   /** state が waiting のときの理由（`permission prompt` など） */
   waitingFor?: string;
