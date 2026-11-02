@@ -1,4 +1,4 @@
-# claude-helper
+# Bantus
 
 Claude デスクトップ（Code タブ）を外から補うツール。セッション一覧、状態の表示、ショートカット。調査結果と計画は [docs/](docs/README.md) にある。
 

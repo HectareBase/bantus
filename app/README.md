@@ -41,7 +41,7 @@ npm run screenshots                # すべての見本を dist/screenshots/<名
 | `empty.json` | セッションが 1 つもないとき |
 
 - 見本データのファイルを書き換えると、すぐ表示に出る
-- 見本データで起動したときは、設定とデータのフォルダを `claude-helper-widget-debug` に分ける。いつものウィジェットと同時に起動でき、設定も別になる（片方を左に置くと比べやすい）
+- 見本データで起動したときは、設定とデータのフォルダを `bantus-debug` に分ける。いつものウィジェットと同時に起動でき、設定も別になる（片方を左に置くと比べやすい）
 - 撮影では、停止中をすべて開き、アニメーションを止め、画面に収まらない分までウィンドウを伸ばしてから撮る
 - 見本データの ID は `local_all-01` の形なので、クリックしても何も開かない。`minutesAgo` は「何分前に動きがあったか」
 - 中身は環境変数で決まる：`WIDGET_FIXTURE`（見本のパス）、`WIDGET_FIXTURE_CYCLE`（巡回の秒数）、`WIDGET_SCREENSHOT`（撮って終わる。保存先）、`WIDGET_SCREENSHOT_FOCUS`（撮る前にフォーカスする要素のセレクター）
@@ -70,7 +70,7 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 - **カードの不透明度**：カードとタイトルバーの塗り。0% で枠だけ。後ろが明るいと文字が読みにくくなるので、背景を 0% にするなら 80% 以上がおすすめ
 - ウィンドウ全体（文字も含む）の不透明度は 100% で固定。文字は常にはっきり表示する
 
-設定は `%APPDATA%\claude-helper-widget\settings.json` に保存します（リポジトリには入りません）。
+設定は `%APPDATA%\bantus\settings.json` に保存します（リポジトリには入りません）。
 
 項目を足すときは、`src/shared/settings.ts` の `Settings`（型）、`DEFAULT_SETTINGS`（既定値）、`SETTING_DEFS`（画面に出す定義）に足します。種類は `segmented`（切り替えボタン）、`display`（モニターの選択）、`slider` です。オン / オフの項目が必要になったら、種類を足します。新しいカテゴリは `CATEGORIES` に足すと、項目が 1 つ以上あるときだけ左の一覧に出ます。
 

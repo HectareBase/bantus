@@ -128,7 +128,7 @@ function openSettingsWindow() {
     height: 520,
     minWidth: 520,
     minHeight: 400,
-    title: 'Claude ウィジェット — 設定',
+    title: 'Bantus — 設定',
     autoHideMenuBar: true,
     show: false,
     backgroundMaterial: 'mica',

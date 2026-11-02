@@ -10,7 +10,7 @@ export const APP_ROOT = join(__dirname, '..', '..', '..');
 export const FIXTURES = join(APP_ROOT, 'fixtures');
 
 export function tempDir(): { path: string; cleanup: () => void } {
-  const path = mkdtempSync(join(tmpdir(), 'claude-helper-test-'));
+  const path = mkdtempSync(join(tmpdir(), 'bantus-test-'));
   return { path, cleanup: () => rmSync(path, { recursive: true, force: true }) };
 }
 

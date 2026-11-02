@@ -1,5 +1,5 @@
 {
-  "name": "claude-helper",
+  "name": "bantus-root",
   "private": true,
   "description": "Runs the app/ scripts from the repository root",
   "scripts": {

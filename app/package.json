@@ -1,5 +1,5 @@
 {
-  "name": "claude-helper-widget",
+  "name": "bantus",
   "version": "0.1.0",
   "private": true,
   "description": "Sidebar widget that shows Claude desktop session status",
