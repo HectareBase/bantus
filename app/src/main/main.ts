@@ -6,10 +6,13 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
-import { WIDTH_MAX, WIDTH_MIN, type Settings } from '../shared/settings';
+import { WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, WidgetLayout } from '../shared/types';
 
 const COLLAPSED_WIDTH = 52;
+/** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
+const SETTINGS_SIZE = { width: 880, height: 640 };
+const SETTINGS_MIN = { width: 520, height: 400 };
 const SESSION_ID = /^local_[0-9a-f-]{36}$/;
 const PRELOAD = join(__dirname, '..', 'preload', 'preload.js');
 const WEB = join(__dirname, '..', '..', 'web', 'renderer');
@@ -125,16 +128,38 @@ async function captureAndQuit(w: BrowserWindow, path: string) {
   app.quit();
 }
 
+/** タイトルバー（上の端）のうち、幅 100px・高さ 30px 以上がどこかのモニターの作業領域に入っているか */
+function titleBarVisible(b: WindowBounds): boolean {
+  return screen.getAllDisplays().some(({ workArea: a }) => {
+    const w = Math.min(b.x + b.width, a.x + a.width) - Math.max(b.x, a.x);
+    const h = Math.min(b.y + 30, a.y + a.height) - Math.max(b.y, a.y);
+    return w >= 100 && h >= 30;
+  });
+}
+
+/** 前に閉じたときの位置と大きさに戻す。モニターが外れるなどでタイトルバーが見えなければ、大きさだけ戻して真ん中に出す */
+function restoreSettingsBounds(w: BrowserWindow) {
+  const saved = getSettings().settingsWindow;
+  if (!saved) return;
+  const bounds = { ...saved, width: Math.max(SETTINGS_MIN.width, saved.width), height: Math.max(SETTINGS_MIN.height, saved.height) };
+  if (titleBarVisible(bounds)) return w.setBounds(bounds);
+  w.setSize(bounds.width, bounds.height);
+  w.center();
+}
+
+function sameBounds(a: WindowBounds, b: WindowBounds): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
 function openSettingsWindow() {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.focus();
     return;
   }
-  settingsWin = new BrowserWindow({
-    width: 680,
-    height: 520,
-    minWidth: 520,
-    minHeight: 400,
+  const w = new BrowserWindow({
+    ...SETTINGS_SIZE,
+    minWidth: SETTINGS_MIN.width,
+    minHeight: SETTINGS_MIN.height,
     title: 'Bantus — 設定',
     icon: ICON,
     autoHideMenuBar: true,
@@ -143,9 +168,19 @@ function openSettingsWindow() {
     backgroundColor: '#00000000',
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
-  settingsWin.loadFile(join(WEB, 'settings.html'));
-  settingsWin.once('ready-to-show', () => settingsWin?.show());
-  settingsWin.on('closed', () => (settingsWin = undefined));
+  settingsWin = w;
+  // コンストラクターに大きさを渡すより、setBounds のほうがずれが小さい（拡大率 125% で、コンストラクターは 6px ほど大きくなる）
+  restoreSettingsBounds(w);
+  // 開いたときの位置と大きさ。閉じるときにこれと同じなら保存しない（座標の丸めで、開くたびに数 px ずつずれていくのを防ぐ）
+  const opened = w.getNormalBounds();
+  w.loadFile(join(WEB, 'settings.html'));
+  w.once('ready-to-show', () => w.show());
+  // 閉じるときに位置と大きさを覚える。最大化していても、元に戻したときの大きさを保存する
+  w.on('close', () => {
+    const bounds = w.getNormalBounds();
+    if (!sameBounds(bounds, opened)) updateSettings({ settingsWindow: bounds });
+  });
+  w.on('closed', () => (settingsWin = undefined));
 }
 
 /** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで設定と終了 */

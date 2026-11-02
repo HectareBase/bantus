@@ -11,6 +11,15 @@ export interface Settings {
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
   cardOpacity: number;
+  /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
+  settingsWindow?: WindowBounds;
+}
+
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -94,5 +103,17 @@ export function normalizeSettings(input: unknown): Settings {
   // 設定画面に出さない項目
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
+  const bounds = normalizeBounds(src.settingsWindow);
+  if (bounds) out.settingsWindow = bounds;
   return out;
+}
+
+/** 4 つの値がそろった数なら整数にして返す。大きさは 1 以上。そうでなければ undefined */
+function normalizeBounds(input: unknown): WindowBounds | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const b = input as Record<string, unknown>;
+  const keys = ['x', 'y', 'width', 'height'] as const;
+  if (!keys.every((k) => typeof b[k] === 'number' && Number.isFinite(b[k]))) return undefined;
+  const [x, y, width, height] = keys.map((k) => Math.round(b[k] as number)) as [number, number, number, number];
+  return width > 0 && height > 0 ? { x, y, width, height } : undefined;
 }

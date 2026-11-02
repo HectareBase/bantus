@@ -17,10 +17,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
   return node;
 }
 
-function card(label: string, description: string | undefined, control: Node): HTMLElement {
+/** stacked にすると、値を名前の下に出す（パスのような長い値用） */
+function card(label: string, description: string | undefined, control: Node, stacked = false): HTMLElement {
   const text = el('div', { className: 'label' }, [el('b', { textContent: label })]);
   if (description) text.append(el('span', { textContent: description }));
-  return el('div', { className: 'card' }, [text, el('div', { className: 'control' }, [control])]);
+  return el('div', { className: stacked ? 'card stacked' : 'card' }, [text, el('div', { className: 'control' }, [control])]);
 }
 
 function set<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -76,9 +77,9 @@ async function renderAbout() {
     el('h2', { textContent: 'このアプリ' }),
     card('バージョン', undefined, el('span', { className: 'about-value', textContent: info.version })),
     el('h2', { textContent: '読み取っているデータ' }),
-    ...info.dataFolders.map((f) => card('フォルダ', '読むだけで、書き換えはしません', el('span', { className: 'about-value', textContent: f }))),
+    ...info.dataFolders.map((f) => card('フォルダ', '読むだけで、書き換えはしません', el('span', { className: 'about-value', textContent: f }), true)),
     el('h2', { textContent: '設定の保存先' }),
-    card('ファイル', undefined, el('span', { className: 'about-value', textContent: info.settingsFile })),
+    card('ファイル', undefined, el('span', { className: 'about-value', textContent: info.settingsFile }), true),
   );
 }
 
