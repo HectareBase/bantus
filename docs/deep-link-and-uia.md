@@ -30,6 +30,19 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 - 「さらに表示」に隠れているセッションは、UIA からは見つかりません。
 - ボタンは `InvokePattern` で押せます。
 
+## 今開いているセッションを知る
+次の 2 つの方法で判別できました。
+
+| 方法 | わかること | 弱いところ |
+|---|---|---|
+| `local_*.json` の `lastFocusedAt` が一番新しいもの（おすすめ） | `sessionId` がそのまま取れる | ファイルが書かれるまで少し遅れるかもしれない（未計測） |
+| UIA の `ControlType.Document` の名前（「タイトル - Claude Code」） | 画面に出ているセッションのタイトル | タイトルしかわからない（同じ名前を区別できない）。表示言語で変わる |
+
+- ウィンドウのタイトル（`MainWindowTitle`）は `Claude` だけで、使えません。
+- Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。必要なら `GetForegroundWindow` と比べます。
+- 分割表示で複数のセッションを並べているときに、どれを指すかは確かめていません（最後にフォーカスしたものと思われます）。
+- ウィジェットは `lastFocusedAt` を使い、その行の背景色を変えています。
+
 ## ホットキー
 - PowerShell 5.1 から `RegisterHotKey`（user32.dll）で登録できます。`MOD_NOREPEAT` を付け、メッセージ専用ウィンドウ（`HWND_MESSAGE`）で `WM_HOTKEY` を受け取ります。
 - **`Ctrl+Alt+Space` は他のアプリが使用中で、登録できませんでした**（Claude のクイック入力の可能性があります）。今は代わりに `Ctrl+Alt+L` を使っています。

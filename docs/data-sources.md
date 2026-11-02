@@ -27,7 +27,7 @@
 | `gitAnchors[]` | `gitRoot`（リポジトリのフォルダ）と `commonDir`（`.git` の場所）。`commonDir` はワークツリーでも同じ値なので、リポジトリの目印になる。git 管理でないフォルダでは空 |
 | `model` / `effort` / `permissionMode` | `claude-opus-5-5` / `medium` / `auto` |
 | `isArchived` | アーカイブ済みなら `true` |
-| `createdAt` / `lastActivityAt` / `lastFocusedAt` | Unix ミリ秒 |
+| `createdAt` / `lastActivityAt` / `lastFocusedAt` | Unix ミリ秒。`lastFocusedAt` が一番新しいものが、デスクトップで今開いているセッション → [deep-link-and-uia.md](deep-link-and-uia.md#今開いているセッションを知る) |
 | `completedTurns` | 終わったターンの数 |
 | `postTurnSummary.status_category` | `completed` など |
 | `postTurnSummary.status_detail` | 例：「abc1234 committed; tests pass; not pushed」 |

@@ -2,7 +2,20 @@
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
 import type { SessionState, SessionView, WidgetLayout } from '../shared/types';
-import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, stateOfRank, tooltip, type Card, type Group } from './model.js';
+import {
+  PENDING_FOCUS_MS,
+  buildCards,
+  buildGroups,
+  cardBadge,
+  formatAgo,
+  nextAttention,
+  resolveFocus,
+  stateOfRank,
+  tooltip,
+  type Card,
+  type Group,
+  type PendingFocus,
+} from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const ICON_FOLDER = 'M2 4.5h4l1.5 1.5H14v6.5H2z';
@@ -40,6 +53,10 @@ const lists = new Map<string, HTMLUListElement>();
 const openStopped = new Set<string>();
 /** 未確認（左端の帯を出す）セッションの ID */
 const attention = new Set<string>();
+/** 最後に受け取ったセッション一覧と、クリックしてまだファイルに反映されていないセッション */
+let latest: SessionView[] = [];
+let pendingFocus: PendingFocus | undefined;
+let pendingTimer: number | undefined;
 
 // ---- 小さな道具 ----
 
@@ -91,9 +108,21 @@ function setAttention(refs: RowRefs, id: string, on: boolean) {
   refs.el.toggleAttribute('data-attention', on);
 }
 
+/** 今開いているセッションの行だけ背景を塗る */
+function applyFocus() {
+  const resolved = resolveFocus(latest, pendingFocus);
+  pendingFocus = resolved.pending;
+  for (const [id, refs] of rows) refs.el.toggleAttribute('data-focused', id === resolved.id);
+}
+
 function openRow(id: string) {
   const refs = rows.get(id);
   if (refs) setAttention(refs, id, false);
+  // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。反映されないまま時間が過ぎたら、ファイルの値に戻す
+  pendingFocus = { id, until: Date.now() + PENDING_FOCUS_MS };
+  clearTimeout(pendingTimer);
+  pendingTimer = window.setTimeout(applyFocus, PENDING_FOCUS_MS);
+  applyFocus();
   window.widget.openSession(id);
 }
 
@@ -236,6 +265,7 @@ function renderMini(list: Card[]) {
 }
 
 function render(sessions: SessionView[]) {
+  latest = sessions;
   const list = buildCards(sessions);
   syncChildren(cardsEl, list.map(renderCard));
   renderMini(list);
@@ -249,6 +279,7 @@ function render(sessions: SessionView[]) {
   for (const map of [subheads, lists] as Map<string, Element>[]) {
     for (const [key, el] of map) if (!el.isConnected) map.delete(key);
   }
+  applyFocus();
 }
 
 // ---- 画面の操作 ----

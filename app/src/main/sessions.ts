@@ -156,6 +156,8 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const running = readRunning(paths.runningDir);
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
+  // 今開いているセッション（docs/deep-link-and-uia.md）
+  let focused: { view: SessionView; at: number } | undefined;
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
@@ -165,7 +167,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const summary = d.postTurnSummary ?? {};
       const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
       const root: string = anchor?.gitRoot || d.originCwd || d.cwd || '';
-      views.push({
+      const view: SessionView = {
         id: d.sessionId,
         title: d.title || '(無題)',
         // gitRoot はワークツリーでも元のリポジトリを指す。git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
@@ -180,9 +182,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         needsAction: summary.needs_action || undefined,
         detail: summary.status_detail || undefined,
         lastActivityAt: Number(d.lastActivityAt) || 0,
-      });
+      };
+      views.push(view);
+      const at = Number(d.lastFocusedAt) || 0;
+      if (at && (!focused || at > focused.at)) focused = { view, at };
     }
   }
+  if (focused) focused.view.focused = true;
   return sortSessions(views);
 }
 

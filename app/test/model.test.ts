@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, stateOfRank, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, formatAgo, nextAttention, resolveFocus, stateOfRank, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -110,4 +110,20 @@ describe('formatAgo', () => {
 
 describe('stateOfRank', () => {
   it('順位から状態に戻す', () => assert.deepEqual([0, 1, 2, 3].map(stateOfRank), ['waiting', 'busy', 'idle', 'stopped']));
+});
+
+describe('resolveFocus', () => {
+  const sessions = [view({ id: 'a', focused: true }), view({ id: 'b' })];
+  const pending = { id: 'b', until: 2000 };
+
+  it('クリックがなければファイルの値', () => assert.deepEqual(resolveFocus(sessions, undefined, 1000), { id: 'a', pending: undefined }));
+  it('ファイルが追いつくまでは、クリックしたセッション', () =>
+    assert.deepEqual(resolveFocus(sessions, pending, 1000), { id: 'b', pending }));
+  it('ファイルが追いついたら、待つのをやめる', () => {
+    const caught = [view({ id: 'a' }), view({ id: 'b', focused: true })];
+    assert.deepEqual(resolveFocus(caught, pending, 1000), { id: 'b', pending: undefined });
+  });
+  it('時間が過ぎたら、ファイルの値に戻す', () => assert.deepEqual(resolveFocus(sessions, pending, 2000), { id: 'a', pending: undefined }));
+  it('クリックしたセッションがなくなったら、ファイルの値', () =>
+    assert.deepEqual(resolveFocus([view({ id: 'a', focused: true })], pending, 1000), { id: 'a', pending: undefined }));
 });

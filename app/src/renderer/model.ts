@@ -73,6 +73,33 @@ export function nextAttention(prev: SessionState | undefined, next: SessionState
   return prev === 'busy' && next === 'idle';
 }
 
+/** クリックで開いたセッション。デスクトップがファイルに書くまでの間、これを今開いているものとして扱う */
+export interface PendingFocus {
+  id: string;
+  /** この時刻（Unix ミリ秒）を過ぎたら、ファイルの値に戻す */
+  until: number;
+}
+
+/** クリックしてからファイルに反映されるまで待つ長さ */
+export const PENDING_FOCUS_MS = 5_000;
+
+/**
+ * 今開いているセッションの ID を決める。
+ * クリックしたセッションがあれば、ファイルが追いつく（またはその時間が過ぎる）まではそちらを優先する。
+ * 返す pending は、まだ待つなら同じもの、もう要らなければ undefined。
+ */
+export function resolveFocus(
+  sessions: SessionView[],
+  pending: PendingFocus | undefined,
+  now = Date.now(),
+): { id: string | undefined; pending: PendingFocus | undefined } {
+  const fromData = sessions.find((s) => s.focused)?.id;
+  if (pending && now < pending.until && fromData !== pending.id && sessions.some((s) => s.id === pending.id)) {
+    return { id: pending.id, pending };
+  }
+  return { id: fromData, pending: undefined };
+}
+
 export function buildCards(sessions: SessionView[]): Card[] {
   const map = new Map<string, Card>();
   for (const s of sessions) {

@@ -32,6 +32,8 @@ export interface SessionView {
   detail?: string;
   /** 最後に動きがあった時刻（Unix ミリ秒） */
   lastActivityAt: number;
+  /** デスクトップで今開いているセッション（`lastFocusedAt` が一番新しいもの）だけ true */
+  focused?: boolean;
 }
 
 export interface WidgetApi {

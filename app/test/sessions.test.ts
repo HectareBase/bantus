@@ -58,7 +58,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
         lastActivityAt: 1000 * n,
         ...d,
       });
-    local(1, { title: 'waiting', cliSessionId: 'cli-1', gitAnchors: [anchor] });
+    local(1, { title: 'waiting', cliSessionId: 'cli-1', gitAnchors: [anchor], lastFocusedAt: 500 });
     local(2, {
       title: 'worktree',
       cliSessionId: 'cli-2',
@@ -66,6 +66,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
       gitAnchors: [{ ...anchor, gitRoot: `${repo.toUpperCase()}\\` }],
       worktreeName: 'fix-login',
       branch: 'claude/fix-login-1a2b3c',
+      lastFocusedAt: 300,
     });
     local(3, { title: 'no git', cliSessionId: 'cli-3', originCwd: join(tmp.path, 'plain') });
     local(4, {
@@ -74,7 +75,8 @@ describe('readSessions（偽のデータフォルダ）', () => {
       gitAnchors: [anchor],
       postTurnSummary: { needs_action: 'approve', status_detail: 'tests pass' },
     });
-    local(5, { title: 'archived', cliSessionId: 'cli-1', isArchived: true });
+    // アーカイブ済みは、lastFocusedAt が新しくても選ばない
+    local(5, { title: 'archived', cliSessionId: 'cli-1', isArchived: true, lastFocusedAt: 900 });
     local(6, { cliSessionId: 'cli-5', cwd: join(tmp.path, 'plain') });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
@@ -89,6 +91,10 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
     assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped']);
+  });
+
+  it('lastFocusedAt が一番新しいセッションだけが focused', () => {
+    assert.deepEqual(sessions.filter((s) => s.focused).map((s) => s.title), ['waiting']);
   });
 
   it('waitingFor は対応待ちのときだけ', () => {
