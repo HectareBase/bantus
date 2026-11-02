@@ -156,18 +156,24 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const running = readRunning(paths.runningDir);
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
-  // 今開いているセッション（docs/deep-link-and-uia.md）
-  let focused: { view: SessionView; at: number } | undefined;
+  // 今開いているセッション（docs/deep-link-and-uia.md）。サイドチャットのときは親の ID にする
+  let focused: { id: string; at: number } | undefined;
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
       if (!d?.sessionId || d.isArchived) continue;
+      const at = Number(d.lastFocusedAt) || 0;
+      // サイドチャット（btw）はデスクトップのサイドバーに出ないので、一覧には入れない。開いているのは親として扱う
+      const btwParent = d.spawnedFrom?.btw ? d.spawnedFrom.sessionId : undefined;
+      const focusId: string = btwParent || d.sessionId;
+      if (at && (!focused || at > focused.at)) focused = { id: focusId, at };
+      if (btwParent) continue;
       const r = running.get(d.cliSessionId);
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
       const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
       const root: string = anchor?.gitRoot || d.originCwd || d.cwd || '';
-      const view: SessionView = {
+      views.push({
         id: d.sessionId,
         title: d.title || '(無題)',
         // gitRoot はワークツリーでも元のリポジトリを指す。git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
@@ -182,13 +188,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         needsAction: summary.needs_action || undefined,
         detail: summary.status_detail || undefined,
         lastActivityAt: Number(d.lastActivityAt) || 0,
-      };
-      views.push(view);
-      const at = Number(d.lastFocusedAt) || 0;
-      if (at && (!focused || at > focused.at)) focused = { view, at };
+      });
     }
   }
-  if (focused) focused.view.focused = true;
+  // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
+  const focusedId = focused?.id;
+  const focusedView = focusedId && views.find((s) => s.id === focusedId);
+  if (focusedView) focusedView.focused = true;
   return sortSessions(views);
 }
 

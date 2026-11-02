@@ -41,6 +41,7 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 - ウィンドウのタイトル（`MainWindowTitle`）は `Claude` だけで、使えません。
 - Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。必要なら `GetForegroundWindow` と比べます。
 - 分割表示で複数のセッションを並べているときに、どれを指すかは確かめていません（最後にフォーカスしたものと思われます）。
+- サイドチャット（btw）を表示しているときは、サイドチャットの `lastFocusedAt` が一番新しくなります。親に置き換えて扱います（[data-sources.md](data-sources.md#サイドチャットbtw)）。
 - ウィジェットは `lastFocusedAt` を使い、その行の背景色を変えています。
 
 ## ホットキー

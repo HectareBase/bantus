@@ -52,9 +52,10 @@ describe('readSessions（偽のデータフォルダ）', () => {
     writeJson(join(paths.runningDir, 'not-a-pid.json'), { pid, sessionId: 'cli-5', status: 'busy' });
 
     const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    const localId = (n: number) => `local_0000000${n}-0000-0000-0000-000000000000`;
     const local = (n: number, d: object) =>
-      writeJson(join(dir, `local_0000000${n}-0000-0000-0000-000000000000.json`), {
-        sessionId: `local_0000000${n}-0000-0000-0000-000000000000`,
+      writeJson(join(dir, `${localId(n)}.json`), {
+        sessionId: localId(n),
         lastActivityAt: 1000 * n,
         ...d,
       });
@@ -78,6 +79,15 @@ describe('readSessions（偽のデータフォルダ）', () => {
     // アーカイブ済みは、lastFocusedAt が新しくても選ばない
     local(5, { title: 'archived', cliSessionId: 'cli-1', isArchived: true, lastFocusedAt: 900 });
     local(6, { cliSessionId: 'cli-5', cwd: join(tmp.path, 'plain') });
+    // サイドチャット（btw）。親（2 の worktree）より後に lastFocusedAt が書かれる
+    local(7, {
+      title: 'btw: side chat',
+      cliSessionId: 'cli-1',
+      lastFocusedAt: 700,
+      spawnedFrom: { sessionId: localId(2), sideSession: true, btw: true },
+    });
+    // btw の付かない別のセッションは、普通のセッションとして出す
+    local(8, { title: 'spawned', cwd: join(tmp.path, 'plain'), spawnedFrom: { sessionId: 'local_x', sideSession: true } });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
 
@@ -85,16 +95,16 @@ describe('readSessions（偽のデータフォルダ）', () => {
   });
   after(() => tmp.cleanup());
 
-  it('アーカイブ済みと壊れたファイル、local_ 以外は読まない', () => {
-    assert.deepEqual(sessions.map((s) => s.title).sort(), ['(無題)', 'dead', 'no git', 'waiting', 'worktree']);
+  it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
+    assert.deepEqual(sessions.map((s) => s.title).sort(), ['(無題)', 'dead', 'no git', 'spawned', 'waiting', 'worktree']);
   });
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
-    assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped']);
+    assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped', 'stopped']);
   });
 
-  it('lastFocusedAt が一番新しいセッションだけが focused', () => {
-    assert.deepEqual(sessions.filter((s) => s.focused).map((s) => s.title), ['waiting']);
+  it('lastFocusedAt が一番新しいセッションだけが focused。サイドチャットなら親', () => {
+    assert.deepEqual(sessions.filter((s) => s.focused).map((s) => s.title), ['worktree']);
   });
 
   it('waitingFor は対応待ちのときだけ', () => {
@@ -126,6 +136,27 @@ describe('readSessions（偽のデータフォルダ）', () => {
   it('最後のターンのまとめを読む', () => {
     assert.equal(byTitle('dead')?.needsAction, 'approve');
     assert.equal(byTitle('dead')?.detail, 'tests pass');
+  });
+});
+
+describe('readSessions（親がないサイドチャット）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+
+  it('親が一覧にないときは、どの行も focused にしない', () => {
+    const paths: DataPaths = { runningDir: join(tmp.path, 'sessions'), dataBase: join(tmp.path, 'Claude-Data') };
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    writeJson(join(dir, 'local_parent.json'), { sessionId: 'local_parent', title: 'parent', isArchived: true, lastFocusedAt: 100 });
+    writeJson(join(dir, 'local_other.json'), { sessionId: 'local_other', title: 'other', lastFocusedAt: 50 });
+    writeJson(join(dir, 'local_btw.json'), {
+      sessionId: 'local_btw',
+      title: 'btw: side chat',
+      lastFocusedAt: 200,
+      spawnedFrom: { sessionId: 'local_parent', btw: true },
+    });
+    const list = readSessions(paths);
+    assert.deepEqual(list.map((s) => s.title), ['other']);
+    assert.equal(list.some((s) => s.focused), false);
   });
 });
 

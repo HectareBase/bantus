@@ -33,6 +33,14 @@
 | `postTurnSummary.status_detail` | 例：「abc1234 committed; tests pass; not pushed」 |
 | `postTurnSummary.needs_action` | ユーザーの対応が必要なとき、その内容（空なら不要） |
 | `turnWrapUp.description` | 最後のターンのまとめの文章 |
+| `spawnedFrom` | 別のセッションから作られたときだけ。`sessionId`（元のセッション）、`sideSession`、`btw` など |
+| `forkedFromSessionId` | フォークしたときの元のセッション（サイドチャットにも付く） |
+
+### サイドチャット（btw）
+- サイドチャットも `local_*.json` を 1 つ持ちます。目印は `spawnedFrom.btw: true` で、親は `spawnedFrom.sessionId` です。タイトルは多くが `btw: ` で始まりますが、目印には使いません。
+- デスクトップのサイドバーには出ないので、ウィジェットの一覧にも出しません。
+- 表示すると、親とサイドチャットの両方の `lastFocusedAt` が書かれ、サイドチャットのほうが少し後になります。今開いているセッションを決めるときは、親に置き換えます。
+- `spawnedFrom` があっても `btw` がないもの（別のセッションとして立ち上げたもの）は、普通のセッションとしてサイドバーに出ます。
 
 - **ピン留めとサイドバーのグループの情報は、このファイルには入っていません。** アプリのツール（`list_sessions` の `pinned` / `group`）からは取れます。
 - サイドバーに表示されるフォルダ名は、作業フォルダの末尾の名前とは限りません（例：作業フォルダ `my-app` が `MyApp` と表示される。リポジトリ名のようです）。
