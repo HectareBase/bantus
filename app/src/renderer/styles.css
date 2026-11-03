@@ -235,15 +235,23 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row[data-attention]::before { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
 
 .text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
-/* ワークツリーごとの通し番号。状態のアイコンの右に薄く出す。タイトルの先頭がそろうよう、幅は一覧でいちばん多い桁数に合わせる（renderer が --seq-digits を決める） */
+/* ワークツリーごとの通し番号。状態のアイコンの右に、細い枠で囲んで薄く出す。
+   タイトルの先頭がそろうよう、幅は一覧でいちばん多い桁数に合わせる（renderer が --seq-digits を決める） */
 .seq {
-  width: calc(var(--seq-digits, 1) * 1ch);
+  /* 枠と余白（左右 4px ずつ）の分を足す（box-sizing は border-box） */
+  width: calc(var(--seq-digits, 1) * 1ch + 8px);
   margin-left: -4px;
+  padding: 0 3px;
+  border: 1px solid var(--text-tertiary);
+  border-radius: 3px;
   font-size: 11px;
-  text-align: right;
+  line-height: 14px;
+  text-align: center;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
+/* 番号がないときも列の幅は残し、枠だけ消す */
+.seq:empty { visibility: hidden; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .branch { overflow: hidden; text-overflow: ellipsis; }
