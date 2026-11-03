@@ -238,14 +238,14 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 /* ワークツリーごとの通し番号。状態のアイコンの右に、細い枠で囲んで薄く出す。
    タイトルの先頭がそろうよう、幅は一覧でいちばん多い桁数に合わせる（renderer が --seq-digits を決める） */
 .seq {
-  /* 枠と余白（左右 4px ずつ）の分を足す（box-sizing は border-box） */
-  width: calc(var(--seq-digits, 1) * 1ch + 8px);
+  /* 枠と余白（左右 3px ずつ）の分を足す（box-sizing は border-box） */
+  width: calc(var(--seq-digits, 1) * 1ch + 6px);
   margin-left: -4px;
-  padding: 0 3px;
+  padding: 0 2px;
   border: 1px solid var(--text-tertiary);
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 14px;
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 11px;
   text-align: center;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
