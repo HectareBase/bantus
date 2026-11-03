@@ -59,7 +59,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
         lastActivityAt: 1000 * n,
         ...d,
       });
-    local(1, { title: 'waiting', cliSessionId: 'cli-1', gitAnchors: [anchor], lastFocusedAt: 500 });
+    local(1, { title: 'waiting', cliSessionId: 'cli-1', gitAnchors: [anchor], lastFocusedAt: 500, createdAt: 10 });
     local(2, {
       title: 'worktree',
       cliSessionId: 'cli-2',
@@ -76,9 +76,10 @@ describe('readSessions（偽のデータフォルダ）', () => {
       cliSessionId: 'cli-4',
       gitAnchors: [anchor],
       postTurnSummary: { needs_action: 'approve', status_detail: 'tests pass' },
+      createdAt: 30,
     });
-    // アーカイブ済みは、lastFocusedAt が新しくても選ばない
-    local(5, { title: 'archived', cliSessionId: 'cli-1', isArchived: true, lastFocusedAt: 900 });
+    // アーカイブ済みは、lastFocusedAt が新しくても選ばない。通し番号には数える
+    local(5, { title: 'archived', cliSessionId: 'cli-1', isArchived: true, lastFocusedAt: 900, gitAnchors: [anchor], createdAt: 20 });
     local(6, { cliSessionId: 'cli-5', cwd: join(tmp.path, 'plain') });
     // サイドチャット（btw）。親（2 の worktree）より後に lastFocusedAt が書かれる
     local(7, {
@@ -164,6 +165,14 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(byTitle('no git')?.workDir, undefined);
   });
 
+  it('通し番号はワークツリーごとに作った順。アーカイブ済みも数え、createdAt が同じなら ID 順', () => {
+    assert.equal(byTitle('waiting')?.seq, 1);
+    assert.equal(byTitle('dead')?.seq, 3);
+    assert.equal(byTitle('worktree')?.seq, 1);
+    assert.equal(byTitle('outside worktree')?.seq, 1);
+    assert.deepEqual(['no git', '(無題)', 'spawned'].map((t) => byTitle(t)?.seq), [1, 2, 3]);
+  });
+
   it('最後のターンのまとめを読む', () => {
     assert.equal(byTitle('dead')?.needsAction, 'approve');
     assert.equal(byTitle('dead')?.detail, 'tests pass');
@@ -209,6 +218,11 @@ describe('readFixture', () => {
     assert.deepEqual(list.map((s) => s.id), ['local_b', 'local_c', 'local_a']);
     assert.equal(list[0]?.lastActivityAt, now - 5 * 60_000);
     assert.equal('minutesAgo' in list[0]!, false);
+  });
+
+  it('通し番号はファイルに書いた順', () => {
+    const list = readFixture(file, now, 0);
+    assert.deepEqual(['local_a', 'local_b', 'local_c'].map((id) => list.find((s) => s.id === id)?.seq), [1, 2, 3]);
   });
 
   it('巡回では状態を 1 つずつ進め、waitingFor を合わせる', () => {

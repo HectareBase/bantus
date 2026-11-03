@@ -139,6 +139,24 @@ function sortSessions(views: SessionView[]): SessionView[] {
   return views.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.lastActivityAt - a.lastActivityAt);
 }
 
+/**
+ * ワークツリーごとの通し番号（seq）を振る。同じリポジトリの同じワークツリー（メインも 1 つとして数える）の中で、作った順に 1 から。
+ * アーカイブ済みも数えるので、アーカイブしても番号は変わらない（削除するとそれより新しいものが詰まる）
+ */
+export function assignSeq(views: SessionView[]): void {
+  const groups = new Map<string, SessionView[]>();
+  for (const view of views) {
+    const key = `${view.repoKey}|${view.worktree?.key ?? ''}`;
+    const list = groups.get(key);
+    if (list) list.push(view);
+    else groups.set(key, [view]);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
+    list.forEach((view, i) => (view.seq = i + 1));
+  }
+}
+
 /** 開発用の巡回の間隔（ミリ秒）。WIDGET_FIXTURE_CYCLE（秒）がなければ 0 */
 function cycleMs(): number {
   return Math.max(0, Number(process.env.WIDGET_FIXTURE_CYCLE) || 0) * 1000;
@@ -146,15 +164,20 @@ function cycleMs(): number {
 
 /**
  * 開発用：環境変数 WIDGET_FIXTURE に見本データ（app/fixtures/*.json）を指定すると、実データの代わりに表示する。
- * 見本データの minutesAgo は「何分前に動きがあったか」。
+ * 見本データの minutesAgo は「何分前に動きがあったか」。ファイルに書いた順を作った順とする（createdAt と通し番号）。
  * WIDGET_FIXTURE_CYCLE（秒）を付けると、その間隔ですべてのセッションの状態を 1 つずつ進める（状態の変化と並べ替えを確かめる）。
  */
 export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): SessionView[] {
   const items = readJson(path);
   if (!Array.isArray(items)) return [];
   const step = cycle ? Math.floor(now / cycle) : 0;
-  return sortSessions(items.map(({ minutesAgo, ...s }) => {
-    const view: SessionView = { ...s, lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000 };
+  const views: SessionView[] = items.map(({ minutesAgo, ...s }, i) => ({
+    ...s,
+    createdAt: i + 1,
+    lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000,
+  }));
+  assignSeq(views);
+  return sortSessions(views.map((view) => {
     if (!step) return view;
     const state = STATES[(STATES.indexOf(view.state) + step) % STATES.length]!;
     // 実データと同じく、waitingFor は対応待ちのときだけ
@@ -168,17 +191,20 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const running = readRunning(paths.runningDir);
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
+  // 通し番号を数えるためのもの。アーカイブ済みも入れる
+  const numbered: SessionView[] = [];
   // 今開いているセッション（docs/deep-link-and-uia.md）。サイドチャットのときは親の ID にする
   let focused: { id: string; at: number } | undefined;
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
-      if (!d?.sessionId || d.isArchived) continue;
+      if (!d?.sessionId) continue;
+      const archived = Boolean(d.isArchived);
       const at = Number(d.lastFocusedAt) || 0;
       // サイドチャット（btw）はデスクトップのサイドバーに出ないので、一覧には入れない。開いているのは親として扱う
       const btwParent = d.spawnedFrom?.btw ? d.spawnedFrom.sessionId : undefined;
       const focusId: string = btwParent || d.sessionId;
-      if (at && (!focused || at > focused.at)) focused = { id: focusId, at };
+      if (!archived && at && (!focused || at > focused.at)) focused = { id: focusId, at };
       if (btwParent) continue;
       const r = running.get(d.cliSessionId);
       const state = toState(r);
@@ -192,7 +218,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const outside: string | undefined =
         !d.worktreeName && anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root) ? anchor.gitRoot : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
-      views.push({
+      const view: SessionView = {
         id: d.sessionId,
         title: d.title || '(無題)',
         // git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
@@ -210,10 +236,14 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         waitingFor: state === 'waiting' ? r?.waitingFor : undefined,
         needsAction: summary.needs_action || undefined,
         detail: summary.status_detail || undefined,
+        createdAt: Number(d.createdAt) || 0,
         lastActivityAt: Number(d.lastActivityAt) || 0,
-      });
+      };
+      numbered.push(view);
+      if (!archived) views.push(view);
     }
   }
+  assignSeq(numbered);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
   const focusedId = focused?.id;
   const focusedView = focusedId && views.find((s) => s.id === focusedId);

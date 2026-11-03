@@ -34,6 +34,10 @@ export interface SessionView {
   needsAction?: string;
   /** 最後のターンのまとめ（ツールチップ用） */
   detail?: string;
+  /** 作った時刻（Unix ミリ秒）。わからなければ 0 */
+  createdAt: number;
+  /** ワークツリーごとの通し番号（作った順に 1 から。アーカイブ済みも数える）。表示のためだけに使う */
+  seq?: number;
   /** 最後に動きがあった時刻（Unix ミリ秒） */
   lastActivityAt: number;
   /** デスクトップで今開いているセッション（`lastFocusedAt` が一番新しいもの）だけ true */
@@ -74,7 +78,10 @@ export interface WidgetApi {
   setAlwaysShow(id: string, on: boolean): void;
 }
 
-export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned' | 'groupLimit' | 'foldScope' | 'alwaysShow'>;
+export type WidgetLayout = Pick<
+  Settings,
+  'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned' | 'groupLimit' | 'foldScope' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'alwaysShow'
+>;
 
 export interface DisplayOption {
   id: string;

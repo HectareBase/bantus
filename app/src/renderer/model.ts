@@ -1,5 +1,6 @@
 // 画面に出す形への組み立て（カード、小見出し、ツールチップ）。DOM を使わないので、テストから直接呼べる。
 
+import type { SortOrder } from '../shared/settings';
 import type { GitChanges, SessionState, SessionView } from '../shared/types';
 import type { IconName } from './icons.js';
 
@@ -34,6 +35,34 @@ export interface Card {
 
 function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
   return a.rank - b.rank || b.latest - a.latest;
+}
+
+const collator = new Intl.Collator('ja', { numeric: true });
+
+/**
+ * カードと小見出しの比べ方。fixed は名前順（同じ名前なら key）で、first に当てはまるもの（メイン）を先頭にする。
+ * recent は最後に動きがあった順、priority は急ぐ順
+ */
+function compareItems<T extends { key: string; rank: number; latest: number }>(
+  order: SortOrder,
+  name: (x: T) => string,
+  first: (x: T) => boolean = () => false,
+) {
+  return (a: T, b: T): number => {
+    if (order === 'priority') return byUrgency(a, b);
+    if (order === 'recent') return b.latest - a.latest;
+    if (first(a) !== first(b)) return first(a) ? -1 : 1;
+    return collator.compare(name(a), name(b)) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  };
+}
+
+/** セッションの比べ方。fixed は新しく作ったものが上、recent は最後に動きがあった順、priority は急ぐ順 */
+export function compareSessions(order: SortOrder) {
+  return (a: SessionView, b: SessionView): number => {
+    if (order === 'fixed') return b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+    if (order === 'priority' && RANK[a.state] !== RANK[b.state]) return RANK[a.state] - RANK[b.state];
+    return b.lastActivityAt - a.lastActivityAt;
+  };
 }
 
 export function stateOfRank(rank: number): SessionState {
@@ -74,7 +103,7 @@ export function statusIconName(state: SessionState, waitingFor?: string): Status
 }
 
 export function tooltip(s: SessionView): string {
-  const lines = [s.title];
+  const lines = [s.seq ? `${s.seq}. ${s.title}` : s.title];
   if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
   if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
   if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
@@ -168,7 +197,7 @@ export function resolveFocus(
   return { id: fromData, pending: undefined };
 }
 
-export function buildCards(sessions: SessionView[]): Card[] {
+export function buildCards(sessions: SessionView[], order: SortOrder = 'priority'): Card[] {
   const map = new Map<string, Card>();
   for (const s of sessions) {
     let card = map.get(s.repoKey);
@@ -180,10 +209,10 @@ export function buildCards(sessions: SessionView[]): Card[] {
     card.rank = Math.min(card.rank, RANK[s.state]);
     card.latest = Math.max(card.latest, s.lastActivityAt);
   }
-  return [...map.values()].sort(byUrgency);
+  return [...map.values()].sort(compareItems<Card>(order, (c) => c.name));
 }
 
-export function buildGroups(active: SessionView[]): Group[] {
+export function buildGroups(active: SessionView[], order: SortOrder = 'priority'): Group[] {
   const map = new Map<string, Group & { rank: number; latest: number }>();
   for (const s of active) {
     const key = s.worktree?.key ?? '';
@@ -207,7 +236,7 @@ export function buildGroups(active: SessionView[]): Group[] {
     g.rank = Math.min(g.rank, RANK[s.state]);
     g.latest = Math.max(g.latest, s.lastActivityAt);
   }
-  return [...map.values()].sort(byUrgency);
+  return [...map.values()].sort(compareItems<Group & { rank: number; latest: number }>(order, (g) => g.label, (g) => g.isMain));
 }
 
 /** 一覧を折りたたむ決まり。設定の値と、画面が覚えている状態から作る */
@@ -220,10 +249,22 @@ export interface FoldOptions {
   alwaysShow: ReadonlySet<string>;
   /** 上限を超えても出すセッション（未確認、今開いているもの）。ほかの行を押し出さないよう、空いた枠がなければ枠の外に足す */
   extra: ReadonlySet<string>;
+  /** 並び順。どれを折りたたむかは並び順に関係なく急ぐ順で選び、選んだあとで並べる */
+  sort: SortOptions;
 }
 
+/** カード、小見出し、行の並び順（設定の projectOrder、worktreeOrder、sessionOrder） */
+export interface SortOptions {
+  project: SortOrder;
+  worktree: SortOrder;
+  session: SortOrder;
+}
+
+/** どれも急ぐ順 */
+export const PRIORITY_SORT: SortOptions = { project: 'priority', worktree: 'priority', session: 'priority' };
+
 /** 何も折りたたまない（停止中だけをたたむ） */
-export const NO_FOLD: FoldOptions = { limit: 0, scope: 'repo', alwaysShow: new Set(), extra: new Set() };
+export const NO_FOLD: FoldOptions = { limit: 0, scope: 'repo', alwaysShow: new Set(), extra: new Set(), sort: PRIORITY_SORT };
 
 /** 折りたたみの中身 */
 export interface Fold {
@@ -291,7 +332,8 @@ function makeFold(key: string, hidden: SessionView[], stopped: SessionView[], sh
 export function cardLayout(card: Card, opts: FoldOptions = NO_FOLD): CardLayout {
   const kept = (s: SessionView) => opts.alwaysShow.has(s.id);
   const byWorktree = opts.scope === 'worktree';
-  const groups = buildGroups([...card.active, ...card.stopped.filter((s) => byWorktree || kept(s))]);
+  const order = compareSessions(opts.sort.session);
+  const groups = buildGroups([...card.active, ...card.stopped.filter((s) => byWorktree || kept(s))], opts.sort.worktree);
   const useSubheads = groups.some((g) => !g.isMain);
   // 小見出しがなければ、メインの作業フォルダの変更を見出しに出す（停止中のワークツリーは折りたたみの中にあり、見出しには出さない）
   const main = [...card.active, ...card.stopped].filter((s) => !s.worktree);
@@ -299,16 +341,17 @@ export function cardLayout(card: Card, opts: FoldOptions = NO_FOLD): CardLayout 
   const shown = new Set((useSubheads ? groups.flatMap((g) => g.sessions) : main).map(folderOf));
   const allHidden: SessionView[] = [];
   const sections = groups.map((g): Section => {
-    const live = g.sessions.filter((s) => s.state !== 'stopped' || kept(s));
+    const live = g.sessions.filter((s) => s.state !== 'stopped' || kept(s)).sort(compareSessions('priority'));
     const { visible, hidden } = pick(live, opts);
-    const section: Section = { key: g.key, group: useSubheads ? g : undefined, sessions: visible };
+    const section: Section = { key: g.key, group: useSubheads ? g : undefined, sessions: visible.sort(order) };
     if (byWorktree) {
-      const stopped = g.sessions.filter((s) => s.state === 'stopped' && !kept(s));
-      section.fold = makeFold(`${card.key}|${g.key}|fold`, hidden, stopped, shown);
+      const stopped = g.sessions.filter((s) => s.state === 'stopped' && !kept(s)).sort(order);
+      section.fold = makeFold(`${card.key}|${g.key}|fold`, hidden.sort(order), stopped, shown);
     } else allHidden.push(...hidden);
     return section;
   });
-  const fold = byWorktree ? undefined : makeFold(`${card.key}|fold`, allHidden, card.stopped.filter((s) => !kept(s)), shown);
+  const stopped = card.stopped.filter((s) => !kept(s)).sort(order);
+  const fold = byWorktree ? undefined : makeFold(`${card.key}|fold`, allHidden.sort(order), stopped, shown);
   return { sections, fold, headerChanges };
 }
 
@@ -331,7 +374,7 @@ export function foldCounts(fold: Fold): { state: SessionState; count: number }[]
 
 /** 画面に並んでいる順（上から）の、折りたたみの外のセッション */
 export function displayOrder(sessions: SessionView[], opts: FoldOptions = NO_FOLD): SessionView[] {
-  return buildCards(sessions).flatMap((card) => cardLayout(card, opts).sections.flatMap((g) => g.sessions));
+  return buildCards(sessions, opts.sort.project).flatMap((card) => cardLayout(card, opts).sections.flatMap((g) => g.sessions));
 }
 
 /**

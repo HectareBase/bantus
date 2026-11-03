@@ -17,11 +17,20 @@ export interface Settings {
   groupLimit: number;
   /** 隠したセッションと停止中をまとめる折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
   foldScope: 'repo' | 'worktree';
+  /** カード（プロジェクト）の並び。fixed は名前順 */
+  projectOrder: SortOrder;
+  /** 小見出し（ワークツリー）の並び。fixed はメインを先頭に、あとは名前順 */
+  worktreeOrder: SortOrder;
+  /** 行（セッション）の並び。fixed は新しく作ったものが上 */
+  sessionOrder: SortOrder;
   /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
   alwaysShow: string[];
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
+
+/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
+export type SortOrder = 'fixed' | 'recent' | 'priority';
 
 export interface WindowBounds {
   x: number;
@@ -39,6 +48,9 @@ export const DEFAULT_SETTINGS: Settings = {
   pinned: true,
   groupLimit: 5,
   foldScope: 'repo',
+  projectOrder: 'fixed',
+  worktreeOrder: 'fixed',
+  sessionOrder: 'fixed',
   alwaysShow: [],
 };
 
@@ -74,9 +86,15 @@ interface Base<K extends keyof Settings> {
 export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
 
 export type SettingDef =
-  | (Base<'edge' | 'foldScope' | 'groupLimit'> & { type: 'segmented'; options: { value: string | number; label: string }[] })
+  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder'> & { type: 'segmented'; options: { value: string | number; label: string }[] })
   | (Base<'display'> & { type: 'display' })
   | (Base<'backgroundOpacity' | 'cardOpacity'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+
+const ORDER_OPTIONS = [
+  { value: 'fixed', label: '固定' },
+  { value: 'recent', label: '更新日時' },
+  { value: 'priority', label: '優先度' },
+];
 
 export const SETTING_DEFS: SettingDef[] = [
   {
@@ -94,6 +112,21 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'foldScope', category: 'display', group: '一覧', type: 'segmented',
     label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
     options: [{ value: 'repo', label: 'リポジトリ' }, { value: 'worktree', label: 'ワークツリー' }],
+  },
+  {
+    key: 'projectOrder', category: 'display', group: '並び順', type: 'segmented',
+    label: 'プロジェクト', description: 'カードの並び。固定は名前順',
+    options: ORDER_OPTIONS,
+  },
+  {
+    key: 'worktreeOrder', category: 'display', group: '並び順', type: 'segmented',
+    label: 'ワークツリー', description: '小見出しの並び。固定はメインを先頭に、あとは名前順',
+    options: ORDER_OPTIONS,
+  },
+  {
+    key: 'sessionOrder', category: 'display', group: '並び順', type: 'segmented',
+    label: 'セッション', description: '行の並び。固定は新しく作ったものが上。表示数を超えたときに折りたたむものは、どの並びでも優先度で選ぶ',
+    options: ORDER_OPTIONS,
   },
   {
     key: 'backgroundOpacity', category: 'display', group: '見た目', type: 'slider',

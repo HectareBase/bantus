@@ -5,6 +5,7 @@
 import type { GitChanges, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
+  PRIORITY_SORT,
   PROGRESS_RING,
   buildCards,
   cardBadge,
@@ -25,6 +26,7 @@ import {
   type FoldOptions,
   type Group,
   type PendingFocus,
+  type SortOptions,
   type StatusIcon,
 } from './model.js';
 import { flip } from './flip.js';
@@ -34,6 +36,7 @@ import { initTooltips } from './tooltip.js';
 interface RowRefs {
   el: HTMLLIElement;
   status: HTMLElement;
+  seq: HTMLElement;
   title: HTMLElement;
   branch: HTMLElement;
   when: HTMLElement;
@@ -83,6 +86,7 @@ const seenState = new Map<string, SessionView['state']>();
 /** 一覧の設定（onLayout で届く）。常に表示は、押したときにすぐ変え、保存された値が戻ってきたらそれに合わせる */
 let groupLimit = 0;
 let foldScope: FoldOptions['scope'] = 'repo';
+let sort: SortOptions = PRIORITY_SORT;
 let alwaysShow = new Set<string>();
 /** 最後に受け取ったセッション一覧と、クリックしてまだファイルに反映されていないセッション */
 let latest: SessionView[] = [];
@@ -150,7 +154,7 @@ function foldOptions(): FoldOptions {
   const extra = new Set(attention);
   const focused = resolveFocus(latest, pendingFocus).id;
   if (focused) extra.add(focused);
-  return { limit: groupLimit, scope: foldScope, alwaysShow, extra };
+  return { limit: groupLimit, scope: foldScope, alwaysShow, extra, sort };
 }
 
 /**
@@ -202,6 +206,7 @@ function getRow(s: SessionView): RowRefs {
     refs = {
       el,
       status: el.querySelector('.status')!,
+      seq: el.querySelector('.seq')!,
       title: el.querySelector('.title')!,
       branch: el.querySelector('.branch')!,
       when: el.querySelector('.when')!,
@@ -226,6 +231,7 @@ function getRow(s: SessionView): RowRefs {
   refs.el.toggleAttribute('data-keep', kept);
   refs.keep.setAttribute('aria-pressed', String(kept));
   refs.keep.dataset.tip = kept ? '常に表示中（クリックで外す）' : '常に表示する';
+  if (prev?.seq !== s.seq) refs.seq.textContent = s.seq ? String(s.seq) : '';
   if (prev?.title !== s.title) refs.title.textContent = s.title;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   refs.el.dataset.tip = tooltip(s);
@@ -413,8 +419,11 @@ function* animatedElements(): Iterable<HTMLElement> {
 function render(sessions: SessionView[]) {
   latest = sessions;
   updateAttention(sessions);
-  const list = buildCards(sessions);
   const opts = foldOptions();
+  const list = buildCards(sessions, opts.sort.project);
+  // 番号の列の幅。どの行でもタイトルの先頭がそろうよう、いちばん大きい番号の桁数にする
+  const digits = String(Math.max(0, ...sessions.map((s) => s.seq ?? 0))).length;
+  document.documentElement.style.setProperty('--seq-digits', String(digits));
   // 並びが変わった行・小見出し・折りたたみ・カードを、前の位置からすべらせる
   flip(animatedElements, () => {
     syncChildren(cardsEl, list.map((card) => renderCard(card, opts)));
@@ -513,10 +522,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') setOpenFold(undefined);
 });
 
-function applyLayout({ edge, backgroundOpacity, cardOpacity, pinned, groupLimit: limit, foldScope: scope, alwaysShow: keep }: WidgetLayout) {
+function applyLayout(layout: WidgetLayout) {
+  const { edge, backgroundOpacity, cardOpacity, pinned, groupLimit: limit, foldScope: scope, alwaysShow: keep } = layout;
   showPinned(pinned);
   groupLimit = limit;
   foldScope = scope;
+  sort = { project: layout.projectOrder, worktree: layout.worktreeOrder, session: layout.sessionOrder };
   alwaysShow = new Set(keep);
   render(latest);
   const root = document.documentElement;

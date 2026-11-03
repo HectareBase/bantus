@@ -33,6 +33,20 @@ describe('buildCards', () => {
   });
 });
 
+describe('buildCards の並び順', () => {
+  const list = () => [
+    view({ repoKey: 'k10', repoName: 'app10', state: 'idle', lastActivityAt: 5 }),
+    view({ repoKey: 'k2', repoName: 'app2', state: 'idle', lastActivityAt: 9 }),
+    view({ repoKey: 'kb', repoName: 'beta', state: 'waiting', lastActivityAt: 1 }),
+    view({ repoKey: 'ka', repoName: 'beta', state: 'idle', lastActivityAt: 3 }),
+  ];
+  it('固定は名前順。数字は数として比べ、同じ名前なら key で決める', () =>
+    assert.deepEqual(buildCards(list(), 'fixed').map((c) => c.key), ['k2', 'k10', 'ka', 'kb']));
+  it('更新日時は状態に関係なく新しい順', () =>
+    assert.deepEqual(buildCards(list(), 'recent').map((c) => c.key), ['k2', 'k10', 'ka', 'kb']));
+  it('優先度は急ぐ順', () => assert.deepEqual(buildCards(list(), 'priority').map((c) => c.key), ['kb', 'k2', 'k10', 'ka']));
+});
+
 describe('buildGroups', () => {
   it('メインは「メイン（ブランチ名）」、ブランチがわからなければ「メイン」', () => {
     assert.equal(buildGroups([view({ mainBranch: 'main' })])[0]?.label, 'メイン（main）');
@@ -49,6 +63,19 @@ describe('buildGroups', () => {
     assert.deepEqual(groups.map((g) => [g.label, g.sessions.length, g.isMain]), [['w-label', 2, false], ['メイン', 1, true]]);
     assert.equal(groups[0]?.tooltip, 'claude/w-123abc');
   });
+});
+
+describe('buildGroups の並び順', () => {
+  const wt = (label: string) => ({ key: label, label, branch: `claude/${label}` });
+  const list = () => [
+    view({ worktree: wt('zeta'), state: 'waiting', lastActivityAt: 1 }),
+    view({ state: 'idle', lastActivityAt: 2 }),
+    view({ worktree: wt('alpha'), state: 'idle', lastActivityAt: 9 }),
+  ];
+  it('固定はメインが先頭、あとは名前順', () =>
+    assert.deepEqual(buildGroups(list(), 'fixed').map((g) => g.label), ['メイン', 'alpha', 'zeta']));
+  it('更新日時はメインも含めて新しい順', () =>
+    assert.deepEqual(buildGroups(list(), 'recent').map((g) => g.label), ['alpha', 'メイン', 'zeta']));
 });
 
 describe('cardBadge', () => {
@@ -147,7 +174,7 @@ describe('statusIconName', () => {
 });
 
 describe('displayOrder と nextCycleTarget', () => {
-  // 画面の並び：カード waiting（w1）→ カード main（m1 処理中、m2 待機。ワークツリーなし）→ カード wt（メイン t1、ワークツリー t2）
+  // 画面の並び（急ぐ順）：カード waiting（w1）→ カード main（m1 処理中、m2 待機。ワークツリーなし）→ カード wt（メイン t1、ワークツリー t2）
   const wt = { key: 'wt|x', label: 'x', branch: 'claude/x-123abc' };
   const sessions: SessionView[] = [
     view({ id: 'm2', repoKey: 'main', state: 'idle', lastActivityAt: 30 }),
@@ -159,13 +186,19 @@ describe('displayOrder と nextCycleTarget', () => {
   ];
 
   it('画面の上から順に並べ、停止中は入れない', () =>
-    assert.deepEqual(displayOrder(sessions).map((s) => s.id), ['w1', 'm2', 'm1', 't2', 't1']));
+    assert.deepEqual(displayOrder(sessions).map((s) => s.id), ['w1', 'm1', 'm2', 't2', 't1']));
+
+  it('並び順の設定に従う', () => {
+    const fixed = { ...NO_FOLD, sort: { project: 'fixed', worktree: 'fixed', session: 'fixed' } } as const;
+    // カードは名前順（main → waiting → wt）、メインが先頭、セッションは新しく作ったものが上
+    assert.deepEqual(displayOrder(sessions, fixed).map((s) => s.id), ['m1', 'm2', 'w1', 't1', 't2']);
+  });
 
   it('未確認があれば、表示順でいちばん上のもの', () =>
     assert.equal(nextCycleTarget(sessions, new Set(['t1', 'm1']), 'w1'), 'm1'));
   it('今開いている行は、未確認でも選ばない', () =>
     assert.equal(nextCycleTarget(sessions, new Set(['w1', 't2']), 'w1'), 't2'));
-  it('未確認がなければ、今開いている行の次', () => assert.equal(nextCycleTarget(sessions, new Set(), 'm1'), 't2'));
+  it('未確認がなければ、今開いている行の次', () => assert.equal(nextCycleTarget(sessions, new Set(), 'm2'), 't2'));
   it('最後の行の次は先頭に戻る', () => assert.equal(nextCycleTarget(sessions, new Set(), 't1'), 'w1'));
   it('今開いている行が一覧にない（停止中）か、わからなければ先頭', () => {
     assert.equal(nextCycleTarget(sessions, new Set(), 's1'), 'w1');
@@ -204,6 +237,23 @@ describe('cardLayout', () => {
     const l = layout(sessions(), NO_FOLD);
     assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1', 'i2', 'i3']);
     assert.deepEqual([ids(l.fold!.hidden), ids(l.fold!.stopped)], [[], ['s1']]);
+  });
+
+  it('並び順を変えても、隠すものは急ぐ順で選び、選んだあとで並べる', () => {
+    const list = [
+      view({ id: 'old-busy', state: 'busy', createdAt: 1, lastActivityAt: 5 }),
+      view({ id: 'mid-idle', state: 'idle', createdAt: 2, lastActivityAt: 40 }),
+      view({ id: 'new-idle', state: 'idle', createdAt: 3, lastActivityAt: 10 }),
+      view({ id: 'newest-idle', state: 'idle', createdAt: 4, lastActivityAt: 20 }),
+      view({ id: 's-old', state: 'stopped', createdAt: 0 }),
+      view({ id: 's-new', state: 'stopped', createdAt: 9 }),
+    ];
+    const fixed = layout(list, opts({ sort: { ...NO_FOLD.sort, session: 'fixed' } }));
+    assert.deepEqual(ids(fixed.sections[0]!.sessions), ['mid-idle', 'old-busy']);
+    assert.deepEqual([ids(fixed.fold!.hidden), ids(fixed.fold!.stopped)], [['newest-idle', 'new-idle'], ['s-new', 's-old']]);
+    const recent = layout(list, opts({ sort: { ...NO_FOLD.sort, session: 'recent' } }));
+    assert.deepEqual(ids(recent.sections[0]!.sessions), ['mid-idle', 'old-busy']);
+    assert.deepEqual(ids(recent.fold!.hidden), ['newest-idle', 'new-idle']);
   });
 
   it('上限を超えた分は、急ぐ順で後ろのものから隠す', () => {

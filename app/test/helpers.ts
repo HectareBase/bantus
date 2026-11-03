@@ -30,6 +30,7 @@ export function view(patch: Partial<SessionView> = {}): SessionView {
     repoKey: 'repo',
     repoName: 'repo',
     state: 'idle',
+    createdAt: counter,
     lastActivityAt: 1_000_000,
     ...patch,
   };

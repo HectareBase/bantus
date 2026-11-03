@@ -202,7 +202,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 16px 1fr auto;
+  grid-template-columns: 16px auto 1fr auto;
   align-items: center;
   gap: 8px;
   margin: 0 4px;
@@ -235,6 +235,15 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row[data-attention]::before { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
 
 .text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+/* ワークツリーごとの通し番号。状態のアイコンの右に薄く出す。タイトルの先頭がそろうよう、幅は一覧でいちばん多い桁数に合わせる（renderer が --seq-digits を決める） */
+.seq {
+  width: calc(var(--seq-digits, 1) * 1ch);
+  margin-left: -4px;
+  font-size: 11px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .branch { overflow: hidden; text-overflow: ellipsis; }
