@@ -32,6 +32,7 @@ describe('normalizeSettings の一覧の項目', () => {
     const s = normalizeSettings({});
     assert.deepEqual([s.groupLimit, s.foldScope, s.alwaysShow], [5, 'repo', []]);
     assert.deepEqual([s.projectOrder, s.worktreeOrder, s.sessionOrder], ['fixed', 'fixed', 'fixed']);
+    assert.deepEqual([s.showSeq, s.showUpdated], [true, true]);
   });
   it('選べる値だけを残す', () => {
     assert.equal(normalizeSettings({ groupLimit: 0 }).groupLimit, 0);
@@ -41,6 +42,8 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.equal(normalizeSettings({ foldScope: 'x' }).foldScope, 'repo');
     assert.equal(normalizeSettings({ sessionOrder: 'recent' }).sessionOrder, 'recent');
     assert.equal(normalizeSettings({ projectOrder: 'name' }).projectOrder, 'fixed');
+    assert.equal(normalizeSettings({ showSeq: false }).showSeq, false);
+    assert.equal(normalizeSettings({ showUpdated: 'false' }).showUpdated, true);
   });
   it('常に表示は、セッションの ID の形をした文字列だけを、重ねずに残す', () =>
     assert.deepEqual(normalizeSettings({ alwaysShow: ['local_a-1', 'local_a-1', 'x', 3, 'local_b'] }).alwaysShow, ['local_a-1', 'local_b']));

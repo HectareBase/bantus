@@ -534,6 +534,8 @@ function applyLayout(layout: WidgetLayout) {
   root.dataset.edge = edge;
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
+  root.classList.toggle('hide-seq', !layout.showSeq);
+  root.classList.toggle('hide-updated', !layout.showUpdated);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
   if (!floating) clickThrough = false;

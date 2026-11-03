@@ -23,6 +23,10 @@ export interface Settings {
   worktreeOrder: SortOrder;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
+  /** 行に、ワークツリーごとの通し番号を出す */
+  showSeq: boolean;
+  /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
+  showUpdated: boolean;
   /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
   alwaysShow: string[];
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
@@ -51,6 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
   sessionOrder: 'fixed',
+  showSeq: true,
+  showUpdated: true,
   alwaysShow: [],
 };
 
@@ -86,9 +92,17 @@ interface Base<K extends keyof Settings> {
 export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
 
 export type SettingDef =
-  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder'> & { type: 'segmented'; options: { value: string | number; label: string }[] })
+  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated'> & {
+      type: 'segmented';
+      options: { value: string | number | boolean; label: string }[];
+    })
   | (Base<'display'> & { type: 'display' })
   | (Base<'backgroundOpacity' | 'cardOpacity'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+
+const SHOW_OPTIONS = [
+  { value: true, label: '表示' },
+  { value: false, label: '非表示' },
+];
 
 const ORDER_OPTIONS = [
   { value: 'fixed', label: '固定' },
@@ -127,6 +141,16 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'sessionOrder', category: 'display', group: '並び順', type: 'segmented',
     label: 'セッション', description: '行の並び。固定は新しく作ったものが上。表示数を超えたときに折りたたむものは、どの並びでも優先度で選ぶ',
     options: ORDER_OPTIONS,
+  },
+  {
+    key: 'showSeq', category: 'display', group: '行に出すもの', type: 'segmented',
+    label: 'セッションの番号', description: 'ワークツリーごとに作った順の番号。状態のアイコンの右に出す',
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'showUpdated', category: 'display', group: '行に出すもの', type: 'segmented',
+    label: '更新日時', description: '2 行目の「◯分前」。ブランチ名も出ない行は 1 行になる',
+    options: SHOW_OPTIONS,
   },
   {
     key: 'backgroundOpacity', category: 'display', group: '見た目', type: 'slider',

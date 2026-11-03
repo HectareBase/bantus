@@ -252,6 +252,11 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 }
 /* 番号がないときも列の幅は残し、枠だけ消す */
 .seq:empty { visibility: hidden; }
+/* 設定で番号を出さないときは、列ごとなくす */
+html.hide-seq .row { grid-template-columns: 16px 1fr auto; }
+html.hide-seq .seq { display: none; }
+/* 設定で更新日時を出さないとき */
+html.hide-updated .when { display: none; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .branch { overflow: hidden; text-overflow: ellipsis; }
