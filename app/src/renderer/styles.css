@@ -328,7 +328,7 @@ html.collapsed #mini {
 .mini-ring[data-state="idle"] { border-color: var(--idle); }
 .mini-ring.blink { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
 
-/* ---- 幅を変える取っ手（内側の端） ---- */
+/* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
 .resize-handle {
   position: fixed;
   top: 0;
@@ -339,19 +339,6 @@ html.collapsed #mini {
   cursor: ew-resize;
 }
 html[data-edge="left"] .resize-handle { left: auto; right: 0; }
-.resize-handle::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 2px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--text-tertiary);
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-.resize-handle:hover::after, html.resizing .resize-handle::after { opacity: 0.6; }
 html.resizing, html.resizing * { cursor: ew-resize !important; }
 html.collapsed .resize-handle { display: none; }
 
