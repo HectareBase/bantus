@@ -44,6 +44,8 @@
 - `app/scripts/clean-dist.mjs`：包む前に `dist/` を消す（前のビルドの残りを入れない）
 - 一番上の `package.json`：同じ名前で `app/` に渡すスクリプト
 - `app/README.md`：作り方と、作ったファイルの場所
+- `app/electron-builder.yml` の `extraFiles`：リポジトリの一番上の `LICENSE` を `LICENSE.txt` に、`THIRD_PARTY_NOTICES.txt` をそのままの名前で、インストール先の一番上（`Bantus.exe` の隣）に置く。MIT と ISC は「すべての複製に表記を入れる」ことが条件なので、配るものすべて（インストーラー、zip、`win-unpacked/`）に入れる。`app/` の外のファイルなので `from: ../LICENSE` のように書く。拡張子を `.txt` にするのは、ダブルクリックでメモ帳が開くようにするため
+- `nsis.license: ../LICENSE`：インストーラーの最初に MIT の使用許諾の画面を出す。画面が 1 つ増え、「同意する」を押す操作が増える
 
 ## 決めたこと
 | 項目 | 決めたこと |
@@ -53,6 +55,7 @@
 | electron-builder の版 | 26.17.0（出てから 2 週間以上たった版） |
 | アンインストール | 設定（`%APPDATA%Bantus`）は消さない（`deleteAppDataOnUninstall: false`）。消すかを聞く画面は作らない |
 | ポータブル版の設定 | インストール版と同じ `%APPDATA%Bantus` |
+| 使用許諾と第三者の表記 | `LICENSE.txt` と `THIRD_PARTY_NOTICES.txt` を `Bantus.exe` の隣に置く。インストーラーでは MIT の使用許諾の画面を出す |
 | 言語ファイル | Electron の言語ファイルは `ja` と `en-US` だけを入れる |
 | ログオン時の起動 | 設定の「全体」→「起動」。インストール版（zip も含む）でだけ使え、`npm start` と見本データのときは灰色。起動したときに Windows の登録（`getLoginItemSettings`）を読んで設定に写す |
 
@@ -79,6 +82,12 @@
 | `npm run typecheck`、`npm test` | 通る（131 件） |
 | `npm audit` | electron の件が消え、ビルドのときだけ使う minimatch 系の中 15 件だけが残る |
 | `npm run dist:dir` で作った exe の起動 | ウィジェットが表示される。トレイのアイコンが登録される（隠れているアイコンの中） |
+
+### 使用許諾と第三者の表記を入れたあと
+| 確かめたこと | 結果 |
+|---|---|
+| `npm run dist:dir` | `win-unpacked/` の一番上に `LICENSE.txt` と `THIRD_PARTY_NOTICES.txt` ができ、中身はリポジトリの一番上のものと同じ |
+| `npm run dist` | インストーラーと zip ができる。zip の一番上に 2 つのファイルが入っている。インストーラーの NSIS スクリプトに使用許諾の画面（`MUI_PAGE_LICENSE`）が入る。インストーラーの中身は `win-unpacked/` を包んだものなので、同じ 2 つが入る |
 
 ### まだ確かめていないこと
 - `Ctrl+Alt+N`：いつものウィジェット（`npm start`）が動いていてキーを使っているため、exe では登録できなかった（想定どおり）。いつものウィジェットを止めて確かめる
