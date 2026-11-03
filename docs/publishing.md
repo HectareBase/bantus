@@ -33,6 +33,8 @@ git config user.email "<GitHub のユーザー ID>+<ユーザー名>@users.norep
 `local/private-words.txt`（git に入れない、個人の語句）
 - 自分の名前、ユーザー名、自分のほかのプロジェクト名など。1 行に 1 つ、大文字小文字を区別しない部分一致です。
 
+`.githooks/` の中と、npm が作る `package-lock.json` は調べません（ロックファイルには、外部パッケージの説明文に作者のメールアドレスが入るため）。
+
 すべてのファイルを手で調べるとき：
 ```bash
 .githooks/check-private.sh --all
