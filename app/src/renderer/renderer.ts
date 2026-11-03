@@ -20,6 +20,7 @@ import {
   formatAgo,
   hasAlertOutput,
   mergeAlerts,
+  newlyFlagged,
   nextAttention,
   openedInClaude,
   pickAlerts,
@@ -39,6 +40,7 @@ import {
 import { flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { playSound } from './sound.js';
+import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
 
 interface RowRefs {
@@ -481,6 +483,7 @@ function* animatedElements(): Iterable<HTMLElement> {
 
 function render(sessions: SessionView[]) {
   latest = sessions;
+  const flaggedBefore = new Set(attention);
   const fresh = updateAttention(sessions);
   if (primed && fresh.length) queueAlerts(fresh);
   const opts = foldOptions();
@@ -492,6 +495,11 @@ function render(sessions: SessionView[]) {
   flip(animatedElements, () => {
     syncChildren(cardsEl, list.map((card) => renderCard(card, opts)));
   });
+  // 新しく未確認になった行に、光を一度だけ横切らせる（並べ替えの動きが終わってから）
+  for (const id of newlyFlagged(flaggedBefore, attention, primed)) {
+    const refs = rows.get(id);
+    if (refs) void sweep(refs.el);
+  }
 
   // なくなったものは捨てる
   const ids = new Set(sessions.map((s) => s.id));

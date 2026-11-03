@@ -10,7 +10,8 @@ const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-function enabled(): boolean {
+/** 動かしてよいか。動きを減らす設定のときと、見えていない（html.paused）ときは動かさない */
+export function enabled(): boolean {
   const root = document.documentElement;
   return !reducedMotion.matches && !root.classList.contains('paused');
 }
@@ -66,6 +67,15 @@ export function flip(collect: () => Iterable<HTMLElement>, mutate: () => void) {
     const y = delta.y - (parent?.y ?? 0);
     if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5) continue;
     animate(el, [{ transform: `translate(${x}px, ${y}px)` }, { transform: 'none' }], MOVE_MS);
+  }
+}
+
+/** 今の並べ替えの動きが終わるまで待つ。待っている間に次の並べ替えが始まったら、それも待つ */
+export async function afterMoves(): Promise<void> {
+  for (;;) {
+    const moving = document.getAnimations().filter((a) => a.id === ANIMATION_ID && a.playState !== 'finished');
+    if (!moving.length) return;
+    await Promise.allSettled(moving.map((a) => a.finished));
   }
 }
 

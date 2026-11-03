@@ -166,6 +166,15 @@ export function nextAttention(prev: SessionState | undefined, next: SessionState
   return prev === 'busy' && next === 'idle';
 }
 
+/**
+ * 新しく未確認になった（前の描画では帯がなかった）セッションの ID。光を一度だけ横切らせる行に使う。
+ * 最初の描画（primed が false）では返さない（起動したとたんに全部の行が光らないように）
+ */
+export function newlyFlagged(before: ReadonlySet<string>, after: Iterable<string>, primed: boolean): string[] {
+  if (!primed) return [];
+  return [...after].filter((id) => !before.has(id));
+}
+
 // ---- 音とトーストで知らせる ----
 
 /** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中から待機になった） */
