@@ -100,6 +100,17 @@ describe('readSessions（偽のデータフォルダ）', () => {
       originCwd: outside,
       gitAnchors: [{ gitRoot: outside, commonDir: anchor.commonDir }, anchor],
     });
+    // 途中でワークツリーに入った（EnterWorktree）。local_*.json は元のままで、CLI の cwd だけがワークツリーのサブフォルダを指す
+    const moved = join(repo, '.claude', 'worktrees', 'moved');
+    writeJson(join(moved, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'moved').replace(/\\/g, '/')}\n`);
+    writeJson(join(repo, '.git', 'worktrees', 'moved', 'HEAD'), 'ref: refs/heads/worktree-moved\n');
+    writeJson(join(paths.runningDir, '6.json'), { pid, sessionId: 'cli-6', status: 'idle', cwd: join(moved, 'app') });
+    local(10, { title: 'entered worktree', cliSessionId: 'cli-6', cwd: repo, originCwd: repo, gitAnchors: [anchor] });
+    // 別のリポジトリのワークツリーに移っていても、そのワークツリーとしては扱わない
+    const other = join(tmp.path, 'Other-wt');
+    writeJson(join(other, '.git'), `gitdir: ${join(tmp.path, 'Other', '.git', 'worktrees', 'x')}\n`);
+    writeJson(join(paths.runningDir, '7.json'), { pid, sessionId: 'cli-7', status: 'idle', cwd: other });
+    local(11, { title: 'other repo', cliSessionId: 'cli-7', cwd: repo, originCwd: repo, gitAnchors: [anchor], createdAt: 40 });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
 
@@ -109,12 +120,14 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
     assert.deepEqual(sessions.map((s) => s.title).sort(), [
-      '(無題)', 'dead', 'no git', 'outside worktree', 'spawned', 'waiting', 'worktree',
+      '(無題)', 'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'spawned', 'waiting', 'worktree',
     ]);
   });
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
-    assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped', 'stopped', 'stopped']);
+    assert.deepEqual(sessions.map((s) => s.state), [
+      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped',
+    ]);
   });
 
   it('lastFocusedAt が一番新しいセッションだけが focused。サイドチャットなら親', () => {
@@ -149,6 +162,21 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(wt.worktree?.branch, 'feature/ext');
     assert.equal(wt.worktree?.label, 'feature/ext');
     assert.notEqual(wt.worktree?.key, byTitle('worktree')?.worktree?.key);
+  });
+
+  it('途中でワークツリーに入ったセッションは、CLI の今の作業フォルダからワークツリーを見つける', () => {
+    const main = byTitle('waiting')!;
+    const wt = byTitle('entered worktree')!;
+    assert.equal(wt.repoKey, main.repoKey);
+    assert.equal(wt.worktree?.branch, 'worktree-moved');
+    assert.equal(wt.workDir, join(tmp.path, 'Repo', '.claude', 'worktrees', 'moved'));
+    assert.equal(wt.seq, 1);
+  });
+
+  it('別のリポジトリのワークツリーに移ったセッションは、メインのまま', () => {
+    assert.equal(byTitle('other repo')?.worktree, undefined);
+    assert.equal(byTitle('other repo')?.workDir, join(tmp.path, 'Repo'));
+    assert.equal(byTitle('other repo')?.seq, 4);
   });
 
   it('git の情報がなければ元の作業フォルダでまとめる', () => {

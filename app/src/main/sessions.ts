@@ -3,7 +3,7 @@
 
 import { readFileSync, readdirSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { SessionState, SessionView } from '../shared/types';
 
 /** 読み取るフォルダ。テストでは偽のフォルダを渡す */
@@ -63,13 +63,20 @@ function isAlive(pid: unknown): boolean {
   }
 }
 
-/** CLI のセッション ID → { status, waitingFor }。ファイルだけが残っているものは除く */
-function readRunning(runningDir: string): Map<string, { status?: string; waitingFor?: string }> {
-  const map = new Map<string, { status?: string; waitingFor?: string }>();
+interface Running {
+  status?: string;
+  waitingFor?: string;
+  /** CLI の今の作業フォルダ。途中でワークツリーに入ると、local_*.json の cwd と違う値になる */
+  cwd?: string;
+}
+
+/** CLI のセッション ID → { status, waitingFor, cwd }。ファイルだけが残っているものは除く */
+function readRunning(runningDir: string): Map<string, Running> {
+  const map = new Map<string, Running>();
   for (const file of listFiles(runningDir, /^\d+\.json$/)) {
     const d = readJson(file);
     if (!d?.sessionId || !isAlive(d.pid)) continue;
-    map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor });
+    map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor, cwd: typeof d.cwd === 'string' ? d.cwd : undefined });
   }
   return map;
 }
@@ -125,7 +132,24 @@ function readWorktreeBranch(worktreeDir: string, heads: Map<string, string | und
   }
 }
 
-export const folderKey = (path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
+/**
+ * folder を含むワークツリーのフォルダ（`.git` がファイルで、その先が commonDir の中）。
+ * メインのリポジトリ（`.git` がフォルダ）、別のリポジトリのワークツリー、git の外なら undefined
+ */
+function findWorktreeRoot(folder: string, commonDir: string): string | undefined {
+  for (let dir = resolve(folder); ; dir = dirname(dir)) {
+    try {
+      const m = /^gitdir: (.+)$/m.exec(readFileSync(join(dir, '.git'), 'utf8'));
+      const gitDir = m?.[1] ? folderKey(resolve(dir, m[1].trim())) : '';
+      return gitDir.startsWith(`${folderKey(resolve(commonDir))}${sep}`) ? dir : undefined;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
+    }
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+
+export const folderKey =(path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
 
 /** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
 export function shortBranch(branch: string): string {
@@ -215,8 +239,14 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const commonDir: string | undefined = anchor?.commonDir;
       const repoRoot = commonDir && basename(commonDir).toLowerCase() === '.git' ? dirname(commonDir) : anchor?.gitRoot;
       const root: string = repoRoot || d.originCwd || d.cwd || '';
-      const outside: string | undefined =
-        !d.worktreeName && anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root) ? anchor.gitRoot : undefined;
+      // 動いている CLI が途中でワークツリーに入ったとき（EnterWorktree）は local_*.json が元のままなので、CLI の今の作業フォルダから探す
+      const outside: string | undefined = d.worktreeName
+        ? undefined
+        : anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root)
+          ? anchor.gitRoot
+          : commonDir && r?.cwd
+            ? findWorktreeRoot(r.cwd, commonDir)
+            : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const view: SessionView = {
         id: d.sessionId,

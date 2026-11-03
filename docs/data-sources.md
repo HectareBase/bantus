@@ -51,7 +51,7 @@
 | `pid` / `procStart` | プロセス ID と起動時刻。**ファイルだけが残っていることがある**ので、そのプロセスが今も動いているかを確かめる |
 | `sessionId` | CLI のセッション ID（`local_*.json` の `cliSessionId` と同じ値） |
 | `name` / `nameSource` / `formerNames` | セッション名と、付けた方法（`user` / `auto` / `derived` など）、以前の名前 |
-| `cwd` / `kind` / `entrypoint` | 作業フォルダ、`interactive`、`claude-desktop` |
+| `cwd` / `kind` / `entrypoint` | 今の作業フォルダ、`interactive`、`claude-desktop`。セッションの途中で EnterWorktree を使うと `cwd` はワークツリーに変わるが、`local_*.json`（`cwd`、`worktreeName` など）と `git-worktrees.json` は元のままで、デスクトップのサイドバーでも元のリポジトリのセッションとして出る。ウィジェットは、動いている間だけこの `cwd` からワークツリーを見つける |
 | `status` / `waitingFor` | 状態と、待ちの理由 |
 | `updatedAt` / `statusUpdatedAt` | 最後にファイルが更新された時刻と、状態が変わった時刻（Unix ミリ秒） |
 
