@@ -24,7 +24,7 @@
 | `cwd` / `originCwd` | 作業フォルダと、元のリポジトリのフォルダ（ワークツリーのときに違う値になる） |
 | `worktreeName` / `worktreePath` | ワークツリーの名前と場所（ワークツリーのときだけ） |
 | `branch` / `sourceBranch` | ワークツリーのブランチと、作成元のブランチ（ワークツリーのときだけ。例：`claude/xxxx-xxxx-1a2b3c`、`main`） |
-| `gitAnchors[]` | `gitRoot`（リポジトリのフォルダ）と `commonDir`（`.git` の場所）。`commonDir` はワークツリーでも同じ値なので、リポジトリの目印になる。git 管理でないフォルダでは空 |
+| `gitAnchors[]` | `gitRoot`（リポジトリのフォルダ）と `commonDir`（`.git` の場所）。`commonDir` はワークツリーでも同じ値なので、リポジトリの目印になる。git 管理でないフォルダでは空。リポジトリの外のワークツリー（`git worktree add` で作ったもの）で始めたセッションでは 2 つになり、1 つ目の `gitRoot` はワークツリーのフォルダ、2 つ目は元のリポジトリ。`commonDir` はどちらも元のリポジトリの `.git` |
 | `model` / `effort` / `permissionMode` | `claude-opus-5-5` / `medium` / `auto` |
 | `isArchived` | アーカイブ済みなら `true` |
 | `createdAt` / `lastActivityAt` / `lastFocusedAt` | Unix ミリ秒。`lastFocusedAt` が一番新しいものが、デスクトップで今開いているセッション → [deep-link-and-uia.md](deep-link-and-uia.md#今開いているセッションを知る) |

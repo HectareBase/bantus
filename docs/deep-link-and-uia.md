@@ -22,7 +22,7 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 | `claude://code/needs-input?session=<local_ID>` | 待っているセッションの中からそれを開く。なければ一番古いものを開く | |
 | `claude://code/new` | 新規作成の画面を開く | ✅ |
 | `claude://code/new?q=<文>` | 入力欄に文を入れて開く。**送信はしない**。最大 14336 文字 | ✅ |
-| `claude://code/new?folder=<パス>` | フォルダを選んで開く。「このワークスペースを信頼しますか？」の確認が出る。`folder` は何度でも付けられる | ✅ |
+| `claude://code/new?folder=<パス>` | フォルダを選んで開く。リンクから開くと、信頼したことのあるフォルダでも毎回「このワークスペースを信頼しますか？」の確認が出る。`folder` は何度でも付けられる | ✅ |
 | `claude://code/new?ssh_host=<host>&ssh_port=<port>&ssh_folder=<パス>` | SSH 先で新規作成。`folder` と一緒には使えない | |
 | `claude://code/search` | セッションの検索を開く（UIA では `Window`「検索」） | ✅ |
 | `claude://code/<cse_… / session_…>` | クラウドのセッションを開く | |
@@ -35,6 +35,24 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 - `code/new`、`code/continue`、`code/needs-input`、`claude.ai/new` は、アプリがジャンプリスト（Linux ではデスクトップエントリの Actions）に登録しているリンクです。
 - `continue` と `needs-input` は、ログインしていないときや、設定（`disableDeepLinks`）でリンクが止められているときは動きません。
 - リンクで開いてから `local_*.json` の `lastFocusedAt` が書き換わるまで、3 秒以上かかることがありました。開いた直後に「今開いているセッション」を読むときは注意してください。
+
+### 新規作成のリンクとワークツリー
+- `code/new` が受け取る引数は `q`（または `prompt`）、`folder`、`file`、`ssh_host` / `ssh_port` / `ssh_folder`、`environment` / `runner_pool` だけです。ほかの引数は捨てられます。
+- ワークツリーを使うかどうか（`useWorktree`）と、元にするブランチ（`sourceBranch`）は、新規作成の画面で選びます。リンクからは渡せません。
+- 既存のワークツリーのフォルダを `folder` に渡したときの動きは、ワークツリーの場所で変わります。
+
+| ワークツリーの場所 | 信頼の確認に出るパス | 選ばれるフォルダ |
+|---|---|---|
+| リポジトリの中（`.claude\worktrees\<名前>`。アプリが作る場所） | 元のリポジトリ | 元のリポジトリ |
+| リポジトリの外（`git worktree add` で作ったもの） | ワークツリーのフォルダ | ワークツリーのフォルダ |
+
+- 「ワークツリー」のチェックは、ワークツリーの場所では決まりません。前に新規作成したときの状態が記憶されます。
+
+- リポジトリの中のワークツリーは、パスを変えても別のブランチでは始められません。アプリが自分で管理するワークツリー（`isManagedWorktreePath`）を、元のリポジトリとして扱うためのようです。
+- リポジトリの外のワークツリーなら、そのフォルダで新規作成の画面を開けます。ただし「ワークツリー」のチェックがオンのまま送信すると、そこからさらに新しいワークツリーが作られるはずです。チェックはリンクではオフにできません。
+- チェックを外して送信すると、1 回目はそのワークツリーのフォルダとブランチのまま動きました。ところが同じ手順を繰り返すと、画面のフォルダ欄にはワークツリーのフォルダが出ているのに、送信すると `LocalSessions.createScratchWorkspace` が呼ばれ、`Claude-Data\claude_*\scratch-workspaces\` の中に作られた空のフォルダ（`scratch-…`）で始まりました。どちらになるかを決める条件は分かっていません。この判断は画面側（ウェブのコード）でしていて、`app.asar` には入っていません。
+- 同じフォルダを新規作成の画面で手で選んで送信すると、そのフォルダとブランチのまま動きました。scratch になるのは、リンクで渡したときだけです。
+- こうして始めたセッションは、アプリからはワークツリーとして扱われません。`local_*.json` の `cwd` / `originCwd` はワークツリーのフォルダになり、`worktreeName` / `worktreePath` / `branch` は空です。`gitAnchors` は 2 つになります（下の [data-sources.md](data-sources.md) を参照）。
 
 ## UIA（Windows UI Automation）
 `System.Windows.Automation` で、Claude のメインウィンドウ（`claude` プロセスの `MainWindowHandle`）から読み取れます。試したときの要素の数は、全部で 368 個でした。
