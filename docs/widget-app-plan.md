@@ -144,4 +144,4 @@ Electron 版は `app/` に置きます。試作は `prototype/`、検証用の�
 
 ## これから決めること
 - 画面を書く方法（素の HTML と CSS と TypeScript で十分か、軽い UI ライブラリを使うか）
-- 配布の方法（`electron-builder` でインストーラーを作るか、zip にするか）
+- 配布の方法 → [packaging-plan.md](packaging-plan.md)（electron-builder で NSIS のインストーラーと zip を作る案）
