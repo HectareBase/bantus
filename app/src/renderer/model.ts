@@ -166,6 +166,87 @@ export function nextAttention(prev: SessionState | undefined, next: SessionState
   return prev === 'busy' && next === 'idle';
 }
 
+// ---- 音とトーストで知らせる ----
+
+/** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中から待機になった） */
+export type AlertReason = 'waiting' | 'done';
+
+export interface Alert {
+  id: string;
+  reason: AlertReason;
+}
+
+/** 状態が変わってから知らせるまで待つ長さ。この間に変わったセッションは 1 回にまとめる */
+export const ALERT_COLLECT_MS = 300;
+/** 続けて知らせるときにあける間 */
+export const ALERT_GAP_MS = 4_000;
+
+/**
+ * 知らせる理由。nextAttention と同じきっかけで、帯が新しく付いたときだけ返す。
+ * 完了の帯が残ったまま対応待ちになったときも、対応待ちとして知らせる。
+ * 起動直後の最初の読み込みで知らせないのは renderer が決める
+ */
+export function attentionReason(prev: SessionState | undefined, next: SessionState): AlertReason | undefined {
+  if (prev === next) return undefined;
+  if (next === 'waiting') return 'waiting';
+  return prev === 'busy' && next === 'idle' ? 'done' : undefined;
+}
+
+/** まだ知らせていないものに、新しいものを足す。同じセッションなら対応待ちのほうを残す */
+export function mergeAlerts(queued: Alert[], fresh: Alert[]): Alert[] {
+  const map = new Map(queued.map((a) => [a.id, a]));
+  for (const a of fresh) {
+    if (map.get(a.id)?.reason !== 'waiting') map.set(a.id, a);
+  }
+  return [...map.values()];
+}
+
+/** 次に知らせるまでの待ち時間。lastAt は前に知らせた時刻（まだなら -Infinity） */
+export function alertDelay(lastAt: number, now: number): number {
+  return Math.max(ALERT_COLLECT_MS, lastAt + ALERT_GAP_MS - now);
+}
+
+export interface AlertFilter {
+  waiting: boolean;
+  done: boolean;
+  /** Claude が前面で、そのセッションを開いているときは知らせない */
+  muteWhenOpen: boolean;
+}
+
+/**
+ * 知らせるものを選び、対応待ちを先に並べる（同じ理由なら元の順）。
+ * openInFront は、Claude が前面にあるときに今開いているセッションの ID。前面にないときやわからないときは undefined
+ */
+export function pickAlerts(alerts: Alert[], filter: AlertFilter, openInFront: string | undefined): Alert[] {
+  return alerts
+    .filter((a) => (a.reason === 'waiting' ? filter.waiting : filter.done))
+    .filter((a) => !(filter.muteWhenOpen && a.id === openInFront))
+    .sort((a, b) => Number(a.reason !== 'waiting') - Number(b.reason !== 'waiting'));
+}
+
+/** 鳴らす音。対応待ちが 1 つでもあれば対応待ちの音 */
+export function alertSound(alerts: Alert[]): AlertReason | undefined {
+  if (!alerts.length) return undefined;
+  return alerts.some((a) => a.reason === 'waiting') ? 'waiting' : 'done';
+}
+
+export interface ToastContent {
+  /** クリックで開くセッション */
+  id: string;
+  title: string;
+  body: string;
+}
+
+/** トーストの中身。先頭（対応待ちを優先）のセッションの名前と理由。ほかにもあれば件数を添える */
+export function toastContent(alerts: Alert[], sessions: SessionView[]): ToastContent | undefined {
+  const first = alerts[0];
+  const s = first && sessions.find((x) => x.id === first.id);
+  if (!first || !s) return undefined;
+  const reason = first.reason === 'waiting' ? `対応待ち（${waitingLabel(s.waitingFor)}）` : '完了';
+  const rest = alerts.length - 1;
+  return { id: s.id, title: s.title, body: rest ? `${reason}。ほかに ${rest} 件` : reason };
+}
+
 /** クリックで開いたセッション。デスクトップがファイルに書くまでの間、これを今開いているものとして扱う */
 export interface PendingFocus {
   id: string;

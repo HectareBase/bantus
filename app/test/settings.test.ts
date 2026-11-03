@@ -79,7 +79,7 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → カードの表示 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'about']));
+  it('左の一覧は 全体 → カードの表示 → 通知 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'notify', 'about']));
   it('全体は 位置 → 見た目 → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
@@ -92,4 +92,33 @@ describe('設定画面のカテゴリ', () => {
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
       ['行に出すもの', ['showSeq', 'showUpdated']],
     ]));
+  it('通知は 知らせるとき → 音 → Windows の通知', () =>
+    assert.deepEqual(layout('notify'), [
+      ['知らせるとき', ['notifyWaiting', 'notifyDone', 'muteWhenOpen']],
+      ['音', ['sound', 'soundType', 'soundVolume']],
+      ['Windows の通知', ['toast']],
+    ]));
+});
+
+describe('normalizeSettings の通知', () => {
+  it('なければ、対応待ちだけを音で知らせ、トーストは出さない', () => {
+    const s = normalizeSettings({});
+    assert.deepEqual(
+      [s.notifyWaiting, s.notifyDone, s.sound, s.soundType, s.soundVolume, s.toast, s.muteWhenOpen],
+      [true, false, true, 'chime', 60, false, true],
+    );
+  });
+  it('選べる値だけを残す', () => {
+    const s = normalizeSettings({ notifyDone: true, soundType: 'bell', toast: true, muteWhenOpen: false });
+    assert.deepEqual([s.notifyDone, s.soundType, s.toast, s.muteWhenOpen], [true, 'bell', true, false]);
+    assert.equal(normalizeSettings({ soundType: 'siren' }).soundType, 'chime');
+    assert.equal(normalizeSettings({ sound: 'false' }).sound, true);
+  });
+  it('音量は 0〜100 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ soundVolume: 150 }).soundVolume, 100);
+    assert.equal(normalizeSettings({ soundVolume: -3 }).soundVolume, 0);
+    assert.equal(normalizeSettings({ soundVolume: 33.6 }).soundVolume, 34);
+  });
+  it('音の種類だけに試聴のボタンを付ける', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.type === 'segmented' && d.preview).map((d) => d.key), ['soundType']));
 });

@@ -125,6 +125,19 @@ h2 { font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
 .segmented button:hover { background: var(--hover); }
 .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 .segmented button:disabled { pointer-events: none; }
+/* 音の試聴のボタン */
+.preview-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--control-stroke);
+  border-radius: 4px;
+  background: var(--control);
+}
+.preview-button:hover { background: var(--hover); }
+.preview-button svg { width: 16px; height: 16px; }
 /* 今は使えない項目（インストール版でだけ使える項目を npm start で開いたとき） */
 .card.disabled .label, .card.disabled .control { opacity: 0.45; }
 

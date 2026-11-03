@@ -3,6 +3,7 @@
 import { CATEGORIES, SETTING_DEFS, type CategoryId, type SettingDef, type Settings } from '../shared/settings.js';
 import { createIcon } from './icon.js';
 import type { IconName } from './icons.js';
+import { playSound } from './sound.js';
 
 const api = window.settingsApi;
 const nav = document.getElementById('nav')!;
@@ -31,6 +32,15 @@ function set<K extends keyof Settings>(key: K, value: Settings[K]) {
 
 // ---- 項目の種類ごとの部品 ----
 
+let previewTimer: number | undefined;
+
+/** 今の音の種類と音量で、対応待ちの音のあとに完了の音を鳴らす */
+function previewSound() {
+  clearTimeout(previewTimer);
+  playSound(settings.soundType, 'waiting', settings.soundVolume);
+  previewTimer = window.setTimeout(() => playSound(settings.soundType, 'done', settings.soundVolume), 1_500);
+}
+
 /** disabled なら、値は見せるが押せなくする（今は segmented だけが使う） */
 async function control(def: SettingDef, disabled: boolean): Promise<Node> {
   switch (def.type) {
@@ -43,10 +53,14 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
         b.addEventListener('click', () => {
           set(def.key, o.value as never);
           for (const other of group.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === b));
+          if (def.preview === 'sound') playSound(settings.soundType, 'waiting', settings.soundVolume);
         });
         group.append(b);
       }
-      return group;
+      if (def.preview !== 'sound') return group;
+      const preview = el('button', { className: 'preview-button', disabled }, [createIcon('volume-2'), '試聴']);
+      preview.addEventListener('click', previewSound);
+      return el('div', { className: 'control' }, [group, preview]);
     }
     case 'display': {
       const select = el('select');

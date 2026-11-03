@@ -56,7 +56,7 @@ export interface GitChanges {
 
 export interface WidgetApi {
   onSessions(listener: (sessions: SessionView[]) => void): void;
-  /** ウィジェットの見た目に関わる設定（置く側、不透明度、一覧の表示数と折りたたみ、常に表示）が変わったとき */
+  /** ウィジェットの見た目に関わる設定（置く側、不透明度、一覧の表示数と折りたたみ、常に表示）と、通知の設定が変わったとき */
   onLayout(listener: (layout: WidgetLayout) => void): void;
   /** 起動時に今の見た目の設定を取りに行く（起動直後に送られた onLayout を取りこぼさないため） */
   getLayout(): Promise<WidgetLayout>;
@@ -77,9 +77,20 @@ export interface WidgetApi {
   setAlwaysShow(id: string, on: boolean): void;
   /** 未確認のセッションの ID を知らせる。増えたらタスクバーを点滅させ、なくなったら止める */
   setAttention(ids: string[]): void;
+  /** Claude のウィンドウが前面にあるか。調べられなかったときは false（知らせないより、知らせるほうを選ぶ） */
+  isClaudeInFront(): Promise<boolean>;
+  /** Windows の通知（トースト）を出す。クリックすると、そのセッションを開く */
+  showToast(toast: ToastRequest): void;
   /** ツールチップを出す。rect は基準の要素（ウィジェットの中の座標）。ツールチップは別のウィンドウで、ウィジェットの外に出る */
   showTip(text: string, rect: TipRect): void;
   hideTip(): void;
+}
+
+export interface ToastRequest {
+  /** クリックで開くセッションの ID */
+  id: string;
+  title: string;
+  body: string;
 }
 
 export interface TipRect {
@@ -102,6 +113,7 @@ export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'groupLimit' | 'foldScope'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'alwaysShow'
+  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'muteWhenOpen'
 >;
 
 export interface DisplayOption {
