@@ -9,7 +9,7 @@ const nav = document.getElementById('nav')!;
 const content = document.getElementById('content')!;
 
 let settings: Settings;
-let current: CategoryId = 'display';
+let current: CategoryId = CATEGORIES[0]!.id;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, children: (Node | string)[] = []): HTMLElementTagNameMap[K] {
   const node = Object.assign(document.createElement(tag), props);

@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { DEFAULT_SETTINGS, normalizeSettings } from '../src/shared/settings';
+import { CATEGORIES, DEFAULT_SETTINGS, SETTING_DEFS, normalizeSettings } from '../src/shared/settings';
 
 describe('normalizeSettings の settingsWindow', () => {
   it('なければ入れない', () => assert.equal(normalizeSettings({}).settingsWindow, undefined));
@@ -58,4 +58,24 @@ describe('normalizeSettings の見出しの濃さ', () => {
     assert.equal(normalizeSettings({ headerShade: 7.6 }).headerShade, 8);
   });
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
+});
+
+describe('設定画面のカテゴリ', () => {
+  const layout = (id: string) => {
+    const out: [string, string[]][] = [];
+    for (const d of SETTING_DEFS.filter((d) => d.category === id)) {
+      if (out.at(-1)?.[0] !== d.group) out.push([d.group, []]);
+      out.at(-1)![1].push(d.key);
+    }
+    return out;
+  };
+  it('左の一覧は 全体 → カードの表示 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'about']));
+  it('全体は 位置 → 見た目', () =>
+    assert.deepEqual(layout('general'), [['位置', ['edge', 'display']], ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']]]));
+  it('カードの表示は 一覧 → 並び順 → 行に出すもの', () =>
+    assert.deepEqual(layout('cards'), [
+      ['一覧', ['groupLimit', 'foldScope']],
+      ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
+      ['行に出すもの', ['showSeq', 'showUpdated']],
+    ]));
 });

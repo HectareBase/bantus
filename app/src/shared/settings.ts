@@ -67,7 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const WIDTH_MIN = 200;
 export const WIDTH_MAX = 480;
 
-export type CategoryId = 'display' | 'about';
+export type CategoryId = 'general' | 'cards' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -78,7 +78,8 @@ export interface Category {
 
 /** 左の一覧の並び。中身のないカテゴリは画面に出さない */
 export const CATEGORIES: Category[] = [
-  { id: 'display', label: '表示', icon: 'panel-right' },
+  { id: 'general', label: '全体', icon: 'app-window' },
+  { id: 'cards', label: 'カードの表示', icon: 'list' },
   { id: 'about', label: '情報', icon: 'info' },
 ];
 
@@ -115,60 +116,60 @@ const ORDER_OPTIONS = [
 
 export const SETTING_DEFS: SettingDef[] = [
   {
-    key: 'edge', category: 'display', group: '位置', type: 'segmented',
+    key: 'edge', category: 'general', group: '位置', type: 'segmented',
     label: '画面の端', description: 'ウィジェットを置く側',
     options: [{ value: 'left', label: '左' }, { value: 'right', label: '右' }],
   },
-  { key: 'display', category: 'display', group: '位置', type: 'display', label: 'モニター' },
+  { key: 'display', category: 'general', group: '位置', type: 'display', label: 'モニター' },
   {
-    key: 'groupLimit', category: 'display', group: '一覧', type: 'segmented',
-    label: 'グループごとの表示数', description: '残りは折りたたみに入る。対応待ち、未確認、開いているもの、常に表示のものはいつも出る',
-    options: [{ value: 3, label: '3' }, { value: 5, label: '5' }, { value: 8, label: '8' }, { value: 0, label: 'すべて' }],
-  },
-  {
-    key: 'foldScope', category: 'display', group: '一覧', type: 'segmented',
-    label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
-    options: [{ value: 'repo', label: 'プロジェクト' }, { value: 'worktree', label: 'ワークツリー' }],
-  },
-  {
-    key: 'projectOrder', category: 'display', group: '並び順', type: 'segmented',
-    label: 'プロジェクト', description: 'カードの並び。固定は名前順',
-    options: ORDER_OPTIONS,
-  },
-  {
-    key: 'worktreeOrder', category: 'display', group: '並び順', type: 'segmented',
-    label: 'ワークツリー', description: '小見出しの並び。固定は元のフォルダを先頭に、あとは名前順',
-    options: ORDER_OPTIONS,
-  },
-  {
-    key: 'sessionOrder', category: 'display', group: '並び順', type: 'segmented',
-    label: 'セッション', description: '行の並び。固定は新しく作ったものが上。表示数を超えたときに折りたたむものは、どの並びでも優先度で選ぶ',
-    options: ORDER_OPTIONS,
-  },
-  {
-    key: 'showSeq', category: 'display', group: '行に出すもの', type: 'segmented',
-    label: 'セッションの番号', description: 'ワークツリーごとに作った順の番号。状態のアイコンの右に出す',
-    options: SHOW_OPTIONS,
-  },
-  {
-    key: 'showUpdated', category: 'display', group: '行に出すもの', type: 'segmented',
-    label: '更新日時', description: '2 行目の「◯分前」。ブランチ名も出ない行は 1 行になる',
-    options: SHOW_OPTIONS,
-  },
-  {
-    key: 'backgroundOpacity', category: 'display', group: '見た目', type: 'slider',
+    key: 'backgroundOpacity', category: 'general', group: '見た目', type: 'slider',
     label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'display', group: '見た目', type: 'slider',
+    key: 'cardOpacity', category: 'general', group: '見た目', type: 'slider',
     label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'display', group: '見た目', type: 'slider',
+    key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
     label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
     min: 0, max: 20, step: 1, unit: '%',
+  },
+  {
+    key: 'groupLimit', category: 'cards', group: '一覧', type: 'segmented',
+    label: 'グループごとの表示数', description: '残りは折りたたみに入る。対応待ち、未確認、開いているもの、常に表示のものはいつも出る',
+    options: [{ value: 3, label: '3' }, { value: 5, label: '5' }, { value: 8, label: '8' }, { value: 0, label: 'すべて' }],
+  },
+  {
+    key: 'foldScope', category: 'cards', group: '一覧', type: 'segmented',
+    label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
+    options: [{ value: 'repo', label: 'プロジェクト' }, { value: 'worktree', label: 'ワークツリー' }],
+  },
+  {
+    key: 'projectOrder', category: 'cards', group: '並び順', type: 'segmented',
+    label: 'プロジェクト', description: 'カードの並び。固定は名前順',
+    options: ORDER_OPTIONS,
+  },
+  {
+    key: 'worktreeOrder', category: 'cards', group: '並び順', type: 'segmented',
+    label: 'ワークツリー', description: '小見出しの並び。固定は元のフォルダを先頭に、あとは名前順',
+    options: ORDER_OPTIONS,
+  },
+  {
+    key: 'sessionOrder', category: 'cards', group: '並び順', type: 'segmented',
+    label: 'セッション', description: '行の並び。固定は新しく作ったものが上。表示数を超えたときに折りたたむものは、どの並びでも優先度で選ぶ',
+    options: ORDER_OPTIONS,
+  },
+  {
+    key: 'showSeq', category: 'cards', group: '行に出すもの', type: 'segmented',
+    label: 'セッションの番号', description: 'ワークツリーごとに作った順の番号。状態のアイコンの右に出す',
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
+    label: '更新日時', description: '2 行目の「◯分前」。ブランチ名も出ない行は 1 行になる',
+    options: SHOW_OPTIONS,
   },
 ];
 
