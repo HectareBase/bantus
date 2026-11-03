@@ -1,19 +1,22 @@
 // サイドバーの描画（カード案 B-1）。リポジトリごとのカードに、ワークツリーごとの小見出しを付ける。
 // 行・小見出し・カードの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
-import type { SessionView, WidgetLayout } from '../shared/types';
+import type { GitChanges, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
   PROGRESS_RING,
   buildCards,
   cardBadge,
   cardSections,
+  changeItems,
+  changesTooltip,
   formatAgo,
   nextAttention,
   nextCycleTarget,
   resolveFocus,
   stateOfRank,
   statusIconName,
+  stoppedLabel,
   tooltip,
   type Card,
   type Group,
@@ -21,7 +24,7 @@ import {
   type StatusIcon,
 } from './model.js';
 import { flip } from './flip.js';
-import { fillIcons, setIcon } from './icon.js';
+import { createIcon, fillIcons, setIcon } from './icon.js';
 import { initTooltips } from './tooltip.js';
 
 interface RowRefs {
@@ -36,6 +39,7 @@ interface RowRefs {
 interface CardRefs {
   el: HTMLElement;
   name: HTMLElement;
+  changes: HTMLElement;
   badge: HTMLElement;
   body: HTMLElement;
   stopped: HTMLElement;
@@ -167,6 +171,26 @@ function getRow(s: SessionView): RowRefs {
   return refs;
 }
 
+// ---- コミットされていない変更 ----
+
+/** 見出しや小見出しの内訳の印（変更、未追跡、push していないコミット）。何もなければ隠す */
+function setChanges(el: HTMLElement, c: GitChanges | undefined) {
+  const items = changeItems(c);
+  // 毎回作り直さないよう、内訳が変わったときだけ描き直す
+  const key = items.map((i) => `${i.icon}:${i.count}`).join(',');
+  if (el.dataset.items === key) return;
+  el.dataset.items = key;
+  el.hidden = items.length === 0;
+  el.replaceChildren(...items.map((i) => {
+    const item = document.createElement('span');
+    item.className = 'changes-item';
+    item.append(createIcon(i.icon), String(i.count));
+    return item;
+  }));
+  if (items.length) el.dataset.tip = changesTooltip(c);
+  else delete el.dataset.tip;
+}
+
 // ---- カード ----
 
 function getCard(card: Card): CardRefs {
@@ -176,6 +200,7 @@ function getCard(card: Card): CardRefs {
     refs = {
       el,
       name: el.querySelector('.repo-name')!,
+      changes: el.querySelector('.changes')!,
       badge: el.querySelector('.badge')!,
       body: el.querySelector('.card-body')!,
       stopped: el.querySelector('.stopped')!,
@@ -205,6 +230,7 @@ function getSubhead(key: string, group: Group): HTMLElement {
   setIcon(el.querySelector('.subhead-icon')!, group.isMain ? 'house' : 'git-branch');
   el.querySelector('.subhead-label')!.textContent = group.label;
   el.dataset.tip = group.tooltip;
+  setChanges(el.querySelector('.changes')!, group.changes);
   return el;
 }
 
@@ -226,7 +252,8 @@ function renderCard(card: Card): HTMLElement {
   refs.badge.dataset.state = badge.state;
   refs.badge.textContent = badge.text;
 
-  const { useSubheads, sections } = cardSections(card);
+  const { useSubheads, sections, headerChanges } = cardSections(card);
+  setChanges(refs.changes, headerChanges);
   const bodyNodes: Element[] = [];
   for (const g of sections) {
     const key = `${card.key}|${g.key}`;
@@ -243,7 +270,7 @@ function renderCard(card: Card): HTMLElement {
 
   // 停止中はたたんでおく。開いたときにどのワークツリーかわかるよう、ブランチ名を添える
   refs.stopped.hidden = card.stopped.length === 0;
-  refs.stoppedLabel.textContent = `停止中 ${card.stopped.length}`;
+  refs.stoppedLabel.textContent = stoppedLabel(card);
   syncChildren(refs.stoppedRows, card.stopped.map((s) => {
     const row = getRow(s);
     row.branch.textContent = s.worktree?.label ?? '';

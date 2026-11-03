@@ -23,6 +23,10 @@ export interface SessionView {
     /** 元のブランチ名（ツールチップ用） */
     branch: string;
   };
+  /** git status を調べる作業フォルダ（git 管理でなければ undefined） */
+  workDir?: string;
+  /** 作業フォルダのコミットされていない変更。まだ調べていない、または調べられなかったときは undefined */
+  changes?: GitChanges;
   state: SessionState;
   /** state が waiting のときの理由（`permission prompt` など） */
   waitingFor?: string;
@@ -34,6 +38,16 @@ export interface SessionView {
   lastActivityAt: number;
   /** デスクトップで今開いているセッション（`lastFocusedAt` が一番新しいもの）だけ true */
   focused?: boolean;
+}
+
+/** `git status` から数えた件数（src/main/git-status.ts） */
+export interface GitChanges {
+  /** 変更したファイル（ステージしたものも含む） */
+  changed: number;
+  /** 未追跡のファイル（.gitignore に入っているものは除く） */
+  untracked: number;
+  /** まだ push していないコミット（追跡するブランチがなければ 0） */
+  ahead: number;
 }
 
 export interface WidgetApi {

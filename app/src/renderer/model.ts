@@ -1,6 +1,6 @@
 // 画面に出す形への組み立て（カード、小見出し、ツールチップ）。DOM を使わないので、テストから直接呼べる。
 
-import type { SessionState, SessionView } from '../shared/types';
+import type { GitChanges, SessionState, SessionView } from '../shared/types';
 import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
@@ -19,6 +19,8 @@ export interface Group {
   tooltip: string;
   isMain: boolean;
   sessions: SessionView[];
+  /** その作業フォルダのコミットされていない変更（同じ小見出しのセッションは同じフォルダ） */
+  changes?: GitChanges;
 }
 
 export interface Card {
@@ -77,7 +79,73 @@ export function tooltip(s: SessionView): string {
   if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
   if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
   if (s.detail) lines.push(s.detail);
+  const changes = changesTooltip(s.changes);
+  if (changes) lines.push(changes);
   return lines.join('\n');
+}
+
+// ---- コミットされていない変更（docs/git-changes.md） ----
+
+/** コミットされていない件数（変更と未追跡）。停止中の「変更あり」はこれで数える */
+export function changeCount(c: GitChanges | undefined): number {
+  return c ? c.changed + c.untracked : 0;
+}
+
+export interface ChangeItem {
+  icon: IconName;
+  count: number;
+}
+
+/** 印に並べる内訳。0 のものは出さない。空なら印を出さない */
+export function changeItems(c: GitChanges | undefined): ChangeItem[] {
+  if (!c) return [];
+  const items: ChangeItem[] = [
+    { icon: 'file-pen-line', count: c.changed },
+    { icon: 'file-plus', count: c.untracked },
+    { icon: 'arrow-up', count: c.ahead },
+  ];
+  return items.filter((i) => i.count > 0);
+}
+
+/** 印とセッションのツールチップに添える内訳。何もなければ空 */
+export function changesTooltip(c: GitChanges | undefined): string {
+  if (!c) return '';
+  const parts: string[] = [];
+  if (c.changed) parts.push(`変更 ${c.changed}`);
+  if (c.untracked) parts.push(`未追跡 ${c.untracked}`);
+  const lines = parts.length ? [`コミットされていない変更：${parts.join('・')}`] : [];
+  if (c.ahead) lines.push(`push していないコミット：${c.ahead}`);
+  return lines.join('\n');
+}
+
+/** セッションの中から、作業フォルダの結果を 1 つ選ぶ（同じフォルダなら同じ結果） */
+function firstChanges(sessions: SessionView[]): GitChanges | undefined {
+  return sessions.find((s) => s.changes)?.changes;
+}
+
+/** 作業フォルダの目印。workDir がなければ（git 管理でない、見本データ）ワークツリーの目印で代える */
+function folderOf(s: SessionView): string {
+  return s.workDir?.toLowerCase() ?? `${s.repoKey}|${s.worktree?.key ?? ''}`;
+}
+
+/**
+ * 停止中のセッションだけが使っている作業フォルダのうち、変更が残っているものの数。
+ * 上の小見出しや見出しにもう出ているフォルダは数えない
+ */
+export function stoppedChangedFolders(card: Card): number {
+  const shown = new Set(card.active.map(folderOf));
+  const folders = new Set<string>();
+  for (const s of card.stopped) {
+    const key = folderOf(s);
+    if (!shown.has(key) && changeCount(s.changes) > 0) folders.add(key);
+  }
+  return folders.size;
+}
+
+/** 停止中をたたんだときの文字 */
+export function stoppedLabel(card: Card): string {
+  const changed = stoppedChangedFolders(card);
+  return `停止中 ${card.stopped.length}` + (changed ? ` · 変更あり ${changed}` : '');
 }
 
 /**
@@ -154,18 +222,30 @@ export function buildGroups(active: SessionView[]): Group[] {
       map.set(key, g);
     }
     g.sessions.push(s);
+    g.changes ??= s.changes;
     g.rank = Math.min(g.rank, RANK[s.state]);
     g.latest = Math.max(g.latest, s.lastActivityAt);
   }
   return [...map.values()].sort(byUrgency);
 }
 
-/** カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける */
-export function cardSections(card: Card): { useSubheads: boolean; sections: Pick<Group, 'key' | 'sessions'>[] } {
+/**
+ * カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける。
+ * 小見出しがないときは、作業フォルダの変更（headerChanges）をカードの見出しに出す
+ */
+export function cardSections(card: Card): {
+  useSubheads: boolean;
+  sections: Pick<Group, 'key' | 'sessions'>[];
+  headerChanges?: GitChanges;
+} {
   const groups = buildGroups(card.active);
   const useSubheads = groups.some((g) => !g.isMain);
-  const sections = useSubheads ? groups : card.active.length ? [{ key: '*', sessions: card.active }] : [];
-  return { useSubheads, sections };
+  if (useSubheads) return { useSubheads, sections: groups };
+  return {
+    useSubheads,
+    sections: card.active.length ? [{ key: '*', sessions: card.active }] : [],
+    headerChanges: firstChanges(card.active),
+  };
 }
 
 /** 画面に並んでいる順（上から）の、停止中でないセッション */

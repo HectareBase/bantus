@@ -66,6 +66,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
       // 末尾の区切りと大文字小文字が違っても、同じカードになる
       gitAnchors: [{ ...anchor, gitRoot: `${repo.toUpperCase()}\\` }],
       worktreeName: 'fix-login',
+      worktreePath: join(repo, '.claude', 'worktrees', 'fix-login'),
       branch: 'claude/fix-login-1a2b3c',
       lastFocusedAt: 300,
     });
@@ -154,6 +155,13 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(plain.repoName, 'plain');
     assert.equal(plain.mainBranch, undefined);
     assert.equal(byTitle('(無題)')?.repoKey, plain.repoKey);
+  });
+
+  it('git status を調べるフォルダ：ワークツリーはその場所、メインはリポジトリ、git でなければなし', () => {
+    assert.equal(byTitle('waiting')?.workDir, join(tmp.path, 'Repo'));
+    assert.equal(byTitle('worktree')?.workDir, join(tmp.path, 'Repo', '.claude', 'worktrees', 'fix-login'));
+    assert.equal(byTitle('outside worktree')?.workDir, join(tmp.path, 'Repo-ext'));
+    assert.equal(byTitle('no git')?.workDir, undefined);
   });
 
   it('最後のターンのまとめを読む', () => {

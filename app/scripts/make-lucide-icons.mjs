@@ -10,6 +10,8 @@ const NAMES = [
   'settings', 'chevron-right', 'pin', 'pin-off', 'folder', 'house', 'git-branch', 'panel-right', 'info',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
+  // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
+  'file-pen-line', 'file-plus', 'arrow-up',
 ];
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());

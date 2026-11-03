@@ -4,6 +4,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createGitStatus } from './git-status';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
@@ -29,6 +30,8 @@ let collapsed = false;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
+/** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
+const gitStatus = createGitStatus(() => sendSessions());
 
 // 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
 if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
@@ -220,7 +223,7 @@ function widthAtCursor(): number {
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
-  const sessions = readSessions();
+  const sessions = gitStatus.apply(readSessions());
   const json = JSON.stringify(sessions);
   if (!force && json === lastSent) return;
   lastSent = json;

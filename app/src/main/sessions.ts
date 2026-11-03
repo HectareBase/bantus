@@ -125,7 +125,7 @@ function readWorktreeBranch(worktreeDir: string, heads: Map<string, string | und
   }
 }
 
-const folderKey = (path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
+export const folderKey = (path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
 
 /** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
 export function shortBranch(branch: string): string {
@@ -204,6 +204,8 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
           : outside && outsideBranch
             ? { key: folderKey(outside), label: shortBranch(outsideBranch), branch: outsideBranch }
             : undefined,
+        // git 管理のフォルダだけ。ワークツリーならその場所、そうでなければリポジトリのフォルダ
+        workDir: anchor ? d.worktreePath || outside || root || undefined : undefined,
         state,
         waitingFor: state === 'waiting' ? r?.waitingFor : undefined,
         needsAction: summary.needs_action || undefined,

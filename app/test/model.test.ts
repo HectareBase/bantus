@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, cardSections, changeItems, changesTooltip, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, stateOfRank, statusIconName, stoppedLabel, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -171,5 +171,54 @@ describe('displayOrder と nextCycleTarget', () => {
   it('ほかに行がなければ何もしない', () => {
     assert.equal(nextCycleTarget([view({ id: 'a' })], new Set(['a']), 'a'), undefined);
     assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
+  });
+});
+
+describe('コミットされていない変更', () => {
+  const some = { changed: 3, untracked: 2, ahead: 1 };
+  it('印は変更・未追跡・push していないコミットの順に、0 でないものだけ', () => {
+    assert.deepEqual(changeItems(some), [
+      { icon: 'file-pen-line', count: 3 },
+      { icon: 'file-plus', count: 2 },
+      { icon: 'arrow-up', count: 1 },
+    ]);
+    assert.deepEqual(changeItems({ changed: 0, untracked: 0, ahead: 4 }), [{ icon: 'arrow-up', count: 4 }]);
+    assert.deepEqual(changeItems({ changed: 0, untracked: 0, ahead: 0 }), []);
+    assert.deepEqual(changeItems(undefined), []);
+  });
+  it('内訳はあるものだけ', () => {
+    assert.equal(changesTooltip(some), 'コミットされていない変更：変更 3・未追跡 2\npush していないコミット：1');
+    assert.equal(changesTooltip({ changed: 0, untracked: 1, ahead: 0 }), 'コミットされていない変更：未追跡 1');
+    assert.equal(changesTooltip({ changed: 0, untracked: 0, ahead: 0 }), '');
+  });
+  it('セッションのツールチップの最後に添える', () => {
+    assert.equal(tooltip(view({ title: 't', changes: { changed: 1, untracked: 0, ahead: 0 } })), 't\nコミットされていない変更：変更 1');
+  });
+  it('小見出しはそのワークツリーの結果を持つ', () => {
+    const wt = { key: 'k', label: 'k', branch: 'k' };
+    const groups = buildGroups([view({ worktree: wt }), view({ worktree: wt, changes: some }), view({})]);
+    assert.deepEqual(groups.find((g) => !g.isMain)?.changes, some);
+    assert.equal(groups.find((g) => g.isMain)?.changes, undefined);
+  });
+  it('小見出しがないときは見出しに出す。あるときは出さない', () => {
+    const [flat] = buildCards([view({ changes: some })]);
+    assert.deepEqual(cardSections(flat!).headerChanges, some);
+    const [split] = buildCards([view({ changes: some }), view({ worktree: { key: 'k', label: 'k', branch: 'k' } })]);
+    assert.equal(cardSections(split!).headerChanges, undefined);
+  });
+  it('停止中は、上に出ていないフォルダの変更だけを数える', () => {
+    const dirty = { changed: 1, untracked: 0, ahead: 0 };
+    const [card] = buildCards([
+      view({ state: 'idle', workDir: 'C:/Repo', changes: dirty }),
+      view({ state: 'stopped', workDir: 'c:/repo', changes: dirty }),
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', changes: dirty }),
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', changes: dirty }),
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-b', changes: { changed: 0, untracked: 0, ahead: 2 } }),
+    ]);
+    assert.equal(stoppedLabel(card!), '停止中 4 · 変更あり 1');
+  });
+  it('停止中に変更がなければ件数だけ', () => {
+    const [card] = buildCards([view({ state: 'stopped' })]);
+    assert.equal(stoppedLabel(card!), '停止中 1');
   });
 });
