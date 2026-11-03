@@ -10,7 +10,7 @@
 | ファイルの中身 | コミットのときに検査し、見つかったらコミットを止める | `.githooks/pre-commit` |
 | コミットメッセージ | 同じ検査。あわせて書き方の決まり（[commit-messages.md](commit-messages.md)）も調べる | `.githooks/commit-msg` |
 | 作者の名前とメールアドレス | このリポジトリ専用の設定を使う。push のときに確認する | `.githooks/pre-push` |
-| 個人の設定、生のログ | git に入れない | `.gitignore`（`local/`、`prototype/shortcuts.json`） |
+| 個人の設定、生のログ | git に入れない | `.gitignore`（`local/`） |
 
 `push` の前には `pre-push` がもう一度すべてを確かめ、問題があれば `push` を止めます。
 

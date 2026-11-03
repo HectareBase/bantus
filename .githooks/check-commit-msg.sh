@@ -6,7 +6,7 @@
 
 # 種別と範囲の一覧。変えるときは docs/commit-messages.md もそろえる
 TYPES='feat|fix|docs|refactor|perf|test|style|build|ci|chore|revert'
-SCOPES='app|prototype|tools|docs|hooks'
+SCOPES='app|tools|docs|hooks'
 
 file=$1
 [ -f "$file" ] || { echo "コミットメッセージのファイルがありません：$file" >&2; exit 2; }

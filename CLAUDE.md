@@ -15,15 +15,12 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 | フォルダ | 中身 |
 |---|---|
 | `docs/` | 資料。`research/` に調査結果、`design/` に設計、直下に開発の決まり |
-| `prototype/` | PowerShell と WPF の試作（セッション一覧、ホットキー） |
 | `tools/` | 検証用と作業用のスクリプト（ワークツリーの片付けはスキル `clean-worktrees` から使う） |
 | `app/` | Electron 版のウィジェット。`npm start` で起動、`npm test` でテスト、`npm run debug` で見本データの表示、`npm run typecheck` で型の確認（一番上でも `app/` でも動く。一番上の `package.json` は `app/` に渡すだけ） |
 | `.githooks/` | 公開前の検査 |
 | `local/` | 手元専用。git に入れない（生のログ、個人の語句のリスト） |
 
-## 今の試作（PowerShell 5.1 と WPF）
-- 起動：`prototype/start-hotkeys.cmd`（`-STA` で `claude-hotkeys.ps1` を起動）
+## `tools/` のスクリプト（PowerShell 5.1）
 - 構文チェック：`[System.Management.Automation.Language.Parser]::ParseFile(...)`
 - 日本語を含む `.ps1` は BOM 付き UTF-8 で保存する。`.cmd` には日本語を書かない
-- WPF のイベントハンドラでは `GetNewClosure()` を使わず、状態は `$script:UI` に置く
 - 状態の変化を確かめるときは `tools/watch-status.ps1` を使う（ログは `local/status-log.txt`）

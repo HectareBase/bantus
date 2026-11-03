@@ -1,6 +1,5 @@
 # 手元専用（個人の設定、生のログ、検査用の個人の語句）
 /local/
-prototype/shortcuts.json
 status-log.txt
 *.log
 
