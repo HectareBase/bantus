@@ -33,18 +33,42 @@
 ## 進め方
 1. **下ごしらえ**：`ICON` のパスを `app.isPackaged` で切り替える。`productName`、`appId`、`setAppUserModelId` を足す。`npm start` で今までどおり動くことを確かめる
 2. **ポータブル版**：`electron-builder` を `devDependencies` に入れ、`npm run dist:dir`（`--dir`）で展開したフォルダを作る。exe を直接起動し、トレイのアイコン、ショートカット（`Ctrl+Alt+N`）、`claude://` で開く動き、設定の保存を確かめる
-3. **インストーラー**：NSIS とポータブル（zip）を作る `npm run dist` を足す。インストール、起動、上書きインストール（設定が残るか）、アンインストール（設定を消すかどうかを聞く。既定は残す）を確かめる
+3. **インストーラー**：NSIS とポータブル（zip）を作る `npm run dist` を足す。インストール、起動、上書きインストール（設定が残るか）、アンインストール（設定は消さずに残す）を確かめる
 4. **ログオン時の起動**：設定の項目を足す。インストール版でだけ有効にし、`npm start` のときは灰色にする
 5. **配布**：GitHub Releases にインストーラーと zip を手で置く手順を書く。SmartScreen の警告の進み方を README に書く
 6. あとで：署名、`electron-updater` による自動更新、arm64
 
-## 足すファイルとスクリプト（案）
-- `app/electron-builder.yml`：設定（`appId`、`productName`、`files`、`extraResources`、`win.target: [nsis, zip]`、`nsis.oneClick: false`、`nsis.perMachine: false`、`directories.output: release`）
-- `app/package.json`：`"dist": "npm run build && electron-builder"`、`"dist:dir": "npm run build && electron-builder --dir"`
+## 足したファイルとスクリプト
+- `app/electron-builder.yml`：設定（`appId`、`productName`、`copyright`、`files`、`extraResources`、`win.target: [nsis, zip]`、`nsis.oneClick: false`、`nsis.perMachine: false`、`directories.output: release`）。electron-builder 26 では `zip` という項目がないので、zip の名前は `win.artifactName`、インストーラーの名前は `nsis.artifactName` で決める
+- `app/package.json`：`"dist": "node scripts/clean-dist.mjs && npm run build && electron-builder"`、`"dist:dir"`（同じく `--dir`）。`productName: "Bantus"` と `author`
+- `app/scripts/clean-dist.mjs`：包む前に `dist/` を消す（前のビルドの残りを入れない）
 - 一番上の `package.json`：同じ名前で `app/` に渡すスクリプト
 - `app/README.md`：作り方と、作ったファイルの場所
 
-## 決めること
-- `appId`（例：`io.github.<公開してよい名前>.bantus`）
-- アンインストールのときに設定（`%APPDATA%\Bantus`）を消すか
-- ポータブル版の設定を exe の隣に置くか（今の案は、インストール版と同じ `%APPDATA%`）
+## 決めたこと
+| 項目 | 決めたこと |
+|---|---|
+| `appId` | `io.github.hectarebase.bantus`（git の `user.name` を小文字にしたもの）。`src/main/main.ts` の `APP_USER_MODEL_ID` も同じ値 |
+| `author`、`copyright`、`publisherName` | 公開してよい名前（git の `user.name`）だけ。`copyright` は年なしの `Copyright © <名前>` |
+| electron-builder の版 | 26.17.0（出てから 2 週間以上たった版） |
+| アンインストール | 設定（`%APPDATA%Bantus`）は消さない（`deleteAppDataOnUninstall: false`）。消すかを聞く画面は作らない |
+| ポータブル版の設定 | インストール版と同じ `%APPDATA%Bantus` |
+| 言語ファイル | Electron の言語ファイルは `ja` と `en-US` だけを入れる |
+| ログオン時の起動 | 設定の「全体」→「起動」。インストール版（zip も含む）でだけ使え、`npm start` と見本データのときは灰色。起動したときに Windows の登録（`getLoginItemSettings`）を読んで設定に写す |
+
+## 確かめた結果（Electron 44.9.0、electron-builder 26.17.0、Windows 11 x64）
+| 確かめたこと | 結果 |
+|---|---|
+| `npm run typecheck`、`npm test` | 通る（131 件） |
+| 見本データでの `npm start` 相当の起動（`npm run debug`） | 今までどおり表示される |
+| `npm run dist:dir`、`npm run dist` | `app/release/` に `Bantus-Setup-0.1.0.exe`（約 107MB）、`Bantus-0.1.0-win-x64.zip`（約 135MB）、`win-unpacked/` ができる。`release/` は `.gitignore` で git に入らない |
+| asar の中身 | `dist/node/`、`dist/web/`、`package.json` の 35 項目だけ。ソースマップとテストはない。ユーザーフォルダのパスやユーザー名は入っていない |
+| exe の起動（見本データ、別のデータフォルダ） | `app.isPackaged` が true、名前は `Bantus`、データフォルダは `%APPDATA%Bantus-debug`。`resources/assets/icon.ico` を読めて空でない。ウィジェットが表示される。ピンの切り替えが `settings.json` に保存される |
+| 「Windows の起動時に開く」（exe、`--user-data-dir` で別のデータフォルダ） | オンにすると `getLoginItemSettings().openAtLogin` が true になり、設定にも保存される。オフで両方 false に戻る |
+| 「Windows の起動時に開く」（`npm start` 相当） | 灰色で押せない |
+
+### まだ確かめていないこと
+- `Ctrl+Alt+N`：いつものウィジェット（`npm start`）が動いていてキーを使っているため、exe では登録できなかった（想定どおり）。いつものウィジェットを止めて確かめる
+- トレイのアイコンの見た目（タスクバーが隠れていて画面で見られなかった。アイコンのファイルを読めることは確かめた）
+- インストール、上書きインストール、アンインストール（設定が残るか）。ユーザーに確かめてから試す
+- `claude://` で開く動き（exe でも `shell.openExternal` は同じなので、変わらない見込み）

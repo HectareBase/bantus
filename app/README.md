@@ -16,6 +16,23 @@ npm run debug -- empty --cycle 3
 ```
 `npm start` は、TypeScript をビルドしてから Electron を起動します。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
 
+### exe とインストーラーを作る
+```bash
+npm run dist       # インストーラー（NSIS）と zip
+npm run dist:dir   # 展開したフォルダだけ（試すとき。速い）
+```
+どちらも `dist/` を消してビルドし直してから、[electron-builder](https://www.electron.build/) で包みます。設定は `electron-builder.yml`、計画は [docs/packaging-plan.md](../docs/packaging-plan.md) です。リポジトリの一番上からでも同じ名前で動きます。
+| できるもの（`release/` の下。git には入らない） | 中身 |
+|---|---|
+| `Bantus-Setup-<版>.exe` | インストーラー。ユーザーごと（`%LOCALAPPDATA%\Programs\Bantus`）に入り、管理者の権限はいらない。インストール先を変えられ、スタートメニューにショートカットを作る |
+| `Bantus-<版>-win-x64.zip` | ポータブル版。展開して `Bantus.exe` を起動する |
+| `win-unpacked/` | 展開したフォルダ（`dist:dir` でもできる） |
+
+- 中に入るのは `dist/node/` と `dist/web/`（ソースマップを除く）と `package.json` だけ。アイコン（`assets/icon.ico`）は asar の外の `resources/assets/` に置く
+- 署名はしていないので、初めて起動すると SmartScreen の警告が出る（「詳細情報」→「実行」で進む）
+- アンインストールしても、設定（`%APPDATA%\Bantus`）は残す
+- インストール版と `npm start` は、同じデータフォルダを使うので同時に動かせない（二重起動の防止）。開発中に並べて動かすときは、見本データ（`npm run debug`）か `--user-data-dir=<別のフォルダ>` で起動する
+
 ### テスト
 ```bash
 npm test
@@ -72,17 +89,18 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 ## 設定
 | カテゴリ | 項目 |
 |---|---|
-| 全体 | 位置：画面の端（左 / 右）、モニター。見た目：背景の不透明度（0〜100%）、カードの不透明度（0〜100%）、見出しの濃さ（0〜20%） |
+| 全体 | 位置：画面の端（左 / 右）、モニター。見た目：背景の不透明度（0〜100%）、カードの不透明度（0〜100%）、見出しの濃さ（0〜20%）。起動：Windows の起動時に開く |
 | カードの表示 | 一覧：グループごとの表示数、折りたたみのまとめ方。並び順：プロジェクト、ワークツリー、セッション。行に出すもの：セッションの番号、更新日時 |
 | 情報 | バージョン、読み取っているフォルダ、設定の保存先 |
 
 - **背景の不透明度**：テーマの背景色（ダークなら濃い灰色）の塗り。0% で背景が消え、カードとタイトルバーだけが浮かぶ。透明なウィンドウには Mica を使えないので、100% でも Mica ではなく塗りつぶし
 - **カードの不透明度**：カードとタイトルバーの塗り。0% で枠だけ。後ろが明るいと文字が読みにくくなるので、背景を 0% にするなら 80% 以上がおすすめ
 - ウィンドウ全体（文字も含む）の不透明度は 100% で固定。文字は常にはっきり表示する
+- **Windows の起動時に開く**：`app.setLoginItemSettings` で、サインインしたときに `Bantus.exe` を開くよう登録する。インストール版（zip も含む）でだけ使え、`npm start` と見本データのときは灰色で押せない（`electron.exe` が登録されてしまうため）。起動したときに Windows の登録を読んで設定に写すので、タスク マネージャーなどで変えても食い違わない
 
-設定は `%APPDATA%\bantus\settings.json` に保存します（リポジトリには入りません）。
+設定は `%APPDATA%\Bantus\settings.json` に保存します（リポジトリには入りません）。
 
-項目を足すときは、`src/shared/settings.ts` の `Settings`（型）、`DEFAULT_SETTINGS`（既定値）、`SETTING_DEFS`（画面に出す定義）に足します。種類は `segmented`（切り替えボタン）、`display`（モニターの選択）、`slider` です。オン / オフの項目が必要になったら、種類を足します。新しいカテゴリは `CATEGORIES` に足すと、項目が 1 つ以上あるときだけ左の一覧に出ます。
+項目を足すときは、`src/shared/settings.ts` の `Settings`（型）、`DEFAULT_SETTINGS`（既定値）、`SETTING_DEFS`（画面に出す定義）に足します。種類は `segmented`（切り替えボタン）、`display`（モニターの選択）、`slider` です。オン / オフの項目も `segmented` で作ります。インストール版でだけ使える項目は `packagedOnly: true` にすると、`npm start` のときに灰色になります。新しいカテゴリは `CATEGORIES` に足すと、項目が 1 つ以上あるときだけ左の一覧に出ます。
 
 ## ファイル
 | ファイル | 内容 |
@@ -101,6 +119,8 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | `src/shared/types.ts` | メインプロセスと画面で共通の型 |
 | `src/shared/settings.ts` | 設定項目の定義（カテゴリ、種類、既定値、値の検査） |
 | `scripts/copy-static.mjs` | HTML と CSS を `dist/web/` にコピーする |
+| `scripts/clean-dist.mjs` | exe に包む前に `dist/` を消す |
+| `electron-builder.yml` | exe とインストーラーの設定 |
 | `fixtures/*.json` | 表示を確かめるための見本データ（一般的な名前だけ） |
 | `scripts/debug.mjs`、`scripts/screenshots.mjs` | 見本データでの起動と撮影 |
 | `test/` | テスト（`npm test`） |
@@ -113,4 +133,4 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | 点滅 1 つとリング 2 つ（見本データ、カードの版） | 0.13%（1 コアの 2.08%） | 約 336MB |
 
 ## 使っている版
-Electron 44.9.0、TypeScript 7.0.2、@types/node 24.19.2（Electron 44 の Node 24 に合わせる）。どれも、出てから 2 週間以上たった版を選んでいます。
+Electron 44.9.0、TypeScript 7.0.2、@types/node 24.19.2（Electron 44 の Node 24 に合わせる）、electron-builder 26.17.0。どれも、出てから 2 週間以上たった版を選んでいます。
