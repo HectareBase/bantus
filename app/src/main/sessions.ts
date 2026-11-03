@@ -3,7 +3,7 @@
 
 import { readFileSync, readdirSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { SessionState, SessionView } from '../shared/types';
 
 /** 読み取るフォルダ。テストでは偽のフォルダを渡す */
@@ -101,19 +101,31 @@ function sessionDirs(dataBase: string): string[] {
   return dirs;
 }
 
-/** `.git/HEAD` から今のブランチ名を読む。読み終えた結果は heads に入れて使い回す */
-function readHeadBranch(commonDir: string, heads: Map<string, string | undefined>): string | undefined {
-  if (heads.has(commonDir)) return heads.get(commonDir);
+/** `.git/HEAD`（ワークツリーなら `.git/worktrees/<名前>/HEAD`）から今のブランチ名を読む。読み終えた結果は heads に入れて使い回す */
+function readHeadBranch(gitDir: string, heads: Map<string, string | undefined>): string | undefined {
+  if (heads.has(gitDir)) return heads.get(gitDir);
   let branch: string | undefined;
   try {
-    const m = /^ref: refs\/heads\/(.+)$/m.exec(readFileSync(join(commonDir, 'HEAD'), 'utf8'));
+    const m = /^ref: refs\/heads\/(.+)$/m.exec(readFileSync(join(gitDir, 'HEAD'), 'utf8'));
     branch = m?.[1]?.trim();
   } catch {
     branch = undefined;
   }
-  heads.set(commonDir, branch);
+  heads.set(gitDir, branch);
   return branch;
 }
+
+/** ワークツリーのフォルダにある `.git` ファイル（`gitdir: <場所>`）から、そのワークツリーのブランチ名を読む */
+function readWorktreeBranch(worktreeDir: string, heads: Map<string, string | undefined>): string | undefined {
+  try {
+    const m = /^gitdir: (.+)$/m.exec(readFileSync(join(worktreeDir, '.git'), 'utf8'));
+    return m?.[1] ? readHeadBranch(resolve(worktreeDir, m[1].trim()), heads) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const folderKey = (path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
 
 /** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
 export function shortBranch(branch: string): string {
@@ -172,17 +184,26 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
       const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
-      const root: string = anchor?.gitRoot || d.originCwd || d.cwd || '';
+      // アプリが作ったワークツリーでは gitRoot が元のリポジトリを指す。リポジトリの外のワークツリー（git worktree add）では
+      // gitRoot がワークツリーのフォルダになるので、commonDir（元のリポジトリの .git）の親を元のリポジトリとする
+      const commonDir: string | undefined = anchor?.commonDir;
+      const repoRoot = commonDir && basename(commonDir).toLowerCase() === '.git' ? dirname(commonDir) : anchor?.gitRoot;
+      const root: string = repoRoot || d.originCwd || d.cwd || '';
+      const outside: string | undefined =
+        !d.worktreeName && anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root) ? anchor.gitRoot : undefined;
+      const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       views.push({
         id: d.sessionId,
         title: d.title || '(無題)',
-        // gitRoot はワークツリーでも元のリポジトリを指す。git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
-        repoKey: root.replace(/[\\/]+$/, '').toLowerCase(),
+        // git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
+        repoKey: folderKey(root),
         repoName: root ? basename(root) : '(フォルダなし)',
-        mainBranch: anchor?.commonDir ? readHeadBranch(anchor.commonDir, heads) : undefined,
+        mainBranch: commonDir ? readHeadBranch(commonDir, heads) : undefined,
         worktree: d.worktreeName
           ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
-          : undefined,
+          : outside && outsideBranch
+            ? { key: folderKey(outside), label: shortBranch(outsideBranch), branch: outsideBranch }
+            : undefined,
         state,
         waitingFor: state === 'waiting' ? r?.waitingFor : undefined,
         needsAction: summary.needs_action || undefined,

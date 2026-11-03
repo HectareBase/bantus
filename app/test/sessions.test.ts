@@ -88,6 +88,16 @@ describe('readSessions（偽のデータフォルダ）', () => {
     });
     // btw の付かない別のセッションは、普通のセッションとして出す
     local(8, { title: 'spawned', cwd: join(tmp.path, 'plain'), spawnedFrom: { sessionId: 'local_x', sideSession: true } });
+    // リポジトリの外のワークツリー（git worktree add）。gitAnchors の 1 つ目がワークツリーのフォルダになる
+    const outside = join(tmp.path, 'Repo-ext');
+    writeJson(join(outside, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'Repo-ext')}\n`);
+    writeJson(join(repo, '.git', 'worktrees', 'Repo-ext', 'HEAD'), 'ref: refs/heads/feature/ext\n');
+    local(9, {
+      title: 'outside worktree',
+      cwd: outside,
+      originCwd: outside,
+      gitAnchors: [{ gitRoot: outside, commonDir: anchor.commonDir }, anchor],
+    });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
 
@@ -96,11 +106,13 @@ describe('readSessions（偽のデータフォルダ）', () => {
   after(() => tmp.cleanup());
 
   it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
-    assert.deepEqual(sessions.map((s) => s.title).sort(), ['(無題)', 'dead', 'no git', 'spawned', 'waiting', 'worktree']);
+    assert.deepEqual(sessions.map((s) => s.title).sort(), [
+      '(無題)', 'dead', 'no git', 'outside worktree', 'spawned', 'waiting', 'worktree',
+    ]);
   });
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
-    assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped', 'stopped']);
+    assert.deepEqual(sessions.map((s) => s.state), ['waiting', 'busy', 'idle', 'stopped', 'stopped', 'stopped', 'stopped']);
   });
 
   it('lastFocusedAt が一番新しいセッションだけが focused。サイドチャットなら親', () => {
@@ -124,6 +136,17 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(main.repoName, 'Repo');
     assert.equal(main.mainBranch, 'main');
     assert.deepEqual(wt.worktree, { key: 'fix-login', label: 'fix-login', branch: 'claude/fix-login-1a2b3c' });
+  });
+
+  it('リポジトリの外のワークツリーも元のリポジトリのカードに入り、ブランチは .git ファイルの先から読む', () => {
+    const main = byTitle('waiting')!;
+    const wt = byTitle('outside worktree')!;
+    assert.equal(wt.repoKey, main.repoKey);
+    assert.equal(wt.repoName, 'Repo');
+    assert.equal(wt.mainBranch, 'main');
+    assert.equal(wt.worktree?.branch, 'feature/ext');
+    assert.equal(wt.worktree?.label, 'feature/ext');
+    assert.notEqual(wt.worktree?.key, byTitle('worktree')?.worktree?.key);
   });
 
   it('git の情報がなければ元の作業フォルダでまとめる', () => {
