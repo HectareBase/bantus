@@ -76,6 +76,7 @@ const tooltips = initTooltips(document.getElementById('tooltip')!);
 const rows = new Map<string, RowRefs>();
 const cards = new Map<string, CardRefs>();
 const subheads = new Map<string, HTMLElement>();
+const sections = new Map<string, HTMLElement>();
 const lists = new Map<string, HTMLUListElement>();
 const folds = new Map<string, FoldRefs>();
 /** 開いている折りたたみ。開けるのは 1 つだけ */
@@ -291,6 +292,17 @@ function getSubhead(key: string, group: Group): HTMLElement {
   return el;
 }
 
+/** ワークツリーの枠。小見出し、行、ワークツリーごとの折りたたみを入れる */
+function getSection(key: string): HTMLElement {
+  let el = sections.get(key);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'worktree';
+    sections.set(key, el);
+  }
+  return el;
+}
+
 function getList(key: string): HTMLUListElement {
   let ul = lists.get(key);
   if (!ul) {
@@ -375,15 +387,24 @@ function renderCard(card: Card, opts: FoldOptions): HTMLElement {
   const bodyNodes: Element[] = [];
   for (const g of layout.sections) {
     const key = `${card.key}|${g.key}`;
-    if (g.group) bodyNodes.push(getSubhead(key, g.group));
+    const nodes: Element[] = [];
+    if (g.group) nodes.push(getSubhead(key, g.group));
     const ul = getList(key);
     syncChildren(ul, g.sessions.map((s) => {
       const row = getRow(s);
       row.branch.textContent = '';
       return row.el;
     }));
-    bodyNodes.push(ul);
-    if (g.fold) bodyNodes.push(renderFold(g.fold, false));
+    nodes.push(ul);
+    if (g.fold) nodes.push(renderFold(g.fold, false));
+    // 小見出しのあるワークツリーは枠で囲む。ワークツリーが 1 つだけのカードは枠を付けない
+    if (g.group) {
+      const section = getSection(key);
+      syncChildren(section, nodes);
+      bodyNodes.push(section);
+    } else {
+      bodyNodes.push(...nodes);
+    }
   }
   if (layout.fold) bodyNodes.push(renderFold(layout.fold, true));
   syncChildren(refs.body, bodyNodes);
@@ -411,7 +432,7 @@ function renderMini(list: Card[]) {
 /** 並べ替えで動かす要素。親（カード）を子より先に */
 function* animatedElements(): Iterable<HTMLElement> {
   for (const c of cards.values()) yield c.el;
-  yield* subheads.values();
+  yield* sections.values();
   for (const f of folds.values()) yield f.el;
   for (const r of rows.values()) yield r.el;
 }
@@ -437,7 +458,7 @@ function render(sessions: SessionView[]) {
   for (const id of seenState.keys()) if (!ids.has(id)) seenState.delete(id);
   const cardKeys = new Set(list.map((c) => c.key));
   for (const key of cards.keys()) if (!cardKeys.has(key)) cards.delete(key);
-  for (const map of [subheads, lists] as Map<string, Element>[]) {
+  for (const map of [subheads, sections, lists] as Map<string, Element>[]) {
     for (const [key, el] of map) if (!el.isConnected) map.delete(key);
   }
   for (const [key, refs] of folds) if (!refs.el.isConnected) folds.delete(key);

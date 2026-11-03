@@ -159,6 +159,18 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .badge[data-state="waiting"] { background: var(--waiting-bg); color: var(--waiting); }
 .badge[data-state="busy"] { background: var(--busy-bg); color: var(--busy); }
 
+/* ---- ワークツリーの枠。小見出しのあるワークツリーを、カードの中でもう 1 段の枠で囲む ---- */
+.worktree {
+  margin: 0 6px 6px;
+  padding: 2px 0;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+}
+.worktree:last-child { margin-bottom: 2px; }
+/* 枠の中では、行と小見出しの左右の余白を詰めて、狭くなった幅を取り戻す */
+.worktree .subhead, .worktree .row, .worktree .fold-toggle { margin-left: 2px; margin-right: 2px; }
+.worktree .fold-toggle { width: calc(100% - 4px); }
+
 /* ---- 小見出し（ワークツリー） ---- */
 /* 見出し、小見出し、行、折りたたみのボタンは、どれも「16px の印の列 + 8px + 文字」の並び。
    見出しの類は左の列にそろえ、セッションの行はいつも 1 段（12px）下げる。ワークツリーのあるなしで字下げを変えない */
