@@ -4,10 +4,11 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
-import { WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
+import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, WidgetLayout } from '../shared/types';
 
 const COLLAPSED_WIDTH = 52;
@@ -21,6 +22,8 @@ const WEB = join(__dirname, '..', '..', 'web', 'renderer');
 const ICON = join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
 /** 未確認のセッションを表示順に開くショートカット（Ctrl+Alt+Space はほかのアプリが使っていた） */
 const CYCLE_SHORTCUT = 'Control+Alt+N';
+/** Claude デスクトップのプロセス名 */
+const CLAUDE_PROCESS = 'claude';
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
@@ -55,7 +58,8 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  return { edge: s.edge, backgroundOpacity: s.backgroundOpacity, cardOpacity: s.cardOpacity, pinned: s.pinned };
+  const { edge, backgroundOpacity, cardOpacity, pinned, groupLimit, foldScope, alwaysShow } = s;
+  return { edge, backgroundOpacity, cardOpacity, pinned, groupLimit, foldScope, alwaysShow };
 }
 
 function applySettings(s: Settings) {
@@ -106,12 +110,11 @@ function createWidget(): BrowserWindow {
   return w;
 }
 
-/** 開発用：停止中もすべて開いた画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
+/** 開発用：折りたたみもすべて開いた画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
 async function captureAndQuit(w: BrowserWindow, path: string) {
   await new Promise((r) => setTimeout(r, 500));
-  await w.webContents.executeJavaScript(
-    "document.querySelectorAll('.stopped:not([hidden]) .stopped-toggle').forEach((b) => b.click())",
-  );
+  // ふだんは 1 つしか開けないので、ボタンは押さずに見た目だけ開く
+  await w.webContents.executeJavaScript("document.querySelectorAll('.fold').forEach((f) => f.classList.add('open'))");
   // 点滅や回転の途中で撮らないよう、アニメーションを止める
   await w.webContents.insertCSS('*, *::before, *::after { animation: none !important; }');
   // ツールチップを見たいときは、その要素にフォーカスして出す（WIDGET_SCREENSHOT_FOCUS に CSS セレクター）
@@ -228,6 +231,13 @@ function sendSessions(force = false) {
   if (!force && json === lastSent) return;
   lastSent = json;
   win.webContents.send('sessions', sessions);
+  // 一覧から消えた（アーカイブや削除された）セッションは、常に表示からも外す。読めずに空のときは外さない
+  const { alwaysShow } = getSettings();
+  if (sessions.length && alwaysShow.length) {
+    const ids = new Set(sessions.map((s) => s.id));
+    const kept = alwaysShow.filter((id) => ids.has(id));
+    if (kept.length !== alwaysShow.length) updateSettings({ alwaysShow: kept });
+  }
 }
 
 // ---- 起動 ----
@@ -238,7 +248,13 @@ app.whenReady().then(() => {
   const stopWatching = watchSessions(() => sendSessions());
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
   if (!process.env.WIDGET_SCREENSHOT) {
-    const ok = globalShortcut.register(CYCLE_SHORTCUT, () => win?.webContents.send('cycle'));
+    startForegroundProbe();
+    const ok = globalShortcut.register(CYCLE_SHORTCUT, async () => {
+      // Claude が前面にないときは、次へ進まずに今のセッションを前面に出す。調べられなかったときは前面にあるものとして扱う
+      const name = await foregroundProcessName();
+      const claudeInFront = name === undefined || name.toLowerCase() === CLAUDE_PROCESS;
+      win?.webContents.send('cycle', claudeInFront);
+    });
     if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
   }
 
@@ -273,6 +289,11 @@ app.whenReady().then(() => {
   ipcMain.on('set-pinned', (_e, value: unknown) => {
     if (typeof value === 'boolean') updateSettings({ pinned: value });
   });
+  ipcMain.on('set-always-show', (_e, id: unknown, on: unknown) => {
+    if (typeof id !== 'string' || !ALWAYS_SHOW_ID.test(id) || typeof on !== 'boolean') return;
+    const rest = getSettings().alwaysShow.filter((x) => x !== id);
+    updateSettings({ alwaysShow: on ? [...rest, id] : rest });
+  });
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));
@@ -300,6 +321,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     stopWatching();
     globalShortcut.unregisterAll();
+    stopForegroundProbe();
     tray?.destroy();
   });
 });

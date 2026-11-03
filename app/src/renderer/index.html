@@ -34,14 +34,28 @@
         <span class="badge"></span>
       </h2>
       <div class="card-body"></div>
-      <div class="stopped">
-        <button class="stopped-toggle">
-          <span class="stopped-icon" data-icon="chevron-right"></span>
-          <span class="stopped-label"></span>
-        </button>
-        <ul class="rows stopped-rows"></ul>
-      </div>
     </section>
+  </template>
+
+  <!-- 折りたたみ：上限で隠したセッションと停止中。行を選ぶか、外をクリックするか、Esc で閉じる -->
+  <template id="fold-template">
+    <div class="fold">
+      <button class="fold-toggle">
+        <span class="fold-icon" data-icon="chevron-right"></span>
+        <span class="fold-text"><span class="when-closed">すべて表示</span><span class="when-open">折りたたむ</span></span>
+        <span class="fold-counts">
+          <span class="fold-count" data-state="busy"><span class="status"></span><span class="n"></span></span>
+          <span class="fold-count" data-state="idle"><span class="status"></span><span class="n"></span></span>
+          <span class="fold-count" data-state="stopped"><span class="status"></span><span class="n"></span></span>
+          <span class="fold-changes" hidden><span class="fold-changes-icon" data-icon="file-pen-line"></span><span class="n"></span></span>
+        </span>
+      </button>
+      <div class="fold-body">
+        <ul class="rows fold-hidden"></ul>
+        <div class="fold-sep">停止中</div>
+        <ul class="rows fold-stopped"></ul>
+      </div>
+    </div>
   </template>
 
   <template id="subhead-template">
@@ -59,6 +73,7 @@
         <span class="title"></span>
         <span class="meta"><span class="branch"></span><span class="when"></span></span>
       </span>
+      <button class="keep" tabindex="-1" aria-label="常に表示" data-icon="star"></button>
     </li>
   </template>
 

@@ -14,7 +14,7 @@ const widget: WidgetApi = {
   },
   getLayout: () => ipcRenderer.invoke('layout:get'),
   onCycle: (listener) => {
-    ipcRenderer.on('cycle', () => listener());
+    ipcRenderer.on('cycle', (_e, claudeInFront: unknown) => listener(claudeInFront !== false));
   },
   openSession: (id) => ipcRenderer.send('open-session', id),
   setCollapsed: (collapsed) => ipcRenderer.send('set-collapsed', collapsed),
@@ -24,6 +24,7 @@ const widget: WidgetApi = {
   resizeEnd: () => ipcRenderer.send('resize-end'),
   openSettings: () => ipcRenderer.send('open-settings'),
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
+  setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
 };
 
 const settingsApi: SettingsApi = {

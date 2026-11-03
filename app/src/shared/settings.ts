@@ -13,6 +13,12 @@ export interface Settings {
   cardOpacity: number;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
+  /** ワークツリーのグループごとに見せるセッションの数。0 ならすべて。残りは折りたたみに入れる */
+  groupLimit: number;
+  /** 隠したセッションと停止中をまとめる折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
+  foldScope: 'repo' | 'worktree';
+  /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
+  alwaysShow: string[];
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
@@ -31,6 +37,9 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 100,
   cardOpacity: 50,
   pinned: true,
+  groupLimit: 5,
+  foldScope: 'repo',
+  alwaysShow: [],
 };
 
 /** ドラッグで変えられる幅の範囲（px） */
@@ -61,8 +70,11 @@ interface Base<K extends keyof Settings> {
   description?: string;
 }
 
+/** 常に表示にできるセッションの ID。見本データの ID（`local_all-01` など）も通す */
+export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
+
 export type SettingDef =
-  | (Base<'edge'> & { type: 'segmented'; options: { value: string; label: string }[] })
+  | (Base<'edge' | 'foldScope' | 'groupLimit'> & { type: 'segmented'; options: { value: string | number; label: string }[] })
   | (Base<'display'> & { type: 'display' })
   | (Base<'backgroundOpacity' | 'cardOpacity'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
 
@@ -73,6 +85,16 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: 'left', label: '左' }, { value: 'right', label: '右' }],
   },
   { key: 'display', category: 'display', group: '位置', type: 'display', label: 'モニター' },
+  {
+    key: 'groupLimit', category: 'display', group: '一覧', type: 'segmented',
+    label: 'グループごとの表示数', description: '残りは折りたたみに入る。対応待ち、未確認、開いているもの、常に表示のものはいつも出る',
+    options: [{ value: 3, label: '3' }, { value: 5, label: '5' }, { value: 8, label: '8' }, { value: 0, label: 'すべて' }],
+  },
+  {
+    key: 'foldScope', category: 'display', group: '一覧', type: 'segmented',
+    label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
+    options: [{ value: 'repo', label: 'リポジトリ' }, { value: 'worktree', label: 'ワークツリー' }],
+  },
   {
     key: 'backgroundOpacity', category: 'display', group: '見た目', type: 'slider',
     label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
@@ -107,6 +129,9 @@ export function normalizeSettings(input: unknown): Settings {
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
+  if (Array.isArray(src.alwaysShow)) {
+    out.alwaysShow = [...new Set(src.alwaysShow.filter((id): id is string => typeof id === 'string' && ALWAYS_SHOW_ID.test(id)))];
+  }
   const bounds = normalizeBounds(src.settingsWindow);
   if (bounds) out.settingsWindow = bounds;
   return out;

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardSections, changeCount, changeItems, stoppedChangedFolders, WAITING_LABELS, type Card } from '../src/renderer/model';
+import { buildCards, buildGroups, cardLayout, changeCount, changeItems, WAITING_LABELS, type Card } from '../src/renderer/model';
 import { readFixture } from '../src/main/sessions';
 import type { SessionState } from '../src/shared/types';
 import { FIXTURES } from './helpers';
@@ -65,10 +65,10 @@ describe('all-states はすべての表示を含む', () => {
     has((c) => c.stopped.some((s) => s.worktree !== undefined), '停止中のワークツリー');
   });
 
-  it('コミットされていない変更の出る場所（小見出し、見出し、停止中）と、内訳の種類', () => {
+  it('コミットされていない変更の出る場所（小見出し、見出し、折りたたみ）と、内訳の種類', () => {
     has((c) => buildGroups(c.active).some((g) => changeItems(g.changes).length > 0), '小見出し');
-    has((c) => changeItems(cardSections(c).headerChanges).length > 0, '見出し');
-    has((c) => stoppedChangedFolders(c) > 0, '停止中');
+    has((c) => changeItems(cardLayout(c).headerChanges).length > 0, '見出し');
+    has((c) => (cardLayout(c).fold?.changedFolders ?? 0) > 0, '折りたたみ');
     assert.ok(sessions.some((s) => changeItems(s.changes).length === 3), '3 種類すべて');
     assert.ok(sessions.some((s) => s.changes && !changeCount(s.changes) && s.changes.ahead > 0), 'push していないコミットだけ');
   });

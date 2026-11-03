@@ -86,7 +86,7 @@ export function tooltip(s: SessionView): string {
 
 // ---- コミットされていない変更（docs/git-changes.md） ----
 
-/** コミットされていない件数（変更と未追跡）。停止中の「変更あり」はこれで数える */
+/** コミットされていない件数（変更と未追跡）。折りたたみの「変更が残る作業フォルダ」はこれで数える */
 export function changeCount(c: GitChanges | undefined): number {
   return c ? c.changed + c.untracked : 0;
 }
@@ -128,25 +128,6 @@ function folderOf(s: SessionView): string {
   return s.workDir?.toLowerCase() ?? `${s.repoKey}|${s.worktree?.key ?? ''}`;
 }
 
-/**
- * 停止中のセッションだけが使っている作業フォルダのうち、変更が残っているものの数。
- * 上の小見出しや見出しにもう出ているフォルダは数えない
- */
-export function stoppedChangedFolders(card: Card): number {
-  const shown = new Set(card.active.map(folderOf));
-  const folders = new Set<string>();
-  for (const s of card.stopped) {
-    const key = folderOf(s);
-    if (!shown.has(key) && changeCount(s.changes) > 0) folders.add(key);
-  }
-  return folders.size;
-}
-
-/** 停止中をたたんだときの文字 */
-export function stoppedLabel(card: Card): string {
-  const changed = stoppedChangedFolders(card);
-  return `停止中 ${card.stopped.length}` + (changed ? ` · 変更あり ${changed}` : '');
-}
 
 /**
  * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
@@ -229,43 +210,164 @@ export function buildGroups(active: SessionView[]): Group[] {
   return [...map.values()].sort(byUrgency);
 }
 
+/** 一覧を折りたたむ決まり。設定の値と、画面が覚えている状態から作る */
+export interface FoldOptions {
+  /** グループごとに見せる数。0 ならすべて見せる */
+  limit: number;
+  /** 折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
+  scope: 'repo' | 'worktree';
+  /** 常に表示のセッション。停止中でも一覧に出し、枠を先に使う */
+  alwaysShow: ReadonlySet<string>;
+  /** 上限を超えても出すセッション（未確認、今開いているもの）。ほかの行を押し出さないよう、空いた枠がなければ枠の外に足す */
+  extra: ReadonlySet<string>;
+}
+
+/** 何も折りたたまない（停止中だけをたたむ） */
+export const NO_FOLD: FoldOptions = { limit: 0, scope: 'repo', alwaysShow: new Set(), extra: new Set() };
+
+/** 折りたたみの中身 */
+export interface Fold {
+  key: string;
+  /** 上限で隠した、停止中でないセッション */
+  hidden: SessionView[];
+  stopped: SessionView[];
+  /** 中のセッションの作業フォルダのうち、コミットされていない変更が残っていて、小見出しや見出しの印に出ていないものの数 */
+  changedFolders: number;
+}
+
+export interface Section {
+  key: string;
+  /** 小見出しを出すときだけ */
+  group?: Group;
+  sessions: SessionView[];
+  /** ワークツリーごとにまとめるときの、このグループの折りたたみ */
+  fold?: Fold;
+}
+
+export interface CardLayout {
+  sections: Section[];
+  /** 小見出しがないときに、カードの見出しに出す作業フォルダの変更 */
+  headerChanges?: GitChanges;
+  /** リポジトリごとにまとめるときの、カードの一番下の折りたたみ */
+  fold?: Fold;
+}
+
+/**
+ * グループの中で見せるものと隠すものを分ける。list は急ぐ順
+ * - 対応待ちと常に表示のものは、上限を超えても出し、枠を先に使う
+ * - 残りの枠を急ぐ順に埋める
+ * - extra のものは、枠に入らなくても出す
+ */
+function pick(list: SessionView[], opts: FoldOptions): { visible: SessionView[]; hidden: SessionView[] } {
+  if (!opts.limit) return { visible: list, hidden: [] };
+  const first = (s: SessionView) => s.state === 'waiting' || opts.alwaysShow.has(s.id);
+  let room = opts.limit - list.filter(first).length;
+  const shown = new Set<SessionView>();
+  for (const s of list) {
+    if (first(s)) shown.add(s);
+    else if (room > 0) {
+      shown.add(s);
+      room--;
+    } else if (opts.extra.has(s.id)) shown.add(s);
+  }
+  return { visible: list.filter((s) => shown.has(s)), hidden: list.filter((s) => !shown.has(s)) };
+}
+
+/** shown：小見出しや見出しの印にもう出ている作業フォルダ（folderOf） */
+function makeFold(key: string, hidden: SessionView[], stopped: SessionView[], shown: ReadonlySet<string>): Fold | undefined {
+  if (!hidden.length && !stopped.length) return undefined;
+  const changed = new Set<string>();
+  for (const s of [...hidden, ...stopped]) {
+    if (changeCount(s.changes) > 0 && !shown.has(folderOf(s))) changed.add(folderOf(s));
+  }
+  return { key, hidden, stopped, changedFolders: changed.size };
+}
+
 /**
  * カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける。
- * 小見出しがないときは、作業フォルダの変更（headerChanges）をカードの見出しに出す
+ * 上限を超えたものと停止中は、折りたたみに入れる（常に表示の停止中は一覧に残す）。
+ * ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す。
  */
-export function cardSections(card: Card): {
-  useSubheads: boolean;
-  sections: Pick<Group, 'key' | 'sessions'>[];
-  headerChanges?: GitChanges;
-} {
-  const groups = buildGroups(card.active);
+export function cardLayout(card: Card, opts: FoldOptions = NO_FOLD): CardLayout {
+  const kept = (s: SessionView) => opts.alwaysShow.has(s.id);
+  const byWorktree = opts.scope === 'worktree';
+  const groups = buildGroups([...card.active, ...card.stopped.filter((s) => byWorktree || kept(s))]);
   const useSubheads = groups.some((g) => !g.isMain);
-  if (useSubheads) return { useSubheads, sections: groups };
-  return {
-    useSubheads,
-    sections: card.active.length ? [{ key: '*', sessions: card.active }] : [],
-    headerChanges: firstChanges(card.active),
-  };
+  // 小見出しがなければ、メインの作業フォルダの変更を見出しに出す（停止中のワークツリーは折りたたみの中にあり、見出しには出さない）
+  const main = [...card.active, ...card.stopped].filter((s) => !s.worktree);
+  const headerChanges = useSubheads ? undefined : firstChanges(main);
+  const shown = new Set((useSubheads ? groups.flatMap((g) => g.sessions) : main).map(folderOf));
+  const allHidden: SessionView[] = [];
+  const sections = groups.map((g): Section => {
+    const live = g.sessions.filter((s) => s.state !== 'stopped' || kept(s));
+    const { visible, hidden } = pick(live, opts);
+    const section: Section = { key: g.key, group: useSubheads ? g : undefined, sessions: visible };
+    if (byWorktree) {
+      const stopped = g.sessions.filter((s) => s.state === 'stopped' && !kept(s));
+      section.fold = makeFold(`${card.key}|${g.key}|fold`, hidden, stopped, shown);
+    } else allHidden.push(...hidden);
+    return section;
+  });
+  const fold = byWorktree ? undefined : makeFold(`${card.key}|fold`, allHidden, card.stopped.filter((s) => !kept(s)), shown);
+  return { sections, fold, headerChanges };
 }
 
-/** 画面に並んでいる順（上から）の、停止中でないセッション */
-export function displayOrder(sessions: SessionView[]): SessionView[] {
-  return buildCards(sessions).flatMap((card) => cardSections(card).sections.flatMap((g) => g.sessions));
+/** 折りたたみの説明（ツールチップと読み上げ用）。「ほか 2 件・停止中 3」 */
+export function foldLabel(fold: Fold): string {
+  const parts: string[] = [];
+  if (fold.hidden.length) parts.push(`ほか ${fold.hidden.length} 件`);
+  if (fold.stopped.length) parts.push(`停止中 ${fold.stopped.length}`);
+  if (fold.changedFolders) parts.push(`変更が残る作業フォルダ ${fold.changedFolders}`);
+  return parts.join('・');
+}
+
+/** 折りたたみのボタンに出す、状態ごとの件数。急ぐ順で、0 件の状態は出さない。対応待ちは隠さないので入らない */
+export function foldCounts(fold: Fold): { state: SessionState; count: number }[] {
+  const states: SessionState[] = ['busy', 'idle', 'stopped'];
+  return states
+    .map((state) => ({ state, count: [...fold.hidden, ...fold.stopped].filter((s) => s.state === state).length }))
+    .filter((c) => c.count > 0);
+}
+
+/** 画面に並んでいる順（上から）の、折りたたみの外のセッション */
+export function displayOrder(sessions: SessionView[], opts: FoldOptions = NO_FOLD): SessionView[] {
+  return buildCards(sessions).flatMap((card) => cardLayout(card, opts).sections.flatMap((g) => g.sessions));
 }
 
 /**
- * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない
+ * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。折りたたみの中のものは選ばない
  * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの
  * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）
  */
-export function nextCycleTarget(sessions: SessionView[], attention: ReadonlySet<string>, currentId: string | undefined): string | undefined {
-  const ids = displayOrder(sessions).map((s) => s.id);
+export function nextCycleTarget(
+  sessions: SessionView[],
+  attention: ReadonlySet<string>,
+  currentId: string | undefined,
+  opts: FoldOptions = NO_FOLD,
+): string | undefined {
+  const ids = displayOrder(sessions, opts).map((s) => s.id);
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
   if (flagged) return flagged;
   // 今開いているものの次から探す。一覧にない（停止中など）ときは indexOf が -1 なので先頭から
   const at = currentId ? ids.indexOf(currentId) : -1;
   const next = ids[(at + 1) % ids.length];
   return next === currentId ? undefined : next;
+}
+
+/**
+ * ショートカットで開くセッションの ID
+ * - Claude のウィンドウが前面になければ、今開いているセッション（開き直して前面に出す）
+ * - 前面にあるか、今開いているセッションが一覧にない（停止中など）ときは nextCycleTarget
+ */
+export function shortcutTarget(
+  sessions: SessionView[],
+  attention: ReadonlySet<string>,
+  currentId: string | undefined,
+  claudeInFront: boolean,
+  opts: FoldOptions = NO_FOLD,
+): string | undefined {
+  if (!claudeInFront && currentId && displayOrder(sessions, opts).some((s) => s.id === currentId)) return currentId;
+  return nextCycleTarget(sessions, attention, currentId, opts);
 }
 
 /** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */

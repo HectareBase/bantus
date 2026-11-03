@@ -2,7 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, cardSections, changeItems, changesTooltip, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, stateOfRank, statusIconName, stoppedLabel, tooltip, waitingLabel } from '../src/renderer/model';
+import {
+  NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, changeItems, changesTooltip, displayOrder, foldCounts, foldLabel, formatAgo,
+  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateOfRank, statusIconName, tooltip, waitingLabel, type FoldOptions,
+} from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -172,6 +175,134 @@ describe('displayOrder と nextCycleTarget', () => {
     assert.equal(nextCycleTarget([view({ id: 'a' })], new Set(['a']), 'a'), undefined);
     assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
   });
+
+  it('Claude が前面になければ、未確認があっても今開いている行を前面に出す', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false), 'm1'));
+  it('Claude が前面にあれば、いつもどおり次へ進む', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', true), 't1'));
+  it('前面になくても、今開いている行が一覧にない（停止中）か、わからなければ次へ進む', () => {
+    assert.equal(shortcutTarget(sessions, new Set(), 's1', false), 'w1');
+    assert.equal(shortcutTarget(sessions, new Set(), undefined, false), 'w1');
+  });
+});
+
+describe('cardLayout', () => {
+  const wt = { key: 'w', label: 'w', branch: 'claude/w-123abc' };
+  const opts = (patch: Partial<FoldOptions> = {}): FoldOptions => ({ ...NO_FOLD, limit: 2, ...patch });
+  const ids = (list: SessionView[]) => list.map((s) => s.id);
+  // 急ぐ順に並べてある（メインプロセスと同じ）
+  const sessions = (): SessionView[] => [
+    view({ id: 'b1', state: 'busy' }),
+    view({ id: 'i1', state: 'idle', lastActivityAt: 30 }),
+    view({ id: 'i2', state: 'idle', lastActivityAt: 20 }),
+    view({ id: 'i3', state: 'idle', lastActivityAt: 10 }),
+    view({ id: 's1', state: 'stopped' }),
+  ];
+  const layout = (list: SessionView[], o: FoldOptions) => cardLayout(buildCards(list)[0]!, o);
+
+  it('上限がなければ、停止中だけを折りたたむ', () => {
+    const l = layout(sessions(), NO_FOLD);
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1', 'i2', 'i3']);
+    assert.deepEqual([ids(l.fold!.hidden), ids(l.fold!.stopped)], [[], ['s1']]);
+  });
+
+  it('上限を超えた分は、急ぐ順で後ろのものから隠す', () => {
+    const l = layout(sessions(), opts());
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1']);
+    assert.deepEqual([ids(l.fold!.hidden), ids(l.fold!.stopped)], [['i2', 'i3'], ['s1']]);
+  });
+
+  it('隠したものも停止中もなければ、折りたたみを出さない', () =>
+    assert.equal(layout([view(), view()], opts()).fold, undefined));
+
+  it('対応待ちは上限を超えても出し、枠を先に使う', () => {
+    const list = [view({ id: 'w1', state: 'waiting' }), view({ id: 'w2', state: 'waiting' }), view({ id: 'w3', state: 'waiting' }), view({ id: 'b1', state: 'busy' })];
+    const l = layout(list, opts());
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['w1', 'w2', 'w3']);
+    assert.deepEqual(ids(l.fold!.hidden), ['b1']);
+  });
+
+  it('常に表示は枠を先に使い、並びは急ぐ順のまま', () => {
+    const l = layout(sessions(), opts({ alwaysShow: new Set(['i3']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i3']);
+  });
+
+  it('常に表示の停止中は、一覧に残す', () => {
+    const l = layout(sessions(), opts({ alwaysShow: new Set(['s1']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 's1']);
+    assert.deepEqual(ids(l.fold!.stopped), []);
+  });
+
+  it('未確認と今開いているものは、ほかの行を押し出さずに枠の外へ足す', () => {
+    const l = layout(sessions(), opts({ extra: new Set(['i3']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1', 'i3']);
+    assert.deepEqual(ids(l.fold!.hidden), ['i2']);
+  });
+
+  it('上限はワークツリーのグループごとにかける', () => {
+    const list = [
+      view({ id: 'm1' }), view({ id: 'm2' }), view({ id: 'm3' }),
+      view({ id: 't1', worktree: wt }), view({ id: 't2', worktree: wt }), view({ id: 't3', worktree: wt }),
+    ];
+    const l = layout(list, opts());
+    assert.deepEqual(l.sections.map((g) => ids(g.sessions)), [['m1', 'm2'], ['t1', 't2']]);
+    assert.deepEqual(ids(l.fold!.hidden), ['m3', 't3']);
+  });
+
+  it('ワークツリーごとにまとめるときは、グループごとに折りたたむ', () => {
+    const list = [
+      view({ id: 'm1' }), view({ id: 'm2' }), view({ id: 'm3' }),
+      view({ id: 't1', worktree: wt }), view({ id: 'ts', worktree: wt, state: 'stopped' }),
+    ];
+    const l = layout(list, opts({ scope: 'worktree' }));
+    assert.equal(l.fold, undefined);
+    assert.deepEqual(l.sections.map((g) => [g.key, ids(g.fold?.hidden ?? []), ids(g.fold?.stopped ?? [])]), [
+      ['', ['m3'], []],
+      ['w', [], ['ts']],
+    ]);
+  });
+
+  it('ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す', () => {
+    const list = [view({ id: 'm1' }), view({ id: 'ts', worktree: wt, state: 'stopped' })];
+    assert.deepEqual(layout(list, opts({ scope: 'worktree' })).sections.map((g) => [g.group?.label, ids(g.sessions)]), [
+      ['メイン', ['m1']],
+      ['w', []],
+    ]);
+    // リポジトリごとなら、小見出しを出さない
+    assert.deepEqual(layout(list, opts()).sections.map((g) => g.group), [undefined]);
+  });
+});
+
+describe('foldLabel と foldCounts', () => {
+  const fold = (hidden: SessionView[], stopped: SessionView[], changedFolders = 0) => ({ key: 'k', hidden, stopped, changedFolders });
+  it('隠したものと停止中の件数', () => {
+    assert.equal(foldLabel(fold([view(), view()], [view({ state: 'stopped' })])), 'ほか 2 件・停止中 1');
+    assert.equal(foldLabel(fold([view()], [])), 'ほか 1 件');
+    assert.equal(foldLabel(fold([], [view({ state: 'stopped' })])), '停止中 1');
+  });
+  it('変更が残る作業フォルダがあれば添える', () => {
+    assert.equal(foldLabel(fold([], [view({ state: 'stopped' })], 2)), '停止中 1・変更が残る作業フォルダ 2');
+  });
+  it('状態ごとの件数を急ぐ順に。0 件の状態は出さない', () => {
+    assert.deepEqual(foldCounts(fold([view({ state: 'idle' }), view({ state: 'busy' }), view({ state: 'idle' })], [view({ state: 'stopped' })])), [
+      { state: 'busy', count: 1 }, { state: 'idle', count: 2 }, { state: 'stopped', count: 1 },
+    ]);
+    assert.deepEqual(foldCounts(fold([], [view({ state: 'stopped' })])), [{ state: 'stopped', count: 1 }]);
+  });
+});
+
+describe('displayOrder と nextCycleTarget（折りたたみあり）', () => {
+  const sessions: SessionView[] = [
+    view({ id: 'a1', state: 'idle', lastActivityAt: 30 }),
+    view({ id: 'a2', state: 'idle', lastActivityAt: 20 }),
+    view({ id: 'a3', state: 'idle', lastActivityAt: 10 }),
+    view({ id: 's1', state: 'stopped' }),
+  ];
+  const opts: FoldOptions = { ...NO_FOLD, limit: 3, alwaysShow: new Set(['a3', 's1']) };
+
+  it('折りたたみの中は入れず、常に表示のものは停止中でも入れる', () =>
+    assert.deepEqual(displayOrder(sessions, opts).map((s) => s.id), ['a1', 'a3', 's1']));
+  it('巡回も見えている行だけ', () => assert.equal(nextCycleTarget(sessions, new Set(), 'a1', opts), 'a3'));
 });
 
 describe('コミットされていない変更', () => {
@@ -200,25 +331,43 @@ describe('コミットされていない変更', () => {
     assert.deepEqual(groups.find((g) => !g.isMain)?.changes, some);
     assert.equal(groups.find((g) => g.isMain)?.changes, undefined);
   });
-  it('小見出しがないときは見出しに出す。あるときは出さない', () => {
+  it('小見出しがないときはメインの変更を見出しに出す。あるときは出さない', () => {
     const [flat] = buildCards([view({ changes: some })]);
-    assert.deepEqual(cardSections(flat!).headerChanges, some);
+    assert.deepEqual(cardLayout(flat!).headerChanges, some);
     const [split] = buildCards([view({ changes: some }), view({ worktree: { key: 'k', label: 'k', branch: 'k' } })]);
-    assert.equal(cardSections(split!).headerChanges, undefined);
+    assert.equal(cardLayout(split!).headerChanges, undefined);
+    const [stoppedWt] = buildCards([view({ state: 'stopped', worktree: { key: 'k', label: 'k', branch: 'k' }, changes: some })]);
+    assert.equal(cardLayout(stoppedWt!).headerChanges, undefined, '停止中のワークツリーの変更は見出しに出さない');
   });
-  it('停止中は、上に出ていないフォルダの変更だけを数える', () => {
+  describe('折りたたみの「変更が残る作業フォルダ」', () => {
     const dirty = { changed: 1, untracked: 0, ahead: 0 };
-    const [card] = buildCards([
+    const wt = (key: string) => ({ key, label: key, branch: key });
+    const list = () => [
       view({ state: 'idle', workDir: 'C:/Repo', changes: dirty }),
+      view({ state: 'idle', workDir: 'C:/Repo/wt-x', worktree: wt('x') }),
       view({ state: 'stopped', workDir: 'c:/repo', changes: dirty }),
-      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', changes: dirty }),
-      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', changes: dirty }),
-      view({ state: 'stopped', workDir: 'C:/Repo/wt-b', changes: { changed: 0, untracked: 0, ahead: 2 } }),
-    ]);
-    assert.equal(stoppedLabel(card!), '停止中 4 · 変更あり 1');
-  });
-  it('停止中に変更がなければ件数だけ', () => {
-    const [card] = buildCards([view({ state: 'stopped' })]);
-    assert.equal(stoppedLabel(card!), '停止中 1');
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', worktree: wt('a'), changes: dirty }),
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-a', worktree: wt('a'), changes: dirty }),
+      view({ state: 'stopped', workDir: 'C:/Repo/wt-b', worktree: wt('b'), changes: { changed: 0, untracked: 0, ahead: 2 } }),
+    ];
+    const opts = (scope: 'repo' | 'worktree'): FoldOptions => ({ ...NO_FOLD, scope });
+    it('リポジトリごと：小見出しに出ていないフォルダだけを数え、push していないだけのものは数えない', () => {
+      const [card] = buildCards(list());
+      assert.equal(cardLayout(card!, opts('repo')).fold?.changedFolders, 1);
+    });
+    it('ワークツリーごと：どのフォルダも小見出しに出るので数えない', () => {
+      const [card] = buildCards(list());
+      const folds = cardLayout(card!, opts('worktree')).sections.map((g) => g.fold?.changedFolders ?? 0);
+      assert.deepEqual(folds.filter((n) => n > 0), []);
+    });
+    it('小見出しがないとき：見出しに出るメインは数えず、停止中のワークツリーは数える', () => {
+      const [card] = buildCards([
+        view({ state: 'stopped', workDir: 'C:/Repo', changes: dirty }),
+        view({ state: 'stopped', workDir: 'C:/Repo/wt-a', worktree: wt('a'), changes: dirty }),
+      ]);
+      const layout = cardLayout(card!, opts('repo'));
+      assert.deepEqual(layout.headerChanges, dirty);
+      assert.equal(layout.fold?.changedFolders, 1);
+    });
   });
 });

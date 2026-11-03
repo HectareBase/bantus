@@ -26,3 +26,20 @@ describe('normalizeSettings の pinned', () => {
   it('false を残す', () => assert.equal(normalizeSettings({ pinned: false }).pinned, false));
   it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ pinned: 'false' }).pinned, true));
 });
+
+describe('normalizeSettings の一覧の項目', () => {
+  it('なければ既定値', () => {
+    const s = normalizeSettings({});
+    assert.deepEqual([s.groupLimit, s.foldScope, s.alwaysShow], [5, 'repo', []]);
+  });
+  it('選べる値だけを残す', () => {
+    assert.equal(normalizeSettings({ groupLimit: 0 }).groupLimit, 0);
+    assert.equal(normalizeSettings({ groupLimit: 4 }).groupLimit, 5);
+    assert.equal(normalizeSettings({ groupLimit: '3' }).groupLimit, 5);
+    assert.equal(normalizeSettings({ foldScope: 'worktree' }).foldScope, 'worktree');
+    assert.equal(normalizeSettings({ foldScope: 'x' }).foldScope, 'repo');
+  });
+  it('常に表示は、セッションの ID の形をした文字列だけを、重ねずに残す', () =>
+    assert.deepEqual(normalizeSettings({ alwaysShow: ['local_a-1', 'local_a-1', 'x', 3, 'local_b'] }).alwaysShow, ['local_a-1', 'local_b']));
+  it('配列でなければ空', () => assert.deepEqual(normalizeSettings({ alwaysShow: 'local_a' }).alwaysShow, []));
+});
