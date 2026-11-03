@@ -6,7 +6,7 @@ import {
   NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, changeItems, changesTooltip, displayOrder, foldCounts, foldLabel, formatAgo,
   nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type FoldOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
-  alertActions, hasAlertOutput, openedInClaude,
+  alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
 } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
@@ -508,5 +508,17 @@ describe('コミットされていない変更', () => {
       assert.deepEqual(layout.headerChanges, dirty);
       assert.equal(layout.fold?.changedFolders, 1);
     });
+  });
+});
+
+describe('newlyFlagged', () => {
+  it('前の描画で帯がなかったものだけを返す', () => {
+    assert.deepEqual(newlyFlagged(new Set(['a']), new Set(['a', 'b']), true), ['b']);
+  });
+  it('帯が残っているだけ、消えただけのものは返さない', () => {
+    assert.deepEqual(newlyFlagged(new Set(['a', 'b']), new Set(['a']), true), []);
+  });
+  it('最初の描画では返さない', () => {
+    assert.deepEqual(newlyFlagged(new Set(), new Set(['a', 'b']), false), []);
   });
 });
