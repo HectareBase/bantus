@@ -75,7 +75,7 @@ export function formatAgo(ms: number, now = Date.now()): string {
   return `${Math.floor(h / 24)} 日前`;
 }
 
-/** 知らない waitingFor はそのまま出す（docs/session-status.md：「対応待ち（その他）」） */
+/** 知らない waitingFor はそのまま出す（docs/research/session-status.md：「対応待ち（その他）」） */
 export function waitingLabel(waitingFor: string | undefined): string {
   return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
 }
@@ -109,7 +109,7 @@ export function tooltip(s: SessionView): string {
   return lines.join('\n');
 }
 
-// ---- コミットされていない変更（docs/git-changes.md） ----
+// ---- コミットされていない変更（docs/design/git-changes.md） ----
 
 /** コミットされていない件数（変更と未追跡）。折りたたみの「変更が残る作業フォルダ」はこれで数える */
 export function changeCount(c: GitChanges | undefined): number {

@@ -1,6 +1,6 @@
 // 作業フォルダごとの、コミットされていない変更（git status）。ウィジェットからは読むだけで、リポジトリを書き換えない。
 // 普通の git status は .git/index を書き直すことがある（index.lock を取る）ので、--no-optional-locks を付けて
-// Claude 自身の git 操作とぶつからないようにする。調べ方と頻度は docs/git-changes.md。
+// Claude 自身の git 操作とぶつからないようにする。調べ方と頻度は docs/design/git-changes.md。
 
 import { execFile } from 'node:child_process';
 import type { GitChanges, SessionState, SessionView } from '../shared/types';

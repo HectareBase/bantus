@@ -1,5 +1,5 @@
 // Claude デスクトップのセッション一覧と状態を読む。データは読むだけで、書き換えない。
-// 読み取り元と項目は docs/data-sources.md、状態の判定は docs/session-status.md。
+// 読み取り元と項目は docs/research/data-sources.md、状態の判定は docs/research/session-status.md。
 
 import { readFileSync, readdirSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
@@ -217,7 +217,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const views: SessionView[] = [];
   // 通し番号を数えるためのもの。アーカイブ済みも入れる
   const numbered: SessionView[] = [];
-  // 今開いているセッション（docs/deep-link-and-uia.md）。サイドチャットのときは親の ID にする
+  // 今開いているセッション（docs/research/deep-link-and-uia.md）。サイドチャットのときは親の ID にする
   let focused: { id: string; at: number } | undefined;
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {

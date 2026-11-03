@@ -24,7 +24,7 @@
 | 二重起動の防止 | `requestSingleInstanceLock()` | インストール版と `npm start` を同時に動かせない | 開発中は `WIDGET_FIXTURE` か、別の `userData` で起動する（今のまま） |
 | ログオン時の起動 | ない | インストールしたら欲しくなる | 設定の「全体」に「Windows の起動時に開く」を足す（`app.setLoginItemSettings`）。インストーラーでは聞かない |
 
-## 公開のルールとの関係（[publishing.md](publishing.md)）
+## 公開のルールとの関係（[publishing.md](../publishing.md)）
 - 作ったファイルは `app/release/` に出す。`.gitignore` の `release/` で git に入らない
 - `author` と `copyright` は、公開してよい名前だけを書く。electron-builder の `copyright` の既定値には年が入るので、**年を書かずに**明示する
 - NSIS の画面に出す「発行元」（`publisherName`）も同じ名前にする

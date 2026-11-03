@@ -53,5 +53,5 @@ CLI 2.1.309 の `claude.exe` の中のコードを読み、実際のファイル
 
 生のログにはセッションのタイトルが入るので、リポジトリには入れていません（`local/` に保存）。
 
-## ウィジェットでの表示
-色と印、並び順は [widget-app-plan.md](widget-app-plan.md) の「表示ルール」にまとめています。並び順は 対応待ち → 処理中 → 待機 → 停止中 です。`local_*.json` の `postTurnSummary.needs_action` に値があるときは、ツールチップに「対応が必要」として出します。
+## ウィジェットでの使い方
+ウィジェットがこの状態をどう表示するか（色と印、並び順）は、設計の資料 [widget-app-plan.md](../design/widget-app-plan.md) の「表示ルール」にあります。どの項目を読むかは [data-usage.md](../design/data-usage.md) にあります。

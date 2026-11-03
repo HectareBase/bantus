@@ -2,7 +2,7 @@
 
 import type { Settings } from './settings';
 
-/** 表示上の状態。並び順もこの順（docs/session-status.md） */
+/** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
 
 export interface SessionView {

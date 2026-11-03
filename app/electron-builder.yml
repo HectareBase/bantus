@@ -1,4 +1,4 @@
-# exe とインストーラーの設定（npm run dist、npm run dist:dir）。計画は docs/packaging-plan.md
+# exe とインストーラーの設定（npm run dist、npm run dist:dir）。計画は docs/design/packaging-plan.md
 # 公開する前提なので、名前は公開してよいものだけを書く。copyright は既定だと年が入るので、年なしで書く
 
 # src/main/main.ts の APP_USER_MODEL_ID と同じ値にする

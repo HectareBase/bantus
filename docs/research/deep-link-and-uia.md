@@ -82,10 +82,10 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 | UIA の `ControlType.Document` の名前（「タイトル - Claude Code」） | 画面に出ているセッションのタイトル | タイトルしかわからない（同じ名前を区別できない）。表示言語で変わる |
 
 - ウィンドウのタイトル（`MainWindowTitle`）は `Claude` だけで、使えません。
-- Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。ウィジェットは `GetForegroundWindow` のウィンドウのプロセス名が `claude` かで判断しています（`app/src/main/foreground.ts`）。
+- Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。`GetForegroundWindow`（user32.dll）で前面のウィンドウを取り、そのプロセス名が `claude` かで見分けられます。
 - 分割表示で複数のセッションを並べているときに、どれを指すかは確かめていません（最後にフォーカスしたものと思われます）。
 - サイドチャット（btw）を表示しているときは、サイドチャットの `lastFocusedAt` が一番新しくなります。親に置き換えて扱います（[data-sources.md](data-sources.md#サイドチャットbtw)）。
-- ウィジェットは `lastFocusedAt` を使い、その行の背景色を変えています。
+- ウィジェットでの使い方は、設計の資料 [data-usage.md](../design/data-usage.md) にあります。
 
 ## ホットキー
 - PowerShell 5.1 から `RegisterHotKey`（user32.dll）で登録できます。`MOD_NOREPEAT` を付け、メッセージ専用ウィンドウ（`HWND_MESSAGE`）で `WM_HOTKEY` を受け取ります。

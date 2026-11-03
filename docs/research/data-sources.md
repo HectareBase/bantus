@@ -1,7 +1,7 @@
 # Claude デスクトップから読めるデータ
 
 調査したバージョンはデスクトップアプリ 4.4212.0、Claude Code CLI 2.1.309（Windows 11、MSIX 版）です。
-**どれも公式には公開されていない形式**なので、アプリを更新したら変わる可能性があります。ウィジェットからは**読むだけ**にし、書き込みはしません。
+**どれも公式には公開されていない形式**なので、アプリを更新したら変わる可能性があります。ウィジェットからは**読むだけ**にし、書き込みはしません。ウィジェットが実際に読む項目と使い道は、設計の資料 [data-usage.md](../design/data-usage.md) にあります。
 
 ## 一覧
 | 情報 | 読み取り元 | 主な項目 |
@@ -38,7 +38,7 @@
 
 ### サイドチャット（btw）
 - サイドチャットも `local_*.json` を 1 つ持ちます。目印は `spawnedFrom.btw: true` で、親は `spawnedFrom.sessionId` です。タイトルは多くが `btw: ` で始まりますが、目印には使いません。
-- デスクトップのサイドバーには出ないので、ウィジェットの一覧にも出しません。
+- デスクトップのサイドバーには出ません。
 - 表示すると、親とサイドチャットの両方の `lastFocusedAt` が書かれ、サイドチャットのほうが少し後になります。今開いているセッションを決めるときは、親に置き換えます。
 - `spawnedFrom` があっても `btw` がないもの（別のセッションとして立ち上げたもの）は、普通のセッションとしてサイドバーに出ます。
 
@@ -51,7 +51,7 @@
 | `pid` / `procStart` | プロセス ID と起動時刻。**ファイルだけが残っていることがある**ので、そのプロセスが今も動いているかを確かめる |
 | `sessionId` | CLI のセッション ID（`local_*.json` の `cliSessionId` と同じ値） |
 | `name` / `nameSource` / `formerNames` | セッション名と、付けた方法（`user` / `auto` / `derived` など）、以前の名前 |
-| `cwd` / `kind` / `entrypoint` | 今の作業フォルダ、`interactive`、`claude-desktop`。セッションの途中で EnterWorktree を使うと `cwd` はワークツリーに変わるが、`local_*.json`（`cwd`、`worktreeName` など）と `git-worktrees.json` は元のままで、デスクトップのサイドバーでも元のリポジトリのセッションとして出る。ウィジェットは、動いている間だけこの `cwd` からワークツリーを見つける |
+| `cwd` / `kind` / `entrypoint` | 今の作業フォルダ、`interactive`、`claude-desktop`。セッションの途中で EnterWorktree を使うと `cwd` はワークツリーに変わるが、`local_*.json`（`cwd`、`worktreeName` など）と `git-worktrees.json` は元のままで、デスクトップのサイドバーでも元のリポジトリのセッションとして出る |
 | `status` / `waitingFor` | 状態と、待ちの理由 |
 | `updatedAt` / `statusUpdatedAt` | 最後にファイルが更新された時刻と、状態が変わった時刻（Unix ミリ秒） |
 

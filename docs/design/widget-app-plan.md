@@ -15,7 +15,7 @@ Claude デスクトップでは、セッションに色やアイコンを付け�
 | 処理中の表示 | 薄い輪の上を、伸び縮みする弧が回る（Windows 11 の ProgressRing に近い動き。lucide にないので自前で描く） |
 | 対応待ちの表示 | 点滅させる。そのときも CPU の使用率を低く抑える |
 | 作り方 | **Electron**（Node.js 24 がこの PC にある） |
-| 管理 | git で管理する。公開するときに**個人情報と日付が入らない**ようにする → [publishing.md](publishing.md) |
+| 管理 | git で管理する。公開するときに**個人情報と日付が入らない**ようにする → [publishing.md](../publishing.md) |
 
 ## 画面のイメージ（カード案 B-1）
 ```
@@ -91,7 +91,7 @@ Claude デスクトップでは、セッションに色やアイコンを付け�
 - 今開いているセッションと停止中のものは選ばない
 - Claude のウィンドウが前面にないときは、次へ進まずに今開いているセッションを開き直して前面に出す（もう一度押すと次へ進む）。前面のウィンドウは、常駐させた PowerShell で `GetForegroundWindow` を呼び、プロセス名が `claude` かで判断する。調べられなかったときは前面にあるものとして扱う
 - 開く先は画面側が決める（未確認の帯を画面側で覚えているため）。メインプロセスはキーを受けて、Claude が前面にあったかと一緒に画面に伝えるだけ
-- 状態の判定は [session-status.md](session-status.md) のとおり
+- 状態の判定は [session-status.md](../research/session-status.md) のとおり
 
 ## Electron での作り方
 | 要素 | 方法 |
@@ -135,7 +135,7 @@ Claude デスクトップでは、セッションに色やアイコンを付け�
 
 **やらないこと**
 - Claude のデータファイルへの書き込み、アプリ本体の改造
-- 認証情報を含むファイルを読むこと（[data-sources.md](data-sources.md) の「触ってはいけないもの」）
+- 認証情報を含むファイルを読むこと（[data-sources.md](../research/data-sources.md) の「触ってはいけないもの」）
 
 ## フォルダの構成
 Electron 版は `app/` に置きます。試作は `prototype/`、検証用のスクリプトは `tools/` にあります。

@@ -1,4 +1,4 @@
-// 前面にあるウィンドウのプロセス名を調べる（docs/deep-link-and-uia.md）。
+// 前面にあるウィンドウのプロセス名を調べる（docs/research/deep-link-and-uia.md）。
 // Node から user32.dll を直接呼べないので、GetForegroundWindow を呼ぶ PowerShell を 1 つ動かし続け、1 行送るたびに 1 行で答えさせる。
 // 起動と Add-Type に 1〜2 秒かかるので、起動したら一度だけ作っておく。
 
