@@ -521,7 +521,8 @@ export function nextCycleTarget(
 
 /**
  * ショートカットで開くセッションの ID
- * - Claude のウィンドウが前面になければ、今開いているセッション（開き直して前面に出す）
+ * - 今開いているもののほかに未確認（左端の帯）の行があれば、前面かどうかに関係なく、表示順でいちばん上のもの
+ * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（開き直して前面に出す）
  * - 前面にあるか、今開いているセッションが一覧にない（停止中など）ときは nextCycleTarget
  */
 export function shortcutTarget(
@@ -531,7 +532,11 @@ export function shortcutTarget(
   claudeInFront: boolean,
   opts: FoldOptions = NO_FOLD,
 ): string | undefined {
-  if (!claudeInFront && currentId && displayOrder(sessions, opts).some((s) => s.id === currentId)) return currentId;
+  const ids = displayOrder(sessions, opts).map((s) => s.id);
+  // 未確認は処理中より急ぐので、前面になくても今のセッションより先に開く
+  const flagged = ids.find((id) => id !== currentId && attention.has(id));
+  if (flagged) return flagged;
+  if (!claudeInFront && currentId && ids.includes(currentId)) return currentId;
   return nextCycleTarget(sessions, attention, currentId, opts);
 }
 
