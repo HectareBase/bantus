@@ -19,5 +19,8 @@ Claude デスクトップのデータを**読むだけ**で、書き換えはし
 
 Bantus は個人が作った非公式のツールで、Anthropic とは関係がありません。Anthropic が承認や支援をしているものでもありません。「Claude」は Anthropic の商標です。
 
+## 変更履歴
+版ごとの変更は [CHANGELOG.md](CHANGELOG.md) にあります。
+
 ## ライセンス
 [MIT License](LICENSE)。画面のアイコンには [Lucide](https://lucide.dev)（ISC License。一部は Feather 由来で MIT License）を使っています。全文は [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) にあります。
