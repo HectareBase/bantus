@@ -16,6 +16,20 @@ npm run debug -- empty --cycle 3
 ```
 `npm start` は、TypeScript をビルドしてから Electron を起動します。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
 
+### ワークツリーで動かす
+機能の追加はワークツリー（`.claude/worktrees/<名前>`）で進めます。ワークツリーには `app/node_modules` がないので、一番上で `npm run setup` を実行します。
+```bash
+npm run setup   # ワークツリーでは、main のチェックアウトの app/node_modules へのジャンクションを作る
+npm start       # いつものウィジェットと並べて起動する
+```
+- `npm run setup`（`scripts/setup.mjs`）は、main のチェックアウトでは今までどおり `npm install` を実行し、ワークツリーでは main の `app/node_modules` へのジャンクション（管理者の権限はいらない）を作る。main の場所は `git rev-parse --git-common-dir` から求める。`app/node_modules` がもうあれば何もしない。main で先に `npm run setup` しておく
+- 依存（`package.json`）を変える作業では、ジャンクションを外して（`cmd /c rmdir app\node_modules`。ジャンクションだけが消え、main の中身は残る。PowerShell の `Remove-Item` は先の中身まで消すことがあるので使わない）から `cd app` で `npm install` する
+- アプリのフォルダから上へたどって最初の `.git` がファイルなら、ワークツリー版として動く（`src/main/worktree.ts`）。インストール版（`app.isPackaged`）では調べない
+- ワークツリー版は、データフォルダを `%APPDATA%\Bantus-wt-<ワークツリー名>`（見本データならさらに `-debug`）に分ける。二重起動の検査も別になるので、いつものウィジェットが動いていても起動できる
+- 初めて起動したときは、いつもの設定（`settings.json`）を写し、端（`edge`）を反対側にする（重ならないように）。あとは別の設定として変えられる。やり直すときは、そのフォルダを消す
+- トレイのツールチップと設定ウィンドウのタイトルにワークツリー名を出す。タスクバーと知らせも、AppUserModelId を変えていつものものと分ける
+- ショートカット（`Ctrl+Alt+N`）はいつものウィジェットが持っているので、ワークツリー版では登録しない（コンソールに一言出す）
+
 ### exe とインストーラーを作る
 ```bash
 npm run dist       # インストーラー（NSIS）と zip
@@ -31,7 +45,7 @@ npm run dist:dir   # 展開したフォルダだけ（試すとき。速い）
 - 中に入るのは `dist/node/` と `dist/web/`（ソースマップを除く）と `package.json` だけ。アイコン（`assets/icon.ico`）は asar の外の `resources/assets/` に置く
 - 署名はしていないので、初めて起動すると SmartScreen の警告が出る（「詳細情報」→「実行」で進む）
 - アンインストールしても、設定（`%APPDATA%\Bantus`）は残す
-- インストール版と `npm start` は、同じデータフォルダを使うので同時に動かせない（二重起動の防止）。開発中に並べて動かすときは、見本データ（`npm run debug`）か `--user-data-dir=<別のフォルダ>` で起動する
+- インストール版と `npm start` は、同じデータフォルダを使うので同時に動かせない（二重起動の防止）。開発中に並べて動かすときは、ワークツリーで起動する（上の「ワークツリーで動かす」）か、見本データ（`npm run debug`）か `--user-data-dir=<別のフォルダ>` で起動する
 
 ### テスト
 ```bash
@@ -42,6 +56,7 @@ npm test
 - `test/model.test.ts`：画面に出す形への組み立て（`src/renderer/model.ts`）。カードと小見出しの並び、バッジ、ツールチップ、「◯分前」、ショートカットで開く先、コミットされていない変更の印
 - `test/git-status.test.ts`：コミットされていない変更（`src/main/git-status.ts`）。`git status` の出力の数え方と、調べ直す時機（偽の git を使う）
 - `test/settings.test.ts`：設定の値をそろえる処理（`src/shared/settings.ts`）。設定ウィンドウの位置と大きさ
+- `test/worktree.test.ts`：ワークツリー版の判定（`src/main/worktree.ts`）。ワークツリー名の取り出し、データフォルダと AppUserModelId の名前、最初の設定（端を反対にする）
 - `test/fixtures.test.ts`：見本データの形。`all-states.json` がすべての状態・理由・分岐を含んでいるか
 
 ### 見本データで表示を確かめる（デバッグ）
@@ -115,6 +130,7 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 |---|---|
 | `src/main/main.ts` | ウィジェットと設定ウィンドウを作り、設定に合わせて位置・背景・不透明度を変える。IPC の受け口 |
 | `src/main/settings-store.ts` | 設定の読み書き |
+| `src/main/worktree.ts` | ワークツリーの中から起動したかの判定と、いつものウィジェットと分けるための値 |
 | `src/main/sessions.ts` | セッションの読み取りと、フォルダの見張り（`fs.watch`、30 秒ごとの読み直し） |
 | `src/preload/preload.ts` | 画面に公開する API（`window.widget`） |
 | `src/renderer/index.html` ほか | ウィジェットの画面。変わったところだけを書き換える |
@@ -128,6 +144,7 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | `src/shared/types.ts` | メインプロセスと画面で共通の型 |
 | `src/shared/settings.ts` | 設定項目の定義（カテゴリ、種類、既定値、値の検査） |
 | `scripts/copy-static.mjs` | HTML と CSS を `dist/web/` にコピーする |
+| `scripts/setup.mjs` | 一番上の `npm run setup`。main では `npm install`、ワークツリーでは main の `node_modules` へのジャンクション |
 | `scripts/clean-dist.mjs` | exe に包む前に `dist/` を消す |
 | `electron-builder.yml` | exe とインストーラーの設定 |
 | `fixtures/*.json` | 表示を確かめるための見本データ（一般的な名前だけ） |

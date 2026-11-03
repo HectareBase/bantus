@@ -3,7 +3,7 @@
   "private": true,
   "description": "Runs the app/ scripts from the repository root",
   "scripts": {
-    "setup": "npm --prefix app install",
+    "setup": "node app/scripts/setup.mjs",
     "start": "npm --prefix app start --",
     "debug": "npm --prefix app run debug --",
     "screenshots": "npm --prefix app run screenshots --",

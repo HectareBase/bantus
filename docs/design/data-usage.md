@@ -37,7 +37,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | `%APPDATA%\Bantus\` のほかのファイル | Electron が自分で作るもの（キャッシュなど） |
 | Windows のスタートアップの登録 | 「Windows の起動時に開く」をオンにしたときだけ（`app.setLoginItemSettings`） |
 
-見本データ（`npm run debug`）で起動したときは、`bantus-debug` という別のフォルダを使います。撮影を頼んだときだけ、指定した場所に PNG を書きます。
+見本データ（`npm run debug`）で起動したときは、`bantus-debug` という別のフォルダを使います。ワークツリーの中から起動したときは `Bantus-wt-<ワークツリー名>`（見本データならさらに `-debug`）を使い、初回だけいつもの `settings.json` を読んで写します（[app/README.md](../../app/README.md) の「ワークツリーで動かす」）。撮影を頼んだときだけ、指定した場所に PNG を書きます。
 
 ## しないこと
 - Claude のデータ（`Claude-Data`、`~/.claude`）には書き込みません。動かすことも、消すこともしません

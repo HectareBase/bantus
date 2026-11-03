@@ -2,13 +2,14 @@
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
-import { writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { tipBounds } from './tip-place';
+import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
@@ -52,10 +53,50 @@ const toasts = new Set<Notification>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
 const gitStatus = createGitStatus(() => sendSessions());
 
-app.setAppUserModelId(APP_USER_MODEL_ID);
+/** フォルダの .git の種類（ワークツリーの判定に使う） */
+function gitEntry(dir: string): GitEntry {
+  try {
+    return statSync(join(dir, '.git')).isFile() ? 'file' : 'dir';
+  } catch {
+    return undefined;
+  }
+}
 
+/** ワークツリーの中から npm start したときの、ワークツリー名。インストール版と main のチェックアウトでは undefined */
+const WORKTREE = app.isPackaged ? undefined : worktreeName(app.getAppPath(), gitEntry);
+
+/**
+ * ワークツリー版のデータフォルダを、いつものウィジェットと分ける（二重起動の検査も別になり、並べて動かせる）。
+ * 初めてのときは、いつもの設定を写して端を反対側にする
+ */
+function useWorktreeUserData(name: string) {
+  const base = app.getPath('userData');
+  const dir = worktreeUserData(base, name, !!process.env.WIDGET_FIXTURE);
+  app.setPath('userData', dir);
+  const file = join(dir, 'settings.json');
+  if (existsSync(file)) return;
+  let saved: unknown;
+  try {
+    saved = JSON.parse(readFileSync(join(base, 'settings.json'), 'utf8'));
+  } catch {
+    // いつもの設定がなければ既定値から
+  }
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify(worktreeInitialSettings(saved), null, 2));
+  } catch (e) {
+    console.error('ワークツリー版の設定を作れませんでした：', e);
+  }
+}
+
+app.setAppUserModelId(WORKTREE ? worktreeAppUserModelId(APP_USER_MODEL_ID, WORKTREE) : APP_USER_MODEL_ID);
+
+if (WORKTREE) useWorktreeUserData(WORKTREE);
 // 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
-if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
+else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
+
+/** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
+const APP_LABEL = WORKTREE ? `Bantus（ワークツリー：${WORKTREE}）` : 'Bantus';
 
 /**
  * Windows の起動時に開く設定を変えられるか。npm start では electron.exe が登録されてしまうので、インストール版でだけ使う。
@@ -269,7 +310,7 @@ function openSettingsWindow() {
     ...SETTINGS_SIZE,
     minWidth: SETTINGS_MIN.width,
     minHeight: SETTINGS_MIN.height,
-    title: 'Bantus — 設定',
+    title: `${APP_LABEL} — 設定`,
     icon: ICON,
     autoHideMenuBar: true,
     show: false,
@@ -282,6 +323,8 @@ function openSettingsWindow() {
   restoreSettingsBounds(w);
   // 開いたときの位置と大きさ。閉じるときにこれと同じなら保存しない（座標の丸めで、開くたびに数 px ずつずれていくのを防ぐ）
   const opened = w.getNormalBounds();
+  // settings.html の <title> で上書きされないようにする
+  w.on('page-title-updated', (e) => e.preventDefault());
   w.loadFile(join(WEB, 'settings.html'));
   w.once('ready-to-show', () => w.show());
   // 閉じるときに位置と大きさを覚える。最大化していても、元に戻したときの大きさを保存する
@@ -302,7 +345,7 @@ function showWidget() {
 /** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで表示、設定、終了 */
 function createTray(): Tray {
   const t = new Tray(ICON);
-  t.setToolTip('Bantus');
+  t.setToolTip(APP_LABEL);
   t.setContextMenu(
     Menu.buildFromTemplate([
       { label: '表示', click: () => showWidget() },
@@ -398,8 +441,10 @@ app.whenReady().then(() => {
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
-  if (!process.env.WIDGET_SCREENSHOT) {
-    startForegroundProbe();
+  if (!process.env.WIDGET_SCREENSHOT) startForegroundProbe();
+  // ワークツリー版も登録しない（いつものウィジェットが持っている）
+  if (WORKTREE) console.log(`ワークツリー版（${WORKTREE}）なので、ショートカット ${CYCLE_SHORTCUT} は登録しません`);
+  else if (!process.env.WIDGET_SCREENSHOT) {
     const ok = globalShortcut.register(CYCLE_SHORTCUT, async () => {
       // 未確認の行がなく Claude が前面にないときは、次へ進まずに今のセッションを前面に出す（決めるのは画面側）。調べられなかったときは前面にあるものとして扱う
       const name = await foregroundProcessName();
