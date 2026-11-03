@@ -56,6 +56,8 @@ npm run dist:dir   # 展開したフォルダだけ（試すとき。速い）
 | `win-unpacked/` | 展開したフォルダ（`dist:dir` でもできる） |
 
 - 中に入るのは `dist/node/` と `dist/web/`（ソースマップを除く）と `package.json` だけ。アイコン（`assets/icon.ico`）は asar の外の `resources/assets/` に置く
+- `Bantus.exe` の隣に、リポジトリの一番上の `LICENSE`（MIT。`LICENSE.txt` という名前にする）と `THIRD_PARTY_NOTICES.txt`（Lucide の ISC と Feather の MIT）を置く。インストーラー、zip、`win-unpacked/` のどれにも入る
+- インストーラーは、最初に MIT の使用許諾の画面を出す（「同意する」を押して進む）
 - 署名はしていないので、初めて起動すると SmartScreen の警告が出る（「詳細情報」→「実行」で進む）
 - アンインストールしても、設定（`%APPDATA%\Bantus`）は残す
 - インストール版と `npm start` は、同じデータフォルダを使うので同時に動かせない（二重起動の防止）。開発中に並べて動かすときは、ワークツリーで起動する（上の「ワークツリーで動かす」）か、見本データ（`npm run debug`）か `--user-data-dir=<別のフォルダ>` で起動する

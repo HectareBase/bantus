@@ -22,6 +22,14 @@ extraResources:
     filter:
       - icon.ico
 
+# MIT と ISC は「すべての複製に表記を入れる」ことが条件なので、Bantus.exe の隣に置く
+# （NSIS、zip、win-unpacked のどれにも入る）。どちらも app/ の外（リポジトリの一番上）にある
+extraFiles:
+  - from: ../LICENSE
+    to: LICENSE.txt
+  - from: ../THIRD_PARTY_NOTICES.txt
+    to: THIRD_PARTY_NOTICES.txt
+
 # Electron の言語ファイルは日本語と英語だけにする
 electronLanguages:
   - ja
@@ -48,4 +56,6 @@ nsis:
   createDesktopShortcut: false
   # 設定（%APPDATA%\Bantus）はアンインストールしても残す
   deleteAppDataOnUninstall: false
+  # インストーラーの画面に MIT の使用許諾を出す（画面が 1 つ増える）
+  license: ../LICENSE
   artifactName: ${productName}-Setup-${version}.${ext}
