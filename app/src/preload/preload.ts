@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Settings } from '../shared/settings';
-import type { SessionView, SettingsApi, WidgetApi, WidgetLayout } from '../shared/types';
+import type { SessionView, SettingsApi, TipApi, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
   onSessions: (listener) => {
@@ -26,6 +26,18 @@ const widget: WidgetApi = {
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
   setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
   setAttention: (ids) => ipcRenderer.send('set-attention', ids),
+  showTip: (text, rect) => ipcRenderer.send('tip-show', text, rect),
+  hideTip: () => ipcRenderer.send('tip-hide'),
+};
+
+const tipApi: TipApi = {
+  onText: (listener) => {
+    ipcRenderer.on('tip:text', (_e, text: string) => listener(text));
+  },
+  onVisible: (listener) => {
+    ipcRenderer.on('tip:visible', (_e, visible: boolean) => listener(visible));
+  },
+  reportSize: (width, height) => ipcRenderer.send('tip:size', width, height),
 };
 
 const settingsApi: SettingsApi = {
@@ -40,3 +52,4 @@ const settingsApi: SettingsApi = {
 
 contextBridge.exposeInMainWorld('widget', widget);
 contextBridge.exposeInMainWorld('settingsApi', settingsApi);
+contextBridge.exposeInMainWorld('tipApi', tipApi);

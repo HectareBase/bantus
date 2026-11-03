@@ -71,7 +71,7 @@ const cardTemplate = document.getElementById('card-template') as HTMLTemplateEle
 const subheadTemplate = document.getElementById('subhead-template') as HTMLTemplateElement;
 const foldTemplate = document.getElementById('fold-template') as HTMLTemplateElement;
 fillIcons(document);
-const tooltips = initTooltips(document.getElementById('tooltip')!);
+const tooltips = initTooltips();
 
 const rows = new Map<string, RowRefs>();
 const cards = new Map<string, CardRefs>();

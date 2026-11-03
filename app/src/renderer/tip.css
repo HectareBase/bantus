@@ -1,0 +1,53 @@
+/* ツールチップのウィンドウ（tip.html）。ウィンドウは透明で、影の分（tip-place.ts の TIP_MARGIN）だけ中身より大きい。
+   色はウィジェットのカード（styles.css）と同じ。 */
+
+:root {
+  --text: #1a1a1a;
+  --card-rgb: 249, 249, 249;
+  --card-stroke: rgba(0, 0, 0, 0.06);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.1);
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #ffffff;
+    --card-rgb: 40, 40, 40;
+    --card-stroke: rgba(255, 255, 255, 0.08);
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.tip {
+  /* 測るときにウィンドウの幅に縛られないよう、絶対位置にする */
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 360px;
+  padding: 6px 9px;
+  border: 1px solid var(--card-stroke);
+  border-radius: 6px;
+  background: rgb(var(--card-rgb));
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: 12px/1.45 "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", sans-serif;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  /* 出るときは少し浮かび、消えるときはそのまま薄くなる */
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.08s, transform 0.12s cubic-bezier(0, 0, 0, 1);
+}
+.tip.open { opacity: 1; transform: none; transition-duration: 0.12s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tip { transform: none; }
+}

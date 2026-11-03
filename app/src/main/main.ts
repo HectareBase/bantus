@@ -8,8 +8,9 @@ import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from
 import { createGitStatus } from './git-status';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
+import { tipBounds } from './tip-place';
 import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
-import type { AboutInfo, DisplayOption, WidgetLayout } from '../shared/types';
+import type { AboutInfo, DisplayOption, TipRect, WidgetLayout } from '../shared/types';
 
 const COLLAPSED_WIDTH = 52;
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
@@ -27,6 +28,10 @@ const CLAUDE_PROCESS = 'claude';
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
+let tipWin: BrowserWindow | undefined;
+/** 今出そうとしているツールチップの基準の要素。消したら undefined にし、遅れて届いた大きさは捨てる */
+let tipAnchor: TipRect | undefined;
+let tipHideTimer: NodeJS.Timeout | undefined;
 /** 変数に持っておかないと、ガベージコレクションでトレイから消える */
 let tray: Tray | undefined;
 let collapsed = false;
@@ -111,6 +116,61 @@ function createWidget(): BrowserWindow {
   return w;
 }
 
+/**
+ * ツールチップのウィンドウ。ウィジェットの外（画面の内側）に出すので、別のウィンドウにする。
+ * フォーカスを取らず、クリックは後ろへ通す。出すたびに作ると遅いので、1 つを使い回す
+ */
+function createTipWindow(): BrowserWindow {
+  const w = new BrowserWindow({
+    width: 400,
+    height: 200,
+    show: false,
+    frame: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    focusable: false,
+    skipTaskbar: true,
+    transparent: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    // 隠れている間も、大きさを測って返せるようにする
+    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  w.setIgnoreMouseEvents(true);
+  // 固定したウィジェットより前に出す
+  w.setAlwaysOnTop(true, 'pop-up-menu');
+  w.loadFile(join(WEB, 'tip.html'));
+  return w;
+}
+
+/** ツールチップの中身の大きさが届いたら、置いて見せる */
+function placeTip(width: number, height: number) {
+  if (!tipAnchor || !win || win.isDestroyed() || !tipWin || tipWin.isDestroyed()) return;
+  const s = getSettings();
+  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, tipAnchor, { width, height }));
+  if (!tipWin.isVisible()) tipWin.showInactive();
+  tipWin.webContents.send('tip:visible', true);
+}
+
+function hideTip() {
+  tipAnchor = undefined;
+  if (!tipWin || tipWin.isDestroyed() || !tipWin.isVisible()) return;
+  tipWin.webContents.send('tip:visible', false);
+  // 薄くなり終えてから隠す（tip.css の消えるアニメーションより少し長く）
+  clearTimeout(tipHideTimer);
+  tipHideTimer = setTimeout(() => {
+    if (!tipAnchor) tipWin?.hide();
+  }, 120);
+}
+
+function isTipRect(v: unknown): v is TipRect {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return ['x', 'y', 'width', 'height'].every((k) => typeof r[k] === 'number' && Number.isFinite(r[k]));
+}
+
 /** 開発用：折りたたみもすべて開いた画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
 async function captureAndQuit(w: BrowserWindow, path: string) {
   await new Promise((r) => setTimeout(r, 500));
@@ -118,18 +178,21 @@ async function captureAndQuit(w: BrowserWindow, path: string) {
   await w.webContents.executeJavaScript("document.querySelectorAll('.fold').forEach((f) => f.classList.add('open'))");
   // 点滅や回転の途中で撮らないよう、アニメーションを止める
   await w.webContents.insertCSS('*, *::before, *::after { animation: none !important; }');
-  // ツールチップを見たいときは、その要素にフォーカスして出す（WIDGET_SCREENSHOT_FOCUS に CSS セレクター）
-  const focus = process.env.WIDGET_SCREENSHOT_FOCUS;
-  if (focus) await w.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(focus)})?.focus()`);
   // 画面に収まらない分も撮れるよう、ウィンドウを中身の高さまで伸ばす（スクロールする要素のいちばん大きな高さ）
   const overflow: number = await w.webContents.executeJavaScript(
     "Math.max(0, ...[...document.querySelectorAll('*')].map((e) => e.scrollHeight - e.clientHeight))",
   );
   if (overflow > 0) w.setBounds({ ...w.getBounds(), height: w.getBounds().height + overflow });
+  // ツールチップを見たいときは、その要素にフォーカスして出す（WIDGET_SCREENSHOT_FOCUS に CSS セレクター）。
+  // ウィンドウの大きさを変えると消えるので、伸ばしたあとに出す
+  const focus = process.env.WIDGET_SCREENSHOT_FOCUS;
+  if (focus) await w.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(focus)})?.focus()`);
   await new Promise((r) => setTimeout(r, 300));
   try {
     const image = await w.webContents.capturePage();
     writeFileSync(path, image.toPNG());
+    // ツールチップは別のウィンドウなので、出ていれば別のファイルに撮る
+    if (tipWin?.isVisible()) writeFileSync(path.replace(/(\.png)?$/i, '-tooltip.png'), (await tipWin.webContents.capturePage()).toPNG());
   } catch (e) {
     console.error('画面を保存できませんでした：', e);
     app.exit(1);
@@ -257,6 +320,7 @@ function sendSessions(force = false) {
 
 app.whenReady().then(() => {
   win = createWidget();
+  tipWin = createTipWindow();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
@@ -311,6 +375,21 @@ app.whenReady().then(() => {
   ipcMain.on('set-attention', (_e, ids: unknown) => {
     if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) updateAttention(ids);
   });
+
+  ipcMain.on('tip-show', (_e, text: unknown, rect: unknown) => {
+    if (typeof text !== 'string' || !text || !isTipRect(rect) || !tipWin || tipWin.isDestroyed()) return;
+    clearTimeout(tipHideTimer);
+    tipAnchor = rect;
+    tipWin.webContents.send('tip:text', text);
+  });
+  ipcMain.on('tip-hide', () => hideTip());
+  ipcMain.on('tip:size', (_e, width: unknown, height: unknown) => {
+    if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
+  });
+  // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
+  win.on('move', () => hideTip());
+  win.on('resize', () => hideTip());
+  win.on('hide', () => hideTip());
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));

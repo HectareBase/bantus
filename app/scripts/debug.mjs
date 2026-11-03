@@ -1,6 +1,6 @@
 // 開発用：見本データ（fixtures/*.json）でウィジェットを起動する。実データは読まない。
 //   node scripts/debug.mjs [見本の名前] [--cycle 秒] [--screenshot 保存先.png] [--focus セレクター]
-//   --focus：撮る前にその要素へフォーカスする（ツールチップを写す）
+//   --focus：撮る前にその要素へフォーカスする（ツールチップは 〈保存先〉-tooltip.png に別に撮る）
 // 見本の名前の既定は all-states。ファイルを書き換えると、すぐ表示に出る。
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';

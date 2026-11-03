@@ -78,6 +78,25 @@ export interface WidgetApi {
   setAlwaysShow(id: string, on: boolean): void;
   /** 未確認のセッションの ID を知らせる。増えたらタスクバーを点滅させ、なくなったら止める */
   setAttention(ids: string[]): void;
+  /** ツールチップを出す。rect は基準の要素（ウィジェットの中の座標）。ツールチップは別のウィンドウで、ウィジェットの外に出る */
+  showTip(text: string, rect: TipRect): void;
+  hideTip(): void;
+}
+
+export interface TipRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** ツールチップのウィンドウ（tip.html）の API */
+export interface TipApi {
+  /** 中身を差し替える。画面側は大きさを測って reportSize で返す */
+  onText(listener: (text: string) => void): void;
+  /** 置き終えたら true、消すときは false。薄くするアニメーションに使う */
+  onVisible(listener: (visible: boolean) => void): void;
+  reportSize(width: number, height: number): void;
 }
 
 export type WidgetLayout = Pick<
@@ -109,5 +128,6 @@ declare global {
   interface Window {
     widget: WidgetApi;
     settingsApi: SettingsApi;
+    tipApi: TipApi;
   }
 }
