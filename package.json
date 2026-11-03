@@ -9,6 +9,8 @@
     "screenshots": "npm --prefix app run screenshots --",
     "icons": "npm --prefix app run icons --",
     "test": "npm --prefix app test --",
-    "typecheck": "npm --prefix app run typecheck --"
+    "typecheck": "npm --prefix app run typecheck --",
+    "dist": "npm --prefix app run dist --",
+    "dist:dir": "npm --prefix app run dist:dir --"
   }
 }

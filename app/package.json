@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Sidebar widget that shows Claude desktop session status",
+  "author": "HectareBase",
   "main": "dist/node/main/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
@@ -13,11 +14,14 @@
     "icons": "electron scripts/make-icons.mjs",
     "lucide-icons": "node scripts/make-lucide-icons.mjs",
     "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\"",
-    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "dist": "node scripts/clean-dist.mjs && npm run build && electron-builder",
+    "dist:dir": "node scripts/clean-dist.mjs && npm run build && electron-builder --dir"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "electron": "44.9.0",
+    "electron-builder": "26.17.0",
     "lucide": "1.66.0",
     "typescript": "7.0.2"
   }

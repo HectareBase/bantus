@@ -1,0 +1,51 @@
+# exe とインストーラーの設定（npm run dist、npm run dist:dir）。計画は docs/packaging-plan.md
+# 公開する前提なので、名前は公開してよいものだけを書く。copyright は既定だと年が入るので、年なしで書く
+
+# src/main/main.ts の APP_USER_MODEL_ID と同じ値にする
+appId: io.github.hectarebase.bantus
+productName: Bantus
+copyright: Copyright © HectareBase
+
+directories:
+  output: release
+
+# 中に入れるのはビルドしたものだけ。テストとソースマップは入れない（package.json は自動で入る）
+files:
+  - dist/node/**
+  - dist/web/**
+  - "!**/*.map"
+
+# Tray は asar の中の .ico を読めないことがあるので、アイコンは resources/assets に外出しする
+extraResources:
+  - from: assets
+    to: assets
+    filter:
+      - icon.ico
+
+# Electron の言語ファイルは日本語と英語だけにする
+electronLanguages:
+  - ja
+  - en-US
+
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch: x64
+    - target: zip
+      arch: x64
+  # zip の名前。インストーラーの名前は nsis の artifactName で決める
+  artifactName: ${productName}-${version}-win-x64.${ext}
+  # 署名はしない。発行元の名前だけを書く
+  signtoolOptions:
+    publisherName: HectareBase
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  # 設定（%APPDATA%\Bantus）はアンインストールしても残す
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}
