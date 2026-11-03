@@ -52,12 +52,14 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  return { edge: s.edge, backgroundOpacity: s.backgroundOpacity, cardOpacity: s.cardOpacity };
+  return { edge: s.edge, backgroundOpacity: s.backgroundOpacity, cardOpacity: s.cardOpacity, pinned: s.pinned };
 }
 
 function applySettings(s: Settings) {
   if (!win || win.isDestroyed()) return;
   win.setBounds(sidebarBounds());
+  // 固定を外すと、ほかのウィンドウをクリックしたときにその後ろへ回る
+  win.setAlwaysOnTop(s.pinned);
   // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときに画面側が決める）
   if (s.backgroundOpacity > 0) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
@@ -83,7 +85,7 @@ function createWidget(): BrowserWindow {
     minimizable: false,
     maximizable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: getSettings().pinned,
     show: false,
     transparent: true,
     hasShadow: false,
@@ -183,14 +185,14 @@ function openSettingsWindow() {
   w.on('closed', () => (settingsWin = undefined));
 }
 
-/** 隠したウィジェットを戻し、前に出す */
+/** ウィジェットを前に出す（固定を外して後ろに回ったときや、隠れたときに使う） */
 function showWidget() {
   if (!win || win.isDestroyed()) return;
   win.show();
   win.moveTop();
 }
 
-/** タスクトレイのアイコン。クリックでウィジェットを表示し（隠していても戻る）、右クリックで表示、設定、終了 */
+/** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで表示、設定、終了 */
 function createTray(): Tray {
   const t = new Tray(ICON);
   t.setToolTip('Bantus');
@@ -265,7 +267,9 @@ app.whenReady().then(() => {
     if (getSettings().backgroundOpacity === 0) win?.setIgnoreMouseEvents(value === true, { forward: true });
   });
   ipcMain.on('open-settings', () => openSettingsWindow());
-  ipcMain.on('hide', () => win?.hide());
+  ipcMain.on('set-pinned', (_e, value: unknown) => {
+    if (typeof value === 'boolean') updateSettings({ pinned: value });
+  });
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));

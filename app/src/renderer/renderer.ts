@@ -321,7 +321,20 @@ function setCollapsed(value: boolean) {
 }
 document.getElementById('collapse')!.addEventListener('click', () => setCollapsed(!collapsed));
 document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
-document.getElementById('hide')!.addEventListener('click', () => window.widget.hide());
+
+// 最前面への固定。押した見た目はすぐ変え、保存された値が onLayout で戻ってきたらそれに合わせる
+const pinButton = document.getElementById('pin')!;
+let pinned = true;
+function showPinned(value: boolean) {
+  pinned = value;
+  setIcon(pinButton, pinned ? 'pin' : 'pin-off');
+  pinButton.setAttribute('aria-pressed', String(pinned));
+  pinButton.dataset.tip = pinned ? '最前面に固定中（クリックで外す）' : '最前面に固定する';
+}
+pinButton.addEventListener('click', () => {
+  showPinned(!pinned);
+  window.widget.setPinned(pinned);
+});
 
 // 内側の端をドラッグして幅を変える。カーソルがウィンドウの外へ出ても、ポインターをつかんだまま追う
 const resizeHandle = document.getElementById('resize-handle')!;
@@ -353,7 +366,8 @@ document.addEventListener('mousemove', (e) => {
   setClickThrough(!solid);
 });
 
-function applyLayout({ edge, backgroundOpacity, cardOpacity }: WidgetLayout) {
+function applyLayout({ edge, backgroundOpacity, cardOpacity, pinned }: WidgetLayout) {
+  showPinned(pinned);
   const root = document.documentElement;
   root.dataset.edge = edge;
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));

@@ -11,6 +11,8 @@ export interface Settings {
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
   cardOpacity: number;
+  /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
+  pinned: boolean;
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   width: 264,
   backgroundOpacity: 100,
   cardOpacity: 50,
+  pinned: true,
 };
 
 /** ドラッグで変えられる幅の範囲（px） */
@@ -103,6 +106,7 @@ export function normalizeSettings(input: unknown): Settings {
   // 設定画面に出さない項目
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
+  if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
   const bounds = normalizeBounds(src.settingsWindow);
   if (bounds) out.settingsWindow = bounds;
   return out;

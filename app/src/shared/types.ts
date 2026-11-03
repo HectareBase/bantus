@@ -53,11 +53,11 @@ export interface WidgetApi {
   resizeMove(): void;
   resizeEnd(): void;
   openSettings(): void;
-  /** ウィジェットを隠す。タスクトレイのアイコンで戻す */
-  hide(): void;
+  /** 最前面への固定を切り替える。保存され、onLayout で画面に戻ってくる */
+  setPinned(pinned: boolean): void;
 }
 
-export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity'>;
+export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned'>;
 
 export interface DisplayOption {
   id: string;

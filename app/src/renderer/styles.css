@@ -292,7 +292,7 @@ html.collapsed .app-name { display: none; }
 html.collapsed .app-icon { margin: 4px 0 0; }
 html.collapsed .titlebar { flex-direction: column; height: auto; margin: 8px 6px; padding: 4px 0; gap: 4px; }
 html.collapsed .spacer { display: none; }
-html.collapsed #hide, html.collapsed #settings { display: none; }
+html.collapsed #pin, html.collapsed #settings { display: none; }
 /* たたむボタンの矢印は、置いている端の向き。たたんだら反対を向く */
 html[data-edge="left"] #collapse svg { transform: rotate(180deg); }
 html.collapsed #collapse svg { transform: rotate(180deg); }

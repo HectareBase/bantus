@@ -20,3 +20,9 @@ describe('normalizeSettings の settingsWindow', () => {
       ...DEFAULT_SETTINGS, settingsWindow: { x: 1, y: 2, width: 3, height: 4 },
     }));
 });
+
+describe('normalizeSettings の pinned', () => {
+  it('なければ固定する', () => assert.equal(normalizeSettings({}).pinned, true));
+  it('false を残す', () => assert.equal(normalizeSettings({ pinned: false }).pinned, false));
+  it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ pinned: 'false' }).pinned, true));
+});
