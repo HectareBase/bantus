@@ -11,6 +11,8 @@ export interface Settings {
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
   cardOpacity: number;
+  /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
+  headerShade: number;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
   /** ワークツリーのグループごとに見せるセッションの数。0 ならすべて。残りは折りたたみに入れる */
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   width: 264,
   backgroundOpacity: 100,
   cardOpacity: 50,
+  headerShade: 5,
   pinned: true,
   groupLimit: 5,
   foldScope: 'repo',
@@ -97,7 +100,7 @@ export type SettingDef =
       options: { value: string | number | boolean; label: string }[];
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
 
 const SHOW_OPTIONS = [
   { value: true, label: '表示' },
@@ -161,6 +164,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'cardOpacity', category: 'display', group: '見た目', type: 'slider',
     label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
     min: 0, max: 100, step: 5, unit: '%',
+  },
+  {
+    key: 'headerShade', category: 'display', group: '見た目', type: 'slider',
+    label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
+    min: 0, max: 20, step: 1, unit: '%',
   },
 ];
 

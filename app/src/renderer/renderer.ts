@@ -534,6 +534,7 @@ function applyLayout(layout: WidgetLayout) {
   root.dataset.edge = edge;
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
+  root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
   root.classList.toggle('hide-seq', !layout.showSeq);
   root.classList.toggle('hide-updated', !layout.showUpdated);
   floating = backgroundOpacity === 0;

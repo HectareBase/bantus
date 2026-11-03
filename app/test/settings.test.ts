@@ -49,3 +49,13 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.deepEqual(normalizeSettings({ alwaysShow: ['local_a-1', 'local_a-1', 'x', 3, 'local_b'] }).alwaysShow, ['local_a-1', 'local_b']));
   it('配列でなければ空', () => assert.deepEqual(normalizeSettings({ alwaysShow: 'local_a' }).alwaysShow, []));
 });
+
+describe('normalizeSettings の見出しの濃さ', () => {
+  it('なければ 5%', () => assert.equal(normalizeSettings({}).headerShade, 5));
+  it('0〜20 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ headerShade: 0 }).headerShade, 0);
+    assert.equal(normalizeSettings({ headerShade: 50 }).headerShade, 20);
+    assert.equal(normalizeSettings({ headerShade: 7.6 }).headerShade, 8);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
+});

@@ -80,7 +80,7 @@ export interface WidgetApi {
 
 export type WidgetLayout = Pick<
   Settings,
-  | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned' | 'groupLimit' | 'foldScope'
+  | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'groupLimit' | 'foldScope'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'alwaysShow'
 >;
 

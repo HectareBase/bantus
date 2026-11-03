@@ -58,8 +58,8 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow } = s;
-  return { edge, backgroundOpacity, cardOpacity, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow };
+  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow } = s;
+  return { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow };
 }
 
 function applySettings(s: Settings) {
