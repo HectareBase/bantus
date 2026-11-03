@@ -17,11 +17,11 @@ export interface Settings {
   pinned: boolean;
   /** ワークツリーのグループごとに見せるセッションの数。0 ならすべて。残りは折りたたみに入れる */
   groupLimit: number;
-  /** 隠したセッションと停止中をまとめる折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
+  /** 隠したセッションと停止中をまとめる折りたたみの単位。repo はカード（プロジェクト）に 1 つ、worktree は小見出しごと */
   foldScope: 'repo' | 'worktree';
   /** カード（プロジェクト）の並び。fixed は名前順 */
   projectOrder: SortOrder;
-  /** 小見出し（ワークツリー）の並び。fixed はメインを先頭に、あとは名前順 */
+  /** 小見出し（ワークツリー）の並び。fixed は元のフォルダを先頭に、あとは名前順 */
   worktreeOrder: SortOrder;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
@@ -128,7 +128,7 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'foldScope', category: 'display', group: '一覧', type: 'segmented',
     label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
-    options: [{ value: 'repo', label: 'リポジトリ' }, { value: 'worktree', label: 'ワークツリー' }],
+    options: [{ value: 'repo', label: 'プロジェクト' }, { value: 'worktree', label: 'ワークツリー' }],
   },
   {
     key: 'projectOrder', category: 'display', group: '並び順', type: 'segmented',
@@ -137,7 +137,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     key: 'worktreeOrder', category: 'display', group: '並び順', type: 'segmented',
-    label: 'ワークツリー', description: '小見出しの並び。固定はメインを先頭に、あとは名前順',
+    label: 'ワークツリー', description: '小見出しの並び。固定は元のフォルダを先頭に、あとは名前順',
     options: ORDER_OPTIONS,
   },
   {

@@ -48,9 +48,9 @@ describe('buildCards の並び順', () => {
 });
 
 describe('buildGroups', () => {
-  it('メインは「メイン（ブランチ名）」、ブランチがわからなければ「メイン」', () => {
-    assert.equal(buildGroups([view({ mainBranch: 'main' })])[0]?.label, 'メイン（main）');
-    assert.equal(buildGroups([view()])[0]?.label, 'メイン');
+  it('元のフォルダはブランチ名、ブランチがわからなければ「元のフォルダ」', () => {
+    assert.equal(buildGroups([view({ mainBranch: 'main' })])[0]?.label, 'main');
+    assert.equal(buildGroups([view()])[0]?.label, '元のフォルダ');
   });
 
   it('同じワークツリーは 1 つの小見出しにまとめ、急ぐ順に並べる', () => {
@@ -60,7 +60,7 @@ describe('buildGroups', () => {
       view({ worktree: wt, state: 'idle' }),
       view({ worktree: wt, state: 'waiting' }),
     ]);
-    assert.deepEqual(groups.map((g) => [g.label, g.sessions.length, g.isMain]), [['w-label', 2, false], ['メイン', 1, true]]);
+    assert.deepEqual(groups.map((g) => [g.label, g.sessions.length, g.isMain]), [['w-label', 2, false], ['元のフォルダ', 1, true]]);
     assert.equal(groups[0]?.tooltip, 'claude/w-123abc');
   });
 });
@@ -72,10 +72,10 @@ describe('buildGroups の並び順', () => {
     view({ state: 'idle', lastActivityAt: 2 }),
     view({ worktree: wt('alpha'), state: 'idle', lastActivityAt: 9 }),
   ];
-  it('固定はメインが先頭、あとは名前順', () =>
-    assert.deepEqual(buildGroups(list(), 'fixed').map((g) => g.label), ['メイン', 'alpha', 'zeta']));
-  it('更新日時はメインも含めて新しい順', () =>
-    assert.deepEqual(buildGroups(list(), 'recent').map((g) => g.label), ['alpha', 'メイン', 'zeta']));
+  it('固定は元のフォルダが先頭、あとは名前順', () =>
+    assert.deepEqual(buildGroups(list(), 'fixed').map((g) => g.label), ['元のフォルダ', 'alpha', 'zeta']));
+  it('更新日時は元のフォルダも含めて新しい順', () =>
+    assert.deepEqual(buildGroups(list(), 'recent').map((g) => g.label), ['alpha', '元のフォルダ', 'zeta']));
 });
 
 describe('cardBadge', () => {
@@ -315,10 +315,10 @@ describe('cardLayout', () => {
   it('ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す', () => {
     const list = [view({ id: 'm1' }), view({ id: 'ts', worktree: wt, state: 'stopped' })];
     assert.deepEqual(layout(list, opts({ scope: 'worktree' })).sections.map((g) => [g.group?.label, ids(g.sessions)]), [
-      ['メイン', ['m1']],
+      ['元のフォルダ', ['m1']],
       ['w', []],
     ]);
-    // リポジトリごとなら、小見出しを出さない
+    // プロジェクトごとなら、小見出しを出さない
     assert.deepEqual(layout(list, opts()).sections.map((g) => g.group), [undefined]);
   });
 });

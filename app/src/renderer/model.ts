@@ -222,8 +222,9 @@ export function buildGroups(active: SessionView[], order: SortOrder = 'priority'
         ? { key, label: s.worktree.label, tooltip: s.worktree.branch, isMain: false, sessions: [], rank: 3, latest: 0 }
         : {
             key,
-            label: s.mainBranch ? `メイン（${s.mainBranch}）` : 'メイン',
-            tooltip: 'リポジトリのフォルダで作業しているセッション',
+            // 家のアイコンで元のフォルダだとわかるので、名前はブランチ名だけにする
+            label: s.mainBranch ?? '元のフォルダ',
+            tooltip: 'プロジェクトの元のフォルダで作業しているセッション',
             isMain: true,
             sessions: [],
             rank: 3,
