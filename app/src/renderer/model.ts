@@ -188,6 +188,21 @@ export function nextCycleTarget(sessions: SessionView[], attention: ReadonlySet<
   return next === currentId ? undefined : next;
 }
 
+/**
+ * ショートカットで開くセッションの ID
+ * - Claude のウィンドウが前面になければ、今開いているセッション（開き直して前面に出す）
+ * - 前面にあるか、今開いているセッションが一覧にない（停止中など）ときは nextCycleTarget
+ */
+export function shortcutTarget(
+  sessions: SessionView[],
+  attention: ReadonlySet<string>,
+  currentId: string | undefined,
+  claudeInFront: boolean,
+): string | undefined {
+  if (!claudeInFront && currentId && displayOrder(sessions).some((s) => s.id === currentId)) return currentId;
+  return nextCycleTarget(sessions, attention, currentId);
+}
+
 /** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
 export function cardBadge(card: Card): { state: '' | 'waiting' | 'busy'; text: string } {
   const waiting = card.active.filter((s) => s.state === 'waiting').length;

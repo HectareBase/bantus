@@ -10,7 +10,7 @@ import {
   cardSections,
   formatAgo,
   nextAttention,
-  nextCycleTarget,
+  shortcutTarget,
   resolveFocus,
   stateOfRank,
   statusIconName,
@@ -119,9 +119,9 @@ function applyFocus(): string | undefined {
   return resolved.id;
 }
 
-/** ショートカット：未確認の行を表示順に開く。なければ表示順で次の行 */
-function openNext() {
-  const id = nextCycleTarget(latest, attention, applyFocus());
+/** ショートカット：Claude が前面になければ今のセッションを前面に出す。前面なら未確認の行を表示順に開き、なければ表示順で次の行 */
+function openNext(claudeInFront: boolean) {
+  const id = shortcutTarget(latest, attention, applyFocus(), claudeInFront);
   if (id) openRow(id);
 }
 

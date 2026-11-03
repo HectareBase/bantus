@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
+import { buildCards, buildGroups, cardBadge, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -171,5 +171,14 @@ describe('displayOrder と nextCycleTarget', () => {
   it('ほかに行がなければ何もしない', () => {
     assert.equal(nextCycleTarget([view({ id: 'a' })], new Set(['a']), 'a'), undefined);
     assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
+  });
+
+  it('Claude が前面になければ、未確認があっても今開いている行を前面に出す', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false), 'm1'));
+  it('Claude が前面にあれば、いつもどおり次へ進む', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', true), 't1'));
+  it('前面になくても、今開いている行が一覧にない（停止中）か、わからなければ次へ進む', () => {
+    assert.equal(shortcutTarget(sessions, new Set(), 's1', false), 'w1');
+    assert.equal(shortcutTarget(sessions, new Set(), undefined, false), 'w1');
   });
 });

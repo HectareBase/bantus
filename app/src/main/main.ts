@@ -4,6 +4,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
@@ -20,6 +21,8 @@ const WEB = join(__dirname, '..', '..', 'web', 'renderer');
 const ICON = join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
 /** 未確認のセッションを表示順に開くショートカット（Ctrl+Alt+Space はほかのアプリが使っていた） */
 const CYCLE_SHORTCUT = 'Control+Alt+N';
+/** Claude デスクトップのプロセス名 */
+const CLAUDE_PROCESS = 'claude';
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
@@ -235,7 +238,13 @@ app.whenReady().then(() => {
   const stopWatching = watchSessions(() => sendSessions());
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
   if (!process.env.WIDGET_SCREENSHOT) {
-    const ok = globalShortcut.register(CYCLE_SHORTCUT, () => win?.webContents.send('cycle'));
+    startForegroundProbe();
+    const ok = globalShortcut.register(CYCLE_SHORTCUT, async () => {
+      // Claude が前面にないときは、次へ進まずに今のセッションを前面に出す。調べられなかったときは前面にあるものとして扱う
+      const name = await foregroundProcessName();
+      const claudeInFront = name === undefined || name.toLowerCase() === CLAUDE_PROCESS;
+      win?.webContents.send('cycle', claudeInFront);
+    });
     if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
   }
 
@@ -297,6 +306,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     stopWatching();
     globalShortcut.unregisterAll();
+    stopForegroundProbe();
     tray?.destroy();
   });
 });

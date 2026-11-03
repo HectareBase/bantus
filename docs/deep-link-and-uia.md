@@ -82,7 +82,7 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 | UIA の `ControlType.Document` の名前（「タイトル - Claude Code」） | 画面に出ているセッションのタイトル | タイトルしかわからない（同じ名前を区別できない）。表示言語で変わる |
 
 - ウィンドウのタイトル（`MainWindowTitle`）は `Claude` だけで、使えません。
-- Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。必要なら `GetForegroundWindow` と比べます。
+- Claude のウィンドウ自体が前面にあるかは、どちらの方法でもわかりません。ウィジェットは `GetForegroundWindow` のウィンドウのプロセス名が `claude` かで判断しています（`app/src/main/foreground.ts`）。
 - 分割表示で複数のセッションを並べているときに、どれを指すかは確かめていません（最後にフォーカスしたものと思われます）。
 - サイドチャット（btw）を表示しているときは、サイドチャットの `lastFocusedAt` が一番新しくなります。親に置き換えて扱います（[data-sources.md](data-sources.md#サイドチャットbtw)）。
 - ウィジェットは `lastFocusedAt` を使い、その行の背景色を変えています。
