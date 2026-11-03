@@ -5,6 +5,7 @@
   "private": true,
   "description": "Sidebar widget that shows Claude desktop session status",
   "author": "HectareBase",
+  "license": "MIT",
   "main": "dist/node/main/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",

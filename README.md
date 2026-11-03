@@ -16,3 +16,8 @@ Claude デスクトップ（Code タブ）を外から補うツールです。�
 
 ## 注意
 Claude デスクトップのデータを**読むだけ**で、書き換えはしません。読み取っているファイルの形式は公式には公開されていないので、アプリの更新で動かなくなることがあります。
+
+Bantus は個人が作った非公式のツールで、Anthropic とは関係がありません。Anthropic が承認や支援をしているものでもありません。「Claude」は Anthropic の商標です。
+
+## ライセンス
+[MIT License](LICENSE)。画面のアイコンには [Lucide](https://lucide.dev)（ISC License。一部は Feather 由来で MIT License）を使っています。全文は [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) にあります。
