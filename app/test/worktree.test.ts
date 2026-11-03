@@ -33,8 +33,8 @@ describe('worktreeName', () => {
 
 describe('ワークツリー版の値', () => {
   it('データフォルダは名前つきで、見本データならさらに -debug', () => {
-    assert.equal(worktreeUserData('C:\AppData\Bantus', 'feature-x', false), 'C:\AppData\Bantus-wt-feature-x');
-    assert.equal(worktreeUserData('C:\AppData\Bantus', 'feature-x', true), 'C:\AppData\Bantus-wt-feature-x-debug');
+    assert.equal(worktreeUserData('C:\\AppData\\Bantus', 'feature-x', false), 'C:\\AppData\\Bantus-wt-feature-x');
+    assert.equal(worktreeUserData('C:\\AppData\\Bantus', 'feature-x', true), 'C:\\AppData\\Bantus-wt-feature-x-debug');
   });
 
   it('使えない文字は _ にする', () => {
