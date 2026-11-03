@@ -5,7 +5,7 @@ import { fileAction, updatePlan } from '../src/main/update-plan';
 
 describe('fileAction', () => {
   it('app/ の外、テスト、見本データ、文書は何もしない', () => {
-    for (const f of ['docs/README.md', 'prototype/claude-hotkeys.ps1', 'package.json', 'app/test/model.test.ts', 'app/fixtures/empty.json', 'app/README.md', 'app/scripts/debug.mjs', 'app/electron-builder.yml']) {
+    for (const f of ['docs/README.md', 'tools/watch-status.ps1', 'package.json', 'app/test/model.test.ts', 'app/fixtures/empty.json', 'app/README.md', 'app/scripts/debug.mjs', 'app/electron-builder.yml']) {
       assert.equal(fileAction(f), 'none', f);
     }
   });

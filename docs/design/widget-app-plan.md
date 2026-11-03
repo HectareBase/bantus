@@ -141,10 +141,7 @@ Claude デスクトップでは、セッションに色やアイコンを付け�
 - 認証情報を含むファイルを読むこと（[data-sources.md](../research/data-sources.md) の「触ってはいけないもの」）
 
 ## フォルダの構成
-Electron 版は `app/` に置きます。試作は `prototype/`、検証用のスクリプトは `tools/` にあります。
-
-## 今ある試作（PowerShell と WPF）
-`prototype/` にあります（使い方は `prototype/README.md`）。状態を記録する検証用のスクリプトは `tools/watch-status.ps1` です。Electron 版ができるまでは、こちらを使います。データを読む処理の考え方は、Electron 版にそのまま移します。
+Electron 版は `app/` に置きます。検証用のスクリプトは `tools/` にあります（状態を記録する `tools/watch-status.ps1` など）。
 
 ## これから決めること
 - 画面を書く方法（素の HTML と CSS と TypeScript で十分か、軽い UI ライブラリを使うか）

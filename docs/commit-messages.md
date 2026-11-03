@@ -33,7 +33,6 @@
 | 範囲 | フォルダ |
 |---|---|
 | `app` | `app/`（Electron 版のウィジェット） |
-| `prototype` | `prototype/`（PowerShell と WPF の試作） |
 | `tools` | `tools/`（検証用のスクリプト） |
 | `docs` | `docs/` |
 | `hooks` | `.githooks/` |
