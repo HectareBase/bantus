@@ -183,22 +183,26 @@ function openSettingsWindow() {
   w.on('closed', () => (settingsWin = undefined));
 }
 
-/** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで設定と終了 */
+/** 隠したウィジェットを戻し、前に出す */
+function showWidget() {
+  if (!win || win.isDestroyed()) return;
+  win.show();
+  win.moveTop();
+}
+
+/** タスクトレイのアイコン。クリックでウィジェットを表示し（隠していても戻る）、右クリックで表示、設定、終了 */
 function createTray(): Tray {
   const t = new Tray(ICON);
   t.setToolTip('Bantus');
   t.setContextMenu(
     Menu.buildFromTemplate([
+      { label: '表示', click: () => showWidget() },
       { label: '設定', click: () => openSettingsWindow() },
       { type: 'separator' },
       { label: '終了', click: () => app.quit() },
     ]),
   );
-  t.on('click', () => {
-    if (!win || win.isDestroyed()) return;
-    win.show();
-    win.moveTop();
-  });
+  t.on('click', () => showWidget());
   return t;
 }
 
@@ -261,7 +265,7 @@ app.whenReady().then(() => {
     if (getSettings().backgroundOpacity === 0) win?.setIgnoreMouseEvents(value === true, { forward: true });
   });
   ipcMain.on('open-settings', () => openSettingsWindow());
-  ipcMain.on('quit', () => app.quit());
+  ipcMain.on('hide', () => win?.hide());
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));

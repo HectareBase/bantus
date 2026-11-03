@@ -321,7 +321,7 @@ function setCollapsed(value: boolean) {
 }
 document.getElementById('collapse')!.addEventListener('click', () => setCollapsed(!collapsed));
 document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
-document.getElementById('quit')!.addEventListener('click', () => window.widget.quit());
+document.getElementById('hide')!.addEventListener('click', () => window.widget.hide());
 
 // 内側の端をドラッグして幅を変える。カーソルがウィンドウの外へ出ても、ポインターをつかんだまま追う
 const resizeHandle = document.getElementById('resize-handle')!;

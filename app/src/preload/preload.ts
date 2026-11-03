@@ -23,7 +23,7 @@ const widget: WidgetApi = {
   resizeMove: () => ipcRenderer.send('resize-move'),
   resizeEnd: () => ipcRenderer.send('resize-end'),
   openSettings: () => ipcRenderer.send('open-settings'),
-  quit: () => ipcRenderer.send('quit'),
+  hide: () => ipcRenderer.send('hide'),
 };
 
 const settingsApi: SettingsApi = {

@@ -53,7 +53,8 @@ export interface WidgetApi {
   resizeMove(): void;
   resizeEnd(): void;
   openSettings(): void;
-  quit(): void;
+  /** ウィジェットを隠す。タスクトレイのアイコンで戻す */
+  hide(): void;
 }
 
 export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity'>;
