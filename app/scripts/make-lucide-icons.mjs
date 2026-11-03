@@ -10,6 +10,8 @@ const NAMES = [
   'settings', 'chevron-right', 'pin', 'folder', 'house', 'git-branch', 'list', 'info',
   // 行の「常に表示」
   'star',
+  // 設定の「通知」と、音の試聴
+  'bell', 'volume-2',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）

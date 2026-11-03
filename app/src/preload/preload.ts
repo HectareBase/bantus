@@ -25,6 +25,8 @@ const widget: WidgetApi = {
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
   setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
   setAttention: (ids) => ipcRenderer.send('set-attention', ids),
+  isClaudeInFront: () => ipcRenderer.invoke('claude-in-front'),
+  showToast: (toast) => ipcRenderer.send('show-toast', toast),
   showTip: (text, rect) => ipcRenderer.send('tip-show', text, rect),
   hideTip: () => ipcRenderer.send('tip-hide'),
 };

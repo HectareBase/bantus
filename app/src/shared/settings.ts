@@ -31,6 +31,20 @@ export interface Settings {
   showUpdated: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
+  /** 対応待ちになったときに知らせる（音とトースト） */
+  notifyWaiting: boolean;
+  /** 完了した（処理中から待機になった）ときに知らせる。Claude 本体の通知と重なるので、既定は知らせない */
+  notifyDone: boolean;
+  /** 知らせるときに音を鳴らす */
+  sound: boolean;
+  /** 音の種類。音は renderer/sound.ts でその場で作る（ファイルは同梱しない） */
+  soundType: SoundType;
+  /** 音量（%） */
+  soundVolume: number;
+  /** 知らせるときに Windows の通知（トースト）を出す */
+  toast: boolean;
+  /** Claude が前面で、そのセッションを開いているときは知らせない */
+  muteWhenOpen: boolean;
   /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
   alwaysShow: string[];
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
@@ -39,6 +53,9 @@ export interface Settings {
 
 /** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
+
+/** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
+export type SoundType = 'chime' | 'bell' | 'pop';
 
 export interface WindowBounds {
   x: number;
@@ -63,6 +80,13 @@ export const DEFAULT_SETTINGS: Settings = {
   showSeq: true,
   showUpdated: true,
   openAtLogin: false,
+  notifyWaiting: true,
+  notifyDone: false,
+  sound: true,
+  soundType: 'chime',
+  soundVolume: 60,
+  toast: false,
+  muteWhenOpen: true,
   alwaysShow: [],
 };
 
@@ -70,7 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const WIDTH_MIN = 200;
 export const WIDTH_MAX = 480;
 
-export type CategoryId = 'general' | 'cards' | 'about';
+export type CategoryId = 'general' | 'cards' | 'notify' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -83,6 +107,7 @@ export interface Category {
 export const CATEGORIES: Category[] = [
   { id: 'general', label: '全体', icon: 'app-window' },
   { id: 'cards', label: 'カードの表示', icon: 'list' },
+  { id: 'notify', label: '通知', icon: 'bell' },
   { id: 'about', label: '情報', icon: 'info' },
 ];
 
@@ -101,16 +126,26 @@ interface Base<K extends keyof Settings> {
 export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
 
 export type SettingDef =
-  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'openAtLogin'> & {
+  | (Base<
+      | 'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'openAtLogin'
+      | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'muteWhenOpen'
+    > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
+      /** 'sound' にすると、右に「試聴」のボタンを付ける。選んだときにもその音を鳴らす */
+      preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
 
 const SHOW_OPTIONS = [
   { value: true, label: '表示' },
   { value: false, label: '非表示' },
+];
+
+const NOTIFY_OPTIONS = [
+  { value: true, label: '知らせる' },
+  { value: false, label: '知らせない' },
 ];
 
 const ORDER_OPTIONS = [
@@ -180,6 +215,40 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
     label: '更新日時', description: '2 行目の「◯分前」。ブランチ名も出ない行は 1 行になる',
     options: SHOW_OPTIONS,
+  },
+  {
+    key: 'notifyWaiting', category: 'notify', group: '知らせるとき', type: 'segmented',
+    label: '対応待ちになったとき', description: '許可や回答を待っているとき',
+    options: NOTIFY_OPTIONS,
+  },
+  {
+    key: 'notifyDone', category: 'notify', group: '知らせるとき', type: 'segmented',
+    label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある',
+    options: NOTIFY_OPTIONS,
+  },
+  {
+    key: 'muteWhenOpen', category: 'notify', group: '知らせるとき', type: 'segmented',
+    label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき',
+    options: [{ value: false, label: '知らせる' }, { value: true, label: '知らせない' }],
+  },
+  {
+    key: 'sound', category: 'notify', group: '音', type: 'segmented',
+    label: '音を鳴らす', description: '何件かが一度に変わっても 1 回だけ鳴らし、続けて鳴るときは数秒あける',
+    options: [{ value: true, label: '鳴らす' }, { value: false, label: '鳴らさない' }],
+  },
+  {
+    key: 'soundType', category: 'notify', group: '音', type: 'segmented', preview: 'sound',
+    label: '音の種類', description: '対応待ちは高め、完了は低めの音になる',
+    options: [{ value: 'chime', label: 'チャイム' }, { value: 'bell', label: 'ベル' }, { value: 'pop', label: 'ポン' }],
+  },
+  {
+    key: 'soundVolume', category: 'notify', group: '音', type: 'slider',
+    label: '音量', min: 0, max: 100, step: 5, unit: '%',
+  },
+  {
+    key: 'toast', category: 'notify', group: 'Windows の通知', type: 'segmented',
+    label: 'トースト通知', description: 'クリックするとそのセッションを開く。通知そのものの音は出さず、上の「音」に従う',
+    options: [{ value: true, label: '出す' }, { value: false, label: '出さない' }],
   },
 ];
 

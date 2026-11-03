@@ -7,6 +7,9 @@ import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
   PROGRESS_RING,
+  alertDelay,
+  alertSound,
+  attentionReason,
   buildCards,
   cardBadge,
   cardLayout,
@@ -15,11 +18,15 @@ import {
   foldCounts,
   foldLabel,
   formatAgo,
+  mergeAlerts,
   nextAttention,
+  pickAlerts,
   shortcutTarget,
   resolveFocus,
   statusIconName,
+  toastContent,
   tooltip,
+  type Alert,
   type Card,
   type Fold,
   type FoldOptions,
@@ -30,6 +37,7 @@ import {
 } from './model.js';
 import { flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
+import { playSound } from './sound.js';
 import { initTooltips } from './tooltip.js';
 
 interface RowRefs {
@@ -91,6 +99,15 @@ let alwaysShow = new Set<string>();
 let latest: SessionView[] = [];
 let pendingFocus: PendingFocus | undefined;
 let pendingTimer: number | undefined;
+/** 通知の設定（onLayout で届く） */
+type NotifyOptions = Pick<WidgetLayout, 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'muteWhenOpen'>;
+let notify: NotifyOptions | undefined;
+/** 最初のセッション一覧を受け取ったか。起動した時点の状態では知らせない */
+let primed = false;
+/** まだ知らせていない変化と、前に知らせた時刻 */
+let queuedAlerts: Alert[] = [];
+let alertTimer: number | undefined;
+let lastAlertAt = -Infinity;
 
 // ---- 小さな道具 ----
 
@@ -187,15 +204,50 @@ function toggleAlwaysShow(id: string) {
   window.widget.setAlwaysShow(id, on);
 }
 
-/** 状態の変化から、未確認の帯を付けるか消すかを決める。どの行を折りたたむかに使うので、描く前に済ませる */
-function updateAttention(sessions: SessionView[]) {
+/**
+ * 状態の変化から、未確認の帯を付けるか消すかを決める。どの行を折りたたむかに使うので、描く前に済ませる。
+ * 知らせる変化（対応待ちになった、完了した）を返す
+ */
+function updateAttention(sessions: SessionView[]): Alert[] {
+  const fresh: Alert[] = [];
   for (const s of sessions) {
     const prev = seenState.get(s.id);
     if (prev === s.state) continue;
     if (nextAttention(prev, s.state, attention.has(s.id))) attention.add(s.id);
     else attention.delete(s.id);
+    const reason = attentionReason(prev, s.state);
+    if (reason) fresh.push({ id: s.id, reason });
     seenState.set(s.id, s.state);
   }
+  return fresh;
+}
+
+// ---- 音とトースト ----
+
+/** 知らせる変化をためておき、少し待ってからまとめて知らせる。続くときは数秒あける（タイマーはそのときだけ使う） */
+function queueAlerts(fresh: Alert[]) {
+  queuedAlerts = mergeAlerts(queuedAlerts, fresh);
+  if (alertTimer === undefined) alertTimer = window.setTimeout(() => void fireAlerts(), alertDelay(lastAlertAt, Date.now()));
+}
+
+async function fireAlerts() {
+  alertTimer = undefined;
+  // 待っている間に開いた（帯が消えた）ものは知らせない
+  const queued = queuedAlerts.filter((a) => attention.has(a.id));
+  queuedAlerts = [];
+  const n = notify;
+  if (!n || !queued.length || !(n.sound || n.toast)) return;
+  // Claude が前面かどうかは、今開いているセッションが入っているときだけ調べる（PowerShell に問い合わせるため）
+  const focused = resolveFocus(latest, pendingFocus).id;
+  const askFront = n.muteWhenOpen && focused !== undefined && queued.some((a) => a.id === focused);
+  const openInFront = askFront && (await window.widget.isClaudeInFront()) ? focused : undefined;
+  const alerts = pickAlerts(queued, { waiting: n.notifyWaiting, done: n.notifyDone, muteWhenOpen: n.muteWhenOpen }, openInFront);
+  const reason = alertSound(alerts);
+  if (!reason) return;
+  lastAlertAt = Date.now();
+  if (n.sound) playSound(n.soundType, reason, n.soundVolume);
+  const toast = n.toast ? toastContent(alerts, latest) : undefined;
+  if (toast) window.widget.showToast(toast);
 }
 
 function getRow(s: SessionView): RowRefs {
@@ -419,7 +471,8 @@ function* animatedElements(): Iterable<HTMLElement> {
 
 function render(sessions: SessionView[]) {
   latest = sessions;
-  updateAttention(sessions);
+  const fresh = updateAttention(sessions);
+  if (primed && fresh.length) queueAlerts(fresh);
   const opts = foldOptions();
   const list = buildCards(sessions, opts.sort.project);
   // 番号の列の幅。どの行でもタイトルの先頭がそろうよう、いちばん大きい番号の桁数にする
@@ -521,6 +574,8 @@ function applyLayout(layout: WidgetLayout) {
   foldScope = scope;
   sort = { project: layout.projectOrder, worktree: layout.worktreeOrder, session: layout.sessionOrder };
   alwaysShow = new Set(keep);
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen } = layout;
+  notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen };
   render(latest);
   const root = document.documentElement;
   root.dataset.edge = edge;
@@ -535,5 +590,8 @@ function applyLayout(layout: WidgetLayout) {
 }
 window.widget.onLayout(applyLayout);
 window.widget.getLayout().then(applyLayout);
-window.widget.onSessions(render);
+window.widget.onSessions((sessions) => {
+  render(sessions);
+  primed = true;
+});
 window.widget.onCycle(openNext);

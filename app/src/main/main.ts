@@ -1,7 +1,7 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
@@ -10,7 +10,7 @@ import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { tipBounds } from './tip-place';
 import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
-import type { AboutInfo, DisplayOption, TipRect, WidgetLayout } from '../shared/types';
+import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
@@ -45,6 +45,8 @@ let dragWidth: number | undefined;
 let lastSent = '';
 /** 前に知らされた未確認のセッション。新しく増えたときだけ点滅させる */
 let attentionIds = new Set<string>();
+/** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
+const toasts = new Set<Notification>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
 const gitStatus = createGitStatus(() => sendSessions());
 
@@ -94,7 +96,11 @@ function sidebarBounds() {
 
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow } = s;
-  return { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow };
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen } = s;
+  return {
+    edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen,
+  };
 }
 
 function applySettings(s: Settings) {
@@ -132,7 +138,8 @@ function createWidget(): BrowserWindow {
     hasShadow: false,
     backgroundColor: '#00000000',
     icon: ICON,
-    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false },
+    // 知らせる音は、クリックなどの操作なしに鳴らす
+    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
   });
   w.loadFile(join(WEB, 'index.html'));
   w.once('ready-to-show', () => {
@@ -327,6 +334,37 @@ function updateAttention(ids: string[]) {
   attentionIds = next;
 }
 
+/** Claude のウィンドウが前面にあるか。調べられなかったときは false */
+async function claudeInFront(): Promise<boolean> {
+  return (await foregroundProcessName())?.toLowerCase() === CLAUDE_PROCESS;
+}
+
+function openSession(id: unknown) {
+  if (typeof id === 'string' && SESSION_ID.test(id)) {
+    shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
+  }
+}
+
+function isToastRequest(v: unknown): v is ToastRequest {
+  if (!v || typeof v !== 'object') return false;
+  const t = v as Record<string, unknown>;
+  return typeof t.id === 'string' && typeof t.title === 'string' && typeof t.body === 'string';
+}
+
+/**
+ * Windows の通知（トースト）を出す。音は画面側で鳴らすので、通知の音は消す。
+ * npm start のとき（インストールしていない版）は、Windows が出さないことがある
+ */
+function showToast(t: ToastRequest) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: t.title, body: t.body, icon: ICON, silent: true });
+  toasts.add(n);
+  n.on('click', () => openSession(t.id));
+  n.on('close', () => toasts.delete(n));
+  n.on('failed', () => toasts.delete(n));
+  n.show();
+}
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
@@ -363,11 +401,7 @@ app.whenReady().then(() => {
     if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
   }
 
-  ipcMain.on('open-session', (_e, id: unknown) => {
-    if (typeof id === 'string' && SESSION_ID.test(id)) {
-      shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
-    }
-  });
+  ipcMain.on('open-session', (_e, id: unknown) => openSession(id));
   ipcMain.on('resize-start', () => {
     dragWidth = getSettings().width;
   });
@@ -398,6 +432,10 @@ app.whenReady().then(() => {
 
   ipcMain.on('set-attention', (_e, ids: unknown) => {
     if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) updateAttention(ids);
+  });
+  ipcMain.handle('claude-in-front', () => claudeInFront());
+  ipcMain.on('show-toast', (_e, toast: unknown) => {
+    if (isToastRequest(toast)) showToast(toast);
   });
 
   ipcMain.on('tip-show', (_e, text: unknown, rect: unknown) => {

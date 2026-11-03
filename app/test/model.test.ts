@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
   NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, changeItems, changesTooltip, displayOrder, foldCounts, foldLabel, formatAgo,
   nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type FoldOptions,
+  ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
 } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
@@ -104,6 +105,60 @@ describe('nextAttention', () => {
   it('状態が同じなら今のまま', () => {
     assert.equal(nextAttention('idle', 'idle', true), true);
     assert.equal(nextAttention('idle', 'idle', false), false);
+  });
+});
+
+describe('attentionReason', () => {
+  it('対応待ちになったら対応待ち（初めて見たときも。起動直後に鳴らさないのは renderer）', () => {
+    assert.equal(attentionReason('busy', 'waiting'), 'waiting');
+    assert.equal(attentionReason('idle', 'waiting'), 'waiting');
+    assert.equal(attentionReason(undefined, 'waiting'), 'waiting');
+  });
+  it('処理中から待機になったら完了', () => assert.equal(attentionReason('busy', 'idle'), 'done'));
+  it('ほかの変化と、状態が同じときは知らせない', () => {
+    assert.equal(attentionReason('waiting', 'waiting'), undefined);
+    assert.equal(attentionReason('waiting', 'idle'), undefined);
+    assert.equal(attentionReason('idle', 'busy'), undefined);
+    assert.equal(attentionReason('busy', 'stopped'), undefined);
+    assert.equal(attentionReason(undefined, 'idle'), undefined);
+  });
+});
+
+describe('知らせるものの選び方', () => {
+  const all = { waiting: true, done: true, muteWhenOpen: true };
+  const a = (id: string, reason: Alert['reason']): Alert => ({ id, reason });
+
+  it('まとめるとき、同じセッションは対応待ちを残す', () => {
+    assert.deepEqual(mergeAlerts([a('x', 'waiting')], [a('x', 'done'), a('y', 'done')]), [a('x', 'waiting'), a('y', 'done')]);
+    assert.deepEqual(mergeAlerts([a('x', 'done')], [a('x', 'waiting')]), [a('x', 'waiting')]);
+  });
+  it('最初は少しだけ待ち、続くときは前から数秒あける', () => {
+    assert.equal(alertDelay(-Infinity, 1_000), ALERT_COLLECT_MS);
+    assert.equal(alertDelay(1_000, 2_000), ALERT_GAP_MS - 1_000);
+    assert.equal(alertDelay(1_000, 1_000 + ALERT_GAP_MS + 5), ALERT_COLLECT_MS);
+  });
+  it('対応待ちを先に並べる', () =>
+    assert.deepEqual(pickAlerts([a('x', 'done'), a('y', 'waiting'), a('z', 'done')], all, undefined).map((x) => x.id), ['y', 'x', 'z']));
+  it('設定で切った理由は外す', () => {
+    assert.deepEqual(pickAlerts([a('x', 'done'), a('y', 'waiting')], { ...all, done: false }, undefined).map((x) => x.id), ['y']);
+    assert.deepEqual(pickAlerts([a('x', 'done'), a('y', 'waiting')], { ...all, waiting: false }, undefined).map((x) => x.id), ['x']);
+  });
+  it('Claude が前面で開いているセッションは外す（設定で切れば外さない）', () => {
+    assert.deepEqual(pickAlerts([a('x', 'waiting'), a('y', 'waiting')], all, 'x').map((x) => x.id), ['y']);
+    assert.deepEqual(pickAlerts([a('x', 'waiting')], { ...all, muteWhenOpen: false }, 'x').map((x) => x.id), ['x']);
+  });
+  it('音は、対応待ちが 1 つでもあれば対応待ち。なければ鳴らさない', () => {
+    assert.equal(alertSound([a('x', 'done'), a('y', 'waiting')]), 'waiting');
+    assert.equal(alertSound([a('x', 'done')]), 'done');
+    assert.equal(alertSound([]), undefined);
+  });
+  it('トーストは先頭のセッションの名前と理由。ほかにもあれば件数を添える', () => {
+    const s1 = view({ title: 'fix login', state: 'waiting', waitingFor: 'permission prompt' });
+    const s2 = view({ title: 'docs' });
+    assert.deepEqual(toastContent([a(s1.id, 'waiting')], [s1, s2]), { id: s1.id, title: 'fix login', body: '対応待ち（許可待ち）' });
+    assert.deepEqual(toastContent([a(s2.id, 'done'), a(s1.id, 'done')], [s1, s2]), { id: s2.id, title: 'docs', body: '完了。ほかに 1 件' });
+    assert.equal(toastContent([], [s1]), undefined);
+    assert.equal(toastContent([a('local_gone', 'done')], [s1]), undefined);
   });
 });
 
