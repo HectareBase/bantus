@@ -48,6 +48,10 @@ interface RowRefs {
   status: HTMLElement;
   seq: HTMLElement;
   title: HTMLElement;
+  /** セッション名の文字。光の帯（.shine）と並べるので、.title の textContent ではなくこれを書き換える */
+  titleText: Text;
+  /** 処理中の間だけ .title に重ねる光の帯と、その中の明るい文字 */
+  shine?: { el: HTMLElement; text: HTMLElement };
   branch: HTMLElement;
   when: HTMLElement;
   keep: HTMLElement;
@@ -262,15 +266,41 @@ async function fireAlerts() {
   if (actions.flash) window.widget.flashTaskbar();
 }
 
+/**
+ * 処理中の行だけ、セッション名に光の帯を重ねる。帯の窓と中の文字を逆向きに動かし、文字は止まって見える。
+ * 描き直すたびに作り直すと動きが最初に戻るので、処理中になったときに作り、処理中でなくなったら外す
+ */
+function setShine(refs: RowRefs, s: SessionView) {
+  const on = s.state === 'busy';
+  if (on && !refs.shine) {
+    const el = document.createElement('span');
+    el.className = 'shine';
+    el.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'shine-text';
+    el.append(text);
+    refs.title.append(el);
+    refs.shine = { el, text };
+  } else if (!on && refs.shine) {
+    refs.shine.el.remove();
+    refs.shine = undefined;
+  }
+  if (refs.shine && refs.shine.text.textContent !== s.title) refs.shine.text.textContent = s.title;
+}
+
 function getRow(s: SessionView): RowRefs {
   let refs = rows.get(s.id);
   if (!refs) {
     const el = clone<HTMLLIElement>(rowTemplate);
+    const title = el.querySelector<HTMLElement>('.title')!;
+    const titleText = document.createTextNode('');
+    title.append(titleText);
     refs = {
       el,
       status: el.querySelector('.status')!,
       seq: el.querySelector('.seq')!,
-      title: el.querySelector('.title')!,
+      title,
+      titleText,
       branch: el.querySelector('.branch')!,
       when: el.querySelector('.when')!,
       keep: el.querySelector('.keep')!,
@@ -295,7 +325,8 @@ function getRow(s: SessionView): RowRefs {
   refs.keep.setAttribute('aria-pressed', String(kept));
   refs.keep.dataset.tip = kept ? '常に表示中（クリックで外す）' : '常に表示する';
   if (prev?.seq !== s.seq) refs.seq.textContent = s.seq ? String(s.seq) : '';
-  if (prev?.title !== s.title) refs.title.textContent = s.title;
+  if (prev?.title !== s.title) refs.titleText.data = s.title;
+  setShine(refs, s);
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   refs.el.dataset.tip = tooltip(s);
   refs.data = s;

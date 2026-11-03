@@ -314,6 +314,31 @@ html.hide-updated .when { display: none; }
 
 .row[data-state="stopped"] .title { color: var(--text-secondary); }
 
+/* 処理中のセッション名は薄くし、明るい文字の帯を左から右へ流す（renderer.ts の setShine が .shine を重ねる）。
+   窓（.shine）は中央だけを mask で見せて右へ動かし、中の文字（.shine-text）は同じだけ左へ戻す。文字は止まって見え、帯だけが流れる。
+   中の文字は .title と同じ幅で切るので、「…」の位置も地の文字とそろう */
+.row[data-state="busy"] .title { position: relative; color: var(--text-tertiary); }
+.shine {
+  --band: 20%;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent calc(50% - var(--band)), #000 50%, transparent calc(50% + var(--band)));
+  animation: shine-window 2s linear infinite;
+  will-change: transform;
+}
+.shine-text {
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  animation: shine-text 2s linear infinite;
+  will-change: transform;
+}
+
 /* 常に表示の星。ふだんはマウスを乗せた行にだけ出し、常に表示の行には塗った星を出し続ける */
 .keep {
   width: 22px;
@@ -409,12 +434,18 @@ html.floating .card, html.floating .titlebar { border-color: rgba(128, 128, 128,
   100% { stroke-dasharray: 1 30; stroke-dashoffset: -27; }
 }
 @keyframes blink { 50% { opacity: 0.2; } }
+@keyframes shine-window { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes shine-text { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
 
 /* 見えていないときは止める */
-html.paused .status svg, html.paused .status circle, html.paused .row::before { animation-play-state: paused; }
+html.paused .status svg, html.paused .status circle, html.paused .row::before,
+html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 
+/* 動きを減らす設定のときは、帯を出さず、処理中のセッション名を止まった色で出す */
 @media (prefers-reduced-motion: reduce) {
   .status svg, .status circle, .row::before { animation: none; }
+  .shine { display: none; }
+  .row[data-state="busy"] .title { color: var(--text-secondary); }
 }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
