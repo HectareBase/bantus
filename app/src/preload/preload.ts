@@ -24,6 +24,7 @@ const widget: WidgetApi = {
   resizeEnd: () => ipcRenderer.send('resize-end'),
   openSettings: () => ipcRenderer.send('open-settings'),
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
+  setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
 };
 
 const settingsApi: SettingsApi = {

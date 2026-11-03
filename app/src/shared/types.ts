@@ -38,7 +38,7 @@ export interface SessionView {
 
 export interface WidgetApi {
   onSessions(listener: (sessions: SessionView[]) => void): void;
-  /** ウィジェットの見た目に関わる設定（置く側、背景とカードの不透明度）が変わったとき */
+  /** ウィジェットの見た目に関わる設定（置く側、不透明度、一覧の表示数と折りたたみ、常に表示）が変わったとき */
   onLayout(listener: (layout: WidgetLayout) => void): void;
   /** 起動時に今の見た目の設定を取りに行く（起動直後に送られた onLayout を取りこぼさないため） */
   getLayout(): Promise<WidgetLayout>;
@@ -55,9 +55,11 @@ export interface WidgetApi {
   openSettings(): void;
   /** 最前面への固定を切り替える。保存され、onLayout で画面に戻ってくる */
   setPinned(pinned: boolean): void;
+  /** セッションを常に表示にするか切り替える。保存され、onLayout で画面に戻ってくる */
+  setAlwaysShow(id: string, on: boolean): void;
 }
 
-export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned'>;
+export type WidgetLayout = Pick<Settings, 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'pinned' | 'groupLimit' | 'foldScope' | 'alwaysShow'>;
 
 export interface DisplayOption {
   id: string;
