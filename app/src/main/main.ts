@@ -53,6 +53,27 @@ app.setAppUserModelId(APP_USER_MODEL_ID);
 // 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
 if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
 
+/**
+ * Windows の起動時に開く設定を変えられるか。npm start では electron.exe が登録されてしまうので、インストール版でだけ使う。
+ * 見本データで動かすときも、いつものウィジェットの登録に触れないよう使わない
+ */
+const LOGIN_ITEM_AVAILABLE = app.isPackaged && !process.env.WIDGET_FIXTURE;
+
+// ---- Windows の起動時に開く ----
+
+/** 起動したときに、Windows の登録を設定に写す（タスク マネージャーなど、ほかの場所で変えられていることがある） */
+function readLoginItem() {
+  if (!LOGIN_ITEM_AVAILABLE) return;
+  const openAtLogin = app.getLoginItemSettings().openAtLogin;
+  if (openAtLogin !== getSettings().openAtLogin) updateSettings({ openAtLogin });
+}
+
+/** 設定が変わったら、Windows の登録に写す */
+function applyLoginItem(s: Settings) {
+  if (!LOGIN_ITEM_AVAILABLE) return;
+  if (app.getLoginItemSettings().openAtLogin !== s.openAtLogin) app.setLoginItemSettings({ openAtLogin: s.openAtLogin });
+}
+
 // ---- 位置と見た目 ----
 
 function targetDisplay(s: Settings): Display {
@@ -404,10 +425,13 @@ app.whenReady().then(() => {
     version: app.getVersion(),
     settingsFile: settingsFilePath(),
     dataFolders: sessionDataFolders(),
+    packaged: LOGIN_ITEM_AVAILABLE,
   }));
 
+  readLoginItem();
   onSettingsChange((s) => {
     applySettings(s);
+    applyLoginItem(s);
     settingsWin?.webContents.send('settings:changed', s);
   });
 

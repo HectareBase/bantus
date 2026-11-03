@@ -29,6 +29,8 @@ export interface Settings {
   showSeq: boolean;
   /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
   showUpdated: boolean;
+  /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
+  openAtLogin: boolean;
   /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
   alwaysShow: string[];
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
@@ -60,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sessionOrder: 'fixed',
   showSeq: true,
   showUpdated: true,
+  openAtLogin: false,
   alwaysShow: [],
 };
 
@@ -90,13 +93,15 @@ interface Base<K extends keyof Settings> {
   group: string;
   label: string;
   description?: string;
+  /** インストール版（exe）でだけ使える項目。npm start のときは灰色にして、押せなくする */
+  packagedOnly?: boolean;
 }
 
 /** 常に表示にできるセッションの ID。見本データの ID（`local_all-01` など）も通す */
 export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
 
 export type SettingDef =
-  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated'> & {
+  | (Base<'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'openAtLogin'> & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
     })
@@ -135,6 +140,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
     label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
     min: 0, max: 20, step: 1, unit: '%',
+  },
+  {
+    key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,
+    label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える',
+    options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
   },
   {
     key: 'groupLimit', category: 'cards', group: '一覧', type: 'segmented',

@@ -31,13 +31,14 @@ function set<K extends keyof Settings>(key: K, value: Settings[K]) {
 
 // ---- 項目の種類ごとの部品 ----
 
-async function control(def: SettingDef): Promise<Node> {
+/** disabled なら、値は見せるが押せなくする（今は segmented だけが使う） */
+async function control(def: SettingDef, disabled: boolean): Promise<Node> {
   switch (def.type) {
     case 'segmented': {
       const group = el('div', { className: 'segmented', role: 'group' });
       group.setAttribute('aria-label', def.label);
       for (const o of def.options) {
-        const b = el('button', { textContent: o.label });
+        const b = el('button', { textContent: o.label, disabled });
         b.setAttribute('aria-pressed', String(settings[def.key] === o.value));
         b.addEventListener('click', () => {
           set(def.key, o.value as never);
@@ -88,13 +89,18 @@ async function renderContent() {
   content.replaceChildren(el('h1', { textContent: category.label }));
   if (current === 'about') return renderAbout();
 
+  const defs = SETTING_DEFS.filter((d) => d.category === current);
+  const packaged = defs.some((d) => d.packagedOnly) && (await api.about()).packaged;
   let group = '';
-  for (const def of SETTING_DEFS.filter((d) => d.category === current)) {
+  for (const def of defs) {
     if (def.group !== group) {
       group = def.group;
       content.append(el('h2', { textContent: group }));
     }
-    content.append(card(def.label, def.description, await control(def)));
+    const disabled = def.packagedOnly === true && !packaged;
+    const node = card(def.label, def.description, await control(def, disabled));
+    if (disabled) node.classList.add('disabled');
+    content.append(node);
   }
 }
 

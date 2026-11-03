@@ -27,6 +27,16 @@ describe('normalizeSettings の pinned', () => {
   it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ pinned: 'false' }).pinned, true));
 });
 
+describe('normalizeSettings の openAtLogin', () => {
+  it('なければ開かない', () => assert.equal(normalizeSettings({}).openAtLogin, false));
+  it('true を残す', () => assert.equal(normalizeSettings({ openAtLogin: true }).openAtLogin, true));
+  it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ openAtLogin: 'true' }).openAtLogin, false));
+  it('全体のカテゴリに、インストール版だけの項目として出す', () => {
+    const def = SETTING_DEFS.find((d) => d.key === 'openAtLogin');
+    assert.deepEqual([def?.category, def?.packagedOnly], ['general', true]);
+  });
+});
+
 describe('normalizeSettings の一覧の項目', () => {
   it('なければ既定値', () => {
     const s = normalizeSettings({});
@@ -70,8 +80,12 @@ describe('設定画面のカテゴリ', () => {
     return out;
   };
   it('左の一覧は 全体 → カードの表示 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'about']));
-  it('全体は 位置 → 見た目', () =>
-    assert.deepEqual(layout('general'), [['位置', ['edge', 'display']], ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']]]));
+  it('全体は 位置 → 見た目 → 起動', () =>
+    assert.deepEqual(layout('general'), [
+      ['位置', ['edge', 'display']],
+      ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']],
+      ['起動', ['openAtLogin']],
+    ]));
   it('カードの表示は 一覧 → 並び順 → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [
       ['一覧', ['groupLimit', 'foldScope']],

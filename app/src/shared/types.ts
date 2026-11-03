@@ -113,6 +113,8 @@ export interface AboutInfo {
   version: string;
   settingsFile: string;
   dataFolders: string[];
+  /** インストール版（exe）で動いているか。false なら packagedOnly の項目を灰色にする。見本データで動かしているときも false */
+  packaged: boolean;
 }
 
 export interface SettingsApi {
