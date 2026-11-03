@@ -37,7 +37,8 @@ function git(cwd: string, args: string[]): Promise<string> {
 /** npm run build を裏で動かす。失敗したら、出力の終わりを付けて reject */
 function build(appPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn('npm', ['run', 'build'], { cwd: appPath, shell: true, windowsHide: true, timeout: BUILD_TIMEOUT_MS });
+    // npm は Windows では npm.cmd なので shell を通す。引数を別に渡すと非推奨の警告が出るので、1 つの文字列にする
+    const child = spawn('npm run build', { cwd: appPath, shell: true, windowsHide: true, timeout: BUILD_TIMEOUT_MS });
     let output = '';
     const keep = (d: Buffer) => (output = (output + d.toString()).slice(-4_000));
     child.stdout.on('data', keep);
@@ -103,6 +104,7 @@ export function startSelfUpdate(appPath: string, handlers: SelfUpdateHandlers): 
       }
       if (stopped) return;
       current = head;
+      console.log(`ビルドできました。${plan === 'reload' ? '読み込み直します' : '起動し直します'}`);
       handlers.notice(undefined);
       if (plan === 'reload') handlers.reload();
       else handlers.relaunch();
