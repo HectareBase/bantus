@@ -18,8 +18,15 @@ const SETTINGS_MIN = { width: 520, height: 400 };
 const SESSION_ID = /^local_[0-9a-f-]{36}$/;
 const PRELOAD = join(__dirname, '..', 'preload', 'preload.js');
 const WEB = join(__dirname, '..', '..', 'web', 'renderer');
-/** アプリのアイコン（npm run icons で assets/icon.svg から作る） */
-const ICON = join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
+/**
+ * アプリのアイコン（npm run icons で assets/icon.svg から作る）。
+ * exe では asar の中の .ico を Tray が読めないことがあるので、assets/ を resources の下に外出しして読む（electron-builder.yml の extraResources）
+ */
+const ICON = app.isPackaged
+  ? join(process.resourcesPath, 'assets', 'icon.ico')
+  : join(__dirname, '..', '..', '..', 'assets', 'icon.ico');
+/** electron-builder.yml の appId と同じ値。通知やタスクバーで、このアプリを見分けるのに使う */
+const APP_USER_MODEL_ID = 'io.github.hectarebase.bantus';
 /** 未確認のセッションを表示順に開くショートカット（Ctrl+Alt+Space はほかのアプリが使っていた） */
 const CYCLE_SHORTCUT = 'Control+Alt+N';
 /** Claude デスクトップのプロセス名 */
@@ -40,6 +47,8 @@ let lastSent = '';
 let attentionIds = new Set<string>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
 const gitStatus = createGitStatus(() => sendSessions());
+
+app.setAppUserModelId(APP_USER_MODEL_ID);
 
 // 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
 if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
