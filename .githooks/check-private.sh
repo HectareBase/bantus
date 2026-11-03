@@ -37,10 +37,11 @@ check_file() {
   fi
 }
 
-# 検査の定義そのものは調べない
+# 検査の定義そのものは調べない。npm が作るロックファイルも調べない（外部パッケージの説明文に、作者のメールアドレスが入る）
 skip() {
   case "$1" in
     .githooks/*) return 0 ;;
+    package-lock.json|*/package-lock.json) return 0 ;;
   esac
   return 1
 }
