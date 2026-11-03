@@ -24,9 +24,12 @@ const widget: WidgetApi = {
   openSettings: () => ipcRenderer.send('open-settings'),
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
   setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
-  setAttention: (ids) => ipcRenderer.send('set-attention', ids),
+  flashTaskbar: () => ipcRenderer.send('flash-taskbar'),
   isClaudeInFront: () => ipcRenderer.invoke('claude-in-front'),
   showToast: (toast) => ipcRenderer.send('show-toast', toast),
+  onToastClick: (listener) => {
+    ipcRenderer.on('toast-click', (_e, id: string) => listener(id));
+  },
   showTip: (text, rect) => ipcRenderer.send('tip-show', text, rect),
   hideTip: () => ipcRenderer.send('tip-hide'),
 };

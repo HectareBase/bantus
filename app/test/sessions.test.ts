@@ -134,6 +134,12 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.deepEqual(sessions.filter((s) => s.focused).map((s) => s.title), ['worktree']);
   });
 
+  it('focusedAt は lastFocusedAt。サイドチャットで開いたら親の値にし、開いたことがなければ省く', () => {
+    assert.equal(byTitle('waiting')?.focusedAt, 500);
+    assert.equal(byTitle('worktree')?.focusedAt, 700);
+    assert.equal(byTitle('no git')?.focusedAt, undefined);
+  });
+
   it('waitingFor は対応待ちのときだけ', () => {
     assert.equal(byTitle('waiting')?.waitingFor, 'permission prompt');
     assert.equal(byTitle('worktree')?.waitingFor, undefined);
