@@ -66,9 +66,13 @@
 | exe の起動（見本データ、別のデータフォルダ） | `app.isPackaged` が true、名前は `Bantus`、データフォルダは `%APPDATA%Bantus-debug`。`resources/assets/icon.ico` を読めて空でない。ウィジェットが表示される。ピンの切り替えが `settings.json` に保存される |
 | 「Windows の起動時に開く」（exe、`--user-data-dir` で別のデータフォルダ） | オンにすると `getLoginItemSettings().openAtLogin` が true になり、設定にも保存される。オフで両方 false に戻る |
 | 「Windows の起動時に開く」（`npm start` 相当） | 灰色で押せない |
+| インストール（`/S` で画面なし） | `%LOCALAPPDATA%ProgramsBantus` に入る。「アプリと機能」に `Bantus 0.1.0`、発行元 `HectareBase` で出る（`HKCU` の Uninstall なのでユーザーごと）。スタートメニューに `Bantus.lnk` ができる |
+| インストール版の起動（`--user-data-dir` で別のデータフォルダ） | 動く。「Windows の起動時に開く」の登録先は、インストールした `Bantus.exe` |
+| 上書きインストール | 「アプリと機能」の項目は 1 つのまま。`%APPDATA%Bantussettings.json` は変わらない |
+| アンインストール（`/S`） | インストール先のフォルダ、「アプリと機能」の項目、スタートメニューのショートカットが消える。`%APPDATA%Bantussettings.json` は残り、中身も変わらない |
 
 ### まだ確かめていないこと
 - `Ctrl+Alt+N`：いつものウィジェット（`npm start`）が動いていてキーを使っているため、exe では登録できなかった（想定どおり）。いつものウィジェットを止めて確かめる
 - トレイのアイコンの見た目（タスクバーが隠れていて画面で見られなかった。アイコンのファイルを読めることは確かめた）
-- インストール、上書きインストール、アンインストール（設定が残るか）。ユーザーに確かめてから試す
+- インストーラーの画面（`/S` で画面なしだけを試した）
 - `claude://` で開く動き（exe でも `shell.openExternal` は同じなので、変わらない見込み）
