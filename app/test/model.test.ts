@@ -2,7 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildCards, buildGroups, cardBadge, displayOrder, formatAgo, nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateOfRank, statusIconName, tooltip, waitingLabel } from '../src/renderer/model';
+import {
+  NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, displayOrder, foldCounts, foldLabel, formatAgo, nextAttention, nextCycleTarget,
+  resolveFocus, shortcutTarget, stateOfRank, statusIconName, tooltip, waitingLabel, type FoldOptions,
+} from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
 
@@ -181,4 +184,120 @@ describe('displayOrder と nextCycleTarget', () => {
     assert.equal(shortcutTarget(sessions, new Set(), 's1', false), 'w1');
     assert.equal(shortcutTarget(sessions, new Set(), undefined, false), 'w1');
   });
+});
+
+describe('cardLayout', () => {
+  const wt = { key: 'w', label: 'w', branch: 'claude/w-123abc' };
+  const opts = (patch: Partial<FoldOptions> = {}): FoldOptions => ({ ...NO_FOLD, limit: 2, ...patch });
+  const ids = (list: SessionView[]) => list.map((s) => s.id);
+  // 急ぐ順に並べてある（メインプロセスと同じ）
+  const sessions = (): SessionView[] => [
+    view({ id: 'b1', state: 'busy' }),
+    view({ id: 'i1', state: 'idle', lastActivityAt: 30 }),
+    view({ id: 'i2', state: 'idle', lastActivityAt: 20 }),
+    view({ id: 'i3', state: 'idle', lastActivityAt: 10 }),
+    view({ id: 's1', state: 'stopped' }),
+  ];
+  const layout = (list: SessionView[], o: FoldOptions) => cardLayout(buildCards(list)[0]!, o);
+
+  it('上限がなければ、停止中だけを折りたたむ', () => {
+    const l = layout(sessions(), NO_FOLD);
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1', 'i2', 'i3']);
+    assert.deepEqual([ids(l.fold!.hidden), ids(l.fold!.stopped)], [[], ['s1']]);
+  });
+
+  it('上限を超えた分は、急ぐ順で後ろのものから隠す', () => {
+    const l = layout(sessions(), opts());
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1']);
+    assert.deepEqual([ids(l.fold!.hidden), ids(l.fold!.stopped)], [['i2', 'i3'], ['s1']]);
+  });
+
+  it('隠したものも停止中もなければ、折りたたみを出さない', () =>
+    assert.equal(layout([view(), view()], opts()).fold, undefined));
+
+  it('対応待ちは上限を超えても出し、枠を先に使う', () => {
+    const list = [view({ id: 'w1', state: 'waiting' }), view({ id: 'w2', state: 'waiting' }), view({ id: 'w3', state: 'waiting' }), view({ id: 'b1', state: 'busy' })];
+    const l = layout(list, opts());
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['w1', 'w2', 'w3']);
+    assert.deepEqual(ids(l.fold!.hidden), ['b1']);
+  });
+
+  it('常に表示は枠を先に使い、並びは急ぐ順のまま', () => {
+    const l = layout(sessions(), opts({ alwaysShow: new Set(['i3']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i3']);
+  });
+
+  it('常に表示の停止中は、一覧に残す', () => {
+    const l = layout(sessions(), opts({ alwaysShow: new Set(['s1']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 's1']);
+    assert.deepEqual(ids(l.fold!.stopped), []);
+  });
+
+  it('未確認と今開いているものは、ほかの行を押し出さずに枠の外へ足す', () => {
+    const l = layout(sessions(), opts({ extra: new Set(['i3']) }));
+    assert.deepEqual(ids(l.sections[0]!.sessions), ['b1', 'i1', 'i3']);
+    assert.deepEqual(ids(l.fold!.hidden), ['i2']);
+  });
+
+  it('上限はワークツリーのグループごとにかける', () => {
+    const list = [
+      view({ id: 'm1' }), view({ id: 'm2' }), view({ id: 'm3' }),
+      view({ id: 't1', worktree: wt }), view({ id: 't2', worktree: wt }), view({ id: 't3', worktree: wt }),
+    ];
+    const l = layout(list, opts());
+    assert.deepEqual(l.sections.map((g) => ids(g.sessions)), [['m1', 'm2'], ['t1', 't2']]);
+    assert.deepEqual(ids(l.fold!.hidden), ['m3', 't3']);
+  });
+
+  it('ワークツリーごとにまとめるときは、グループごとに折りたたむ', () => {
+    const list = [
+      view({ id: 'm1' }), view({ id: 'm2' }), view({ id: 'm3' }),
+      view({ id: 't1', worktree: wt }), view({ id: 'ts', worktree: wt, state: 'stopped' }),
+    ];
+    const l = layout(list, opts({ scope: 'worktree' }));
+    assert.equal(l.fold, undefined);
+    assert.deepEqual(l.sections.map((g) => [g.key, ids(g.fold?.hidden ?? []), ids(g.fold?.stopped ?? [])]), [
+      ['', ['m3'], []],
+      ['w', [], ['ts']],
+    ]);
+  });
+
+  it('ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す', () => {
+    const list = [view({ id: 'm1' }), view({ id: 'ts', worktree: wt, state: 'stopped' })];
+    assert.deepEqual(layout(list, opts({ scope: 'worktree' })).sections.map((g) => [g.group?.label, ids(g.sessions)]), [
+      ['メイン', ['m1']],
+      ['w', []],
+    ]);
+    // リポジトリごとなら、小見出しを出さない
+    assert.deepEqual(layout(list, opts()).sections.map((g) => g.group), [undefined]);
+  });
+});
+
+describe('foldLabel と foldCounts', () => {
+  const fold = (hidden: SessionView[], stopped: SessionView[]) => ({ key: 'k', hidden, stopped });
+  it('隠したものと停止中の件数', () => {
+    assert.equal(foldLabel(fold([view(), view()], [view({ state: 'stopped' })])), 'ほか 2 件・停止中 1');
+    assert.equal(foldLabel(fold([view()], [])), 'ほか 1 件');
+    assert.equal(foldLabel(fold([], [view({ state: 'stopped' })])), '停止中 1');
+  });
+  it('状態ごとの件数を急ぐ順に。0 件の状態は出さない', () => {
+    assert.deepEqual(foldCounts(fold([view({ state: 'idle' }), view({ state: 'busy' }), view({ state: 'idle' })], [view({ state: 'stopped' })])), [
+      { state: 'busy', count: 1 }, { state: 'idle', count: 2 }, { state: 'stopped', count: 1 },
+    ]);
+    assert.deepEqual(foldCounts(fold([], [view({ state: 'stopped' })])), [{ state: 'stopped', count: 1 }]);
+  });
+});
+
+describe('displayOrder と nextCycleTarget（折りたたみあり）', () => {
+  const sessions: SessionView[] = [
+    view({ id: 'a1', state: 'idle', lastActivityAt: 30 }),
+    view({ id: 'a2', state: 'idle', lastActivityAt: 20 }),
+    view({ id: 'a3', state: 'idle', lastActivityAt: 10 }),
+    view({ id: 's1', state: 'stopped' }),
+  ];
+  const opts: FoldOptions = { ...NO_FOLD, limit: 3, alwaysShow: new Set(['a3', 's1']) };
+
+  it('折りたたみの中は入れず、常に表示のものは停止中でも入れる', () =>
+    assert.deepEqual(displayOrder(sessions, opts).map((s) => s.id), ['a1', 'a3', 's1']));
+  it('巡回も見えている行だけ', () => assert.equal(nextCycleTarget(sessions, new Set(), 'a1', opts), 'a3'));
 });

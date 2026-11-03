@@ -160,26 +160,127 @@ export function buildGroups(active: SessionView[]): Group[] {
   return [...map.values()].sort(byUrgency);
 }
 
-/** カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける */
-export function cardSections(card: Card): { useSubheads: boolean; sections: Pick<Group, 'key' | 'sessions'>[] } {
-  const groups = buildGroups(card.active);
-  const useSubheads = groups.some((g) => !g.isMain);
-  const sections = useSubheads ? groups : card.active.length ? [{ key: '*', sessions: card.active }] : [];
-  return { useSubheads, sections };
+/** 一覧を折りたたむ決まり。設定の値と、画面が覚えている状態から作る */
+export interface FoldOptions {
+  /** グループごとに見せる数。0 ならすべて見せる */
+  limit: number;
+  /** 折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
+  scope: 'repo' | 'worktree';
+  /** 常に表示のセッション。停止中でも一覧に出し、枠を先に使う */
+  alwaysShow: ReadonlySet<string>;
+  /** 上限を超えても出すセッション（未確認、今開いているもの）。ほかの行を押し出さないよう、空いた枠がなければ枠の外に足す */
+  extra: ReadonlySet<string>;
 }
 
-/** 画面に並んでいる順（上から）の、停止中でないセッション */
-export function displayOrder(sessions: SessionView[]): SessionView[] {
-  return buildCards(sessions).flatMap((card) => cardSections(card).sections.flatMap((g) => g.sessions));
+/** 何も折りたたまない（停止中だけをたたむ） */
+export const NO_FOLD: FoldOptions = { limit: 0, scope: 'repo', alwaysShow: new Set(), extra: new Set() };
+
+/** 折りたたみの中身 */
+export interface Fold {
+  key: string;
+  /** 上限で隠した、停止中でないセッション */
+  hidden: SessionView[];
+  stopped: SessionView[];
+}
+
+export interface Section {
+  key: string;
+  /** 小見出しを出すときだけ */
+  group?: Group;
+  sessions: SessionView[];
+  /** ワークツリーごとにまとめるときの、このグループの折りたたみ */
+  fold?: Fold;
+}
+
+export interface CardLayout {
+  sections: Section[];
+  /** リポジトリごとにまとめるときの、カードの一番下の折りたたみ */
+  fold?: Fold;
 }
 
 /**
- * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない
+ * グループの中で見せるものと隠すものを分ける。list は急ぐ順
+ * - 対応待ちと常に表示のものは、上限を超えても出し、枠を先に使う
+ * - 残りの枠を急ぐ順に埋める
+ * - extra のものは、枠に入らなくても出す
+ */
+function pick(list: SessionView[], opts: FoldOptions): { visible: SessionView[]; hidden: SessionView[] } {
+  if (!opts.limit) return { visible: list, hidden: [] };
+  const first = (s: SessionView) => s.state === 'waiting' || opts.alwaysShow.has(s.id);
+  let room = opts.limit - list.filter(first).length;
+  const shown = new Set<SessionView>();
+  for (const s of list) {
+    if (first(s)) shown.add(s);
+    else if (room > 0) {
+      shown.add(s);
+      room--;
+    } else if (opts.extra.has(s.id)) shown.add(s);
+  }
+  return { visible: list.filter((s) => shown.has(s)), hidden: list.filter((s) => !shown.has(s)) };
+}
+
+function makeFold(key: string, hidden: SessionView[], stopped: SessionView[]): Fold | undefined {
+  return hidden.length || stopped.length ? { key, hidden, stopped } : undefined;
+}
+
+/**
+ * カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける。
+ * 上限を超えたものと停止中は、折りたたみに入れる（常に表示の停止中は一覧に残す）。
+ * ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す。
+ */
+export function cardLayout(card: Card, opts: FoldOptions = NO_FOLD): CardLayout {
+  const kept = (s: SessionView) => opts.alwaysShow.has(s.id);
+  const byWorktree = opts.scope === 'worktree';
+  const groups = buildGroups([...card.active, ...card.stopped.filter((s) => byWorktree || kept(s))]);
+  const useSubheads = groups.some((g) => !g.isMain);
+  const allHidden: SessionView[] = [];
+  const sections = groups.map((g): Section => {
+    const live = g.sessions.filter((s) => s.state !== 'stopped' || kept(s));
+    const { visible, hidden } = pick(live, opts);
+    const section: Section = { key: g.key, group: useSubheads ? g : undefined, sessions: visible };
+    if (byWorktree) {
+      const stopped = g.sessions.filter((s) => s.state === 'stopped' && !kept(s));
+      section.fold = makeFold(`${card.key}|${g.key}|fold`, hidden, stopped);
+    } else allHidden.push(...hidden);
+    return section;
+  });
+  const fold = byWorktree ? undefined : makeFold(`${card.key}|fold`, allHidden, card.stopped.filter((s) => !kept(s)));
+  return { sections, fold };
+}
+
+/** 折りたたみの説明（ツールチップと読み上げ用）。「ほか 2 件・停止中 3」 */
+export function foldLabel(fold: Fold): string {
+  const parts: string[] = [];
+  if (fold.hidden.length) parts.push(`ほか ${fold.hidden.length} 件`);
+  if (fold.stopped.length) parts.push(`停止中 ${fold.stopped.length}`);
+  return parts.join('・');
+}
+
+/** 折りたたみのボタンに出す、状態ごとの件数。急ぐ順で、0 件の状態は出さない。対応待ちは隠さないので入らない */
+export function foldCounts(fold: Fold): { state: SessionState; count: number }[] {
+  const states: SessionState[] = ['busy', 'idle', 'stopped'];
+  return states
+    .map((state) => ({ state, count: [...fold.hidden, ...fold.stopped].filter((s) => s.state === state).length }))
+    .filter((c) => c.count > 0);
+}
+
+/** 画面に並んでいる順（上から）の、折りたたみの外のセッション */
+export function displayOrder(sessions: SessionView[], opts: FoldOptions = NO_FOLD): SessionView[] {
+  return buildCards(sessions).flatMap((card) => cardLayout(card, opts).sections.flatMap((g) => g.sessions));
+}
+
+/**
+ * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。折りたたみの中のものは選ばない
  * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの
  * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）
  */
-export function nextCycleTarget(sessions: SessionView[], attention: ReadonlySet<string>, currentId: string | undefined): string | undefined {
-  const ids = displayOrder(sessions).map((s) => s.id);
+export function nextCycleTarget(
+  sessions: SessionView[],
+  attention: ReadonlySet<string>,
+  currentId: string | undefined,
+  opts: FoldOptions = NO_FOLD,
+): string | undefined {
+  const ids = displayOrder(sessions, opts).map((s) => s.id);
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
   if (flagged) return flagged;
   // 今開いているものの次から探す。一覧にない（停止中など）ときは indexOf が -1 なので先頭から
@@ -198,9 +299,10 @@ export function shortcutTarget(
   attention: ReadonlySet<string>,
   currentId: string | undefined,
   claudeInFront: boolean,
+  opts: FoldOptions = NO_FOLD,
 ): string | undefined {
-  if (!claudeInFront && currentId && displayOrder(sessions).some((s) => s.id === currentId)) return currentId;
-  return nextCycleTarget(sessions, attention, currentId);
+  if (!claudeInFront && currentId && displayOrder(sessions, opts).some((s) => s.id === currentId)) return currentId;
+  return nextCycleTarget(sessions, attention, currentId, opts);
 }
 
 /** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */

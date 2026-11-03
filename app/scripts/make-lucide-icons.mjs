@@ -8,6 +8,8 @@ import { icons } from 'lucide';
 /** lucide.dev での名前 */
 const NAMES = [
   'settings', 'chevron-right', 'pin', 'pin-off', 'folder', 'house', 'git-branch', 'panel-right', 'info',
+  // 行の「常に表示」
+  'star',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
 ];

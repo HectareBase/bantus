@@ -148,7 +148,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .badge[data-state="busy"] { background: var(--busy-bg); color: var(--busy); }
 
 /* ---- 小見出し（ワークツリー） ---- */
-/* 見出し、小見出し、行、「停止中 n」は、どれも「16px の印の列 + 8px + 文字」の並び。
+/* 見出し、小見出し、行、折りたたみのボタンは、どれも「16px の印の列 + 8px + 文字」の並び。
    見出しの類は左の列にそろえ、セッションの行はいつも 1 段（12px）下げる。ワークツリーのあるなしで字下げを変えない */
 .subhead {
   position: relative;
@@ -182,7 +182,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 16px 1fr;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
   gap: 8px;
   margin: 0 4px;
@@ -223,11 +223,28 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 
 .row[data-state="stopped"] .title { color: var(--text-secondary); }
 
-/* ---- 停止中（たたむ） ---- */
-.stopped[hidden] { display: none; }
-.stopped-toggle {
+/* 常に表示の星。ふだんはマウスを乗せた行にだけ出し、常に表示の行には塗った星を出し続ける */
+.keep {
+  width: 22px;
+  height: 22px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
   display: grid;
-  grid-template-columns: 16px 1fr;
+  place-items: center;
+  opacity: 0;
+}
+.keep svg { width: 12px; height: 12px; }
+.keep:hover { background: var(--hover); color: var(--text); }
+.row:hover .keep, .row[data-keep] .keep { opacity: 1; }
+.row[data-keep] .keep svg { fill: currentColor; }
+
+/* ---- 折りたたみ（上限で隠したセッションと停止中） ---- */
+.fold-toggle {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
   gap: 8px;
   width: calc(100% - 8px);
@@ -240,12 +257,29 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   color: var(--text-tertiary);
   text-align: left;
 }
-.stopped-toggle:hover { background: var(--hover); }
-.stopped-icon { justify-self: center; display: flex; transition: transform 0.1s; }
-.stopped-icon svg { width: 12px; height: 12px; }
-.stopped.open .stopped-icon { transform: rotate(90deg); }
-.stopped-rows { display: none; }
-.stopped.open .stopped-rows { display: block; }
+.fold-toggle:hover { background: var(--hover); }
+.fold-icon { justify-self: center; display: flex; transition: transform 0.1s; }
+.fold-icon svg { width: 12px; height: 12px; }
+.fold.open .fold-icon { transform: rotate(90deg); }
+/* 左の文字は、開いているかどうかで「すべて表示」と「折りたたむ」を切り替える */
+.fold-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fold .when-open, .fold.open .when-closed { display: none; }
+.fold.open .when-open { display: inline; }
+/* 右端の、状態ごとの印と件数。印と色は行と同じ。処理中の弧は、行と見分けやすいよう回さずに止めておく */
+.fold-counts { display: flex; gap: 10px; }
+.fold-count { display: flex; align-items: center; gap: 3px; }
+.fold-count[hidden] { display: none; }
+.fold-count .status { width: 12px; height: 12px; }
+.fold-count .status svg { width: 12px; height: 12px; }
+.fold-count[data-state="busy"] .status { color: var(--busy); }
+.fold-count[data-state="idle"] .status { color: var(--idle); }
+.fold-count[data-state="stopped"] .status { color: var(--stopped); }
+.fold-count .progress-ring, .fold-count .progress-ring .arc { animation: none; }
+.fold-count .progress-ring .arc { stroke-dasharray: 18 30; }
+.fold-body { display: none; }
+.fold.open .fold-body { display: block; }
+.fold-sep { margin: 4px 4px 0 24px; padding: 2px 8px; font-size: 11px; color: var(--text-tertiary); }
+.fold-sep[hidden] { display: none; }
 
 /* ---- 状態の印（lucide のアイコン。どれを出すかは model.ts の statusIconName） ---- */
 .status {
