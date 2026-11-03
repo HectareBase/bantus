@@ -25,6 +25,7 @@ const widget: WidgetApi = {
   openSettings: () => ipcRenderer.send('open-settings'),
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
   setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
+  setAttention: (ids) => ipcRenderer.send('set-attention', ids),
 };
 
 const settingsApi: SettingsApi = {

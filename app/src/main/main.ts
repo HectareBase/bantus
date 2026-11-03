@@ -33,6 +33,8 @@ let collapsed = false;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
+/** 前に知らされた未確認のセッション。新しく増えたときだけ点滅させる */
+let attentionIds = new Set<string>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
 const gitStatus = createGitStatus(() => sendSessions());
 
@@ -91,7 +93,6 @@ function createWidget(): BrowserWindow {
     movable: false,
     minimizable: false,
     maximizable: false,
-    skipTaskbar: true,
     alwaysOnTop: getSettings().pinned,
     show: false,
     transparent: true,
@@ -223,6 +224,18 @@ function widthAtCursor(): number {
   return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
 }
 
+/**
+ * 未確認が増えたらタスクバーのボタンを点滅させ、なくなったら止める。
+ * 点滅はウィジェットが前面に来るまで続き、そのあとは止まる（未確認が残っていても、次に増えるまでは点滅させない）
+ */
+function updateAttention(ids: string[]) {
+  if (!win || win.isDestroyed()) return;
+  const next = new Set(ids);
+  if (!next.size) win.flashFrame(false);
+  else if (ids.some((id) => !attentionIds.has(id)) && !win.isFocused()) win.flashFrame(true);
+  attentionIds = next;
+}
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
@@ -293,6 +306,10 @@ app.whenReady().then(() => {
     if (typeof id !== 'string' || !ALWAYS_SHOW_ID.test(id) || typeof on !== 'boolean') return;
     const rest = getSettings().alwaysShow.filter((x) => x !== id);
     updateSettings({ alwaysShow: on ? [...rest, id] : rest });
+  });
+
+  ipcMain.on('set-attention', (_e, ids: unknown) => {
+    if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) updateAttention(ids);
   });
 
   ipcMain.handle('settings:get', () => getSettings());

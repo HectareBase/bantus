@@ -76,6 +76,8 @@ export interface WidgetApi {
   setPinned(pinned: boolean): void;
   /** セッションを常に表示にするか切り替える。保存され、onLayout で画面に戻ってくる */
   setAlwaysShow(id: string, on: boolean): void;
+  /** 未確認のセッションの ID を知らせる。増えたらタスクバーを点滅させ、なくなったら止める */
+  setAttention(ids: string[]): void;
 }
 
 export type WidgetLayout = Pick<

@@ -465,6 +465,7 @@ function render(sessions: SessionView[]) {
   if (openFold && !folds.has(openFold)) openFold = undefined;
   applyFocus();
   tooltips.prune();
+  window.widget.setAttention([...attention]);
 }
 
 // ---- 画面の操作 ----
