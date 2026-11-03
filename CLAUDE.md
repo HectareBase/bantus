@@ -9,6 +9,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 - 公開を前提にしている。個人情報と日付を書かない。コミットは git フック（`.githooks/`）が検査する。コミットの日時は書き換えない。詳しくは [docs/publishing.md](docs/publishing.md)
 - コミットメッセージは日本語で、1 行目を `<種別>(<範囲>): <要約>` にする（例：`feat(app): ツールチップを自前で描く`）。`commit-msg` フックが検査する。詳しくは [docs/commit-messages.md](docs/commit-messages.md)
 - 状態の判定は [docs/session-status.md](docs/session-status.md) に従う。知らない `waitingFor` の値は「対応待ち（その他）」として扱う
+- 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める（`start_session` に `use_worktree: true` を渡す）。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
 
 ## フォルダ
 | フォルダ | 中身 |
