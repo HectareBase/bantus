@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
+import { startSelfUpdate } from './self-update';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { tipBounds } from './tip-place';
@@ -97,6 +98,12 @@ else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('use
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
 const APP_LABEL = WORKTREE ? `Bantus（ワークツリー：${WORKTREE}）` : 'Bantus';
+
+/**
+ * main に入った新しいコードへ自動で切り替えるか。main のチェックアウトから npm start したときだけ。
+ * インストール版、ワークツリー版、見本データでは切り替えない
+ */
+const SELF_UPDATE = !app.isPackaged && !WORKTREE && !process.env.WIDGET_FIXTURE;
 
 /**
  * Windows の起動時に開く設定を変えられるか。npm start では electron.exe が登録されてしまうので、インストール版でだけ使う。
@@ -416,6 +423,33 @@ function showToast(t: ToastRequest) {
   n.show();
 }
 
+// ---- 新しいコードへの切り替え（self-update.ts） ----
+
+/** ビルドし直した画面を読み込み直す。一覧は読み込み終えたら送り直す（前と同じでも送る） */
+function reloadWindows() {
+  hideTip();
+  if (win && !win.isDestroyed()) {
+    win.webContents.once('did-finish-load', () => sendSessions(true));
+    win.webContents.reload();
+  }
+  if (tipWin && !tipWin.isDestroyed()) tipWin.webContents.reload();
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.reload();
+}
+
+/** 起動し直す。before-quit の片付け（トレイのアイコンなど）を通すため、exit ではなく quit で終える */
+function relaunch() {
+  app.relaunch({ args: [app.getAppPath()] });
+  app.quit();
+}
+
+/** 切り替えの失敗などを、トレイのツールチップと Windows の通知で伝える。undefined でツールチップを戻す */
+function updateNotice(message: string | undefined) {
+  tray?.setToolTip(message ? `${APP_LABEL}\n${message}` : APP_LABEL);
+  if (!message) return;
+  console.log(message);
+  if (Notification.isSupported()) new Notification({ title: APP_LABEL, body: message, icon: ICON }).show();
+}
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
@@ -440,6 +474,7 @@ app.whenReady().then(() => {
   tipWin = createTipWindow();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
+  const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
   if (!process.env.WIDGET_SCREENSHOT) startForegroundProbe();
   // ワークツリー版も登録しない（いつものウィジェットが持っている）
@@ -532,6 +567,7 @@ app.whenReady().then(() => {
 
   app.on('before-quit', () => {
     stopWatching();
+    stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();
     tray?.destroy();
