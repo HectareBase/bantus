@@ -177,8 +177,8 @@ function foldOptions(): FoldOptions {
 }
 
 /**
- * ショートカット：Claude が前面になければ今のセッションを前面に出す。
- * 前面なら未確認の行を表示順に開き、なければ表示順で次の行（折りたたみの中は選ばない）
+ * ショートカット：未確認の行があれば、Claude が前面かどうかに関係なく表示順に開く（折りたたみの中は選ばない）。
+ * なければ、前面にないときは今のセッションを前面に出し、前面なら表示順で次の行
  */
 function openNext(claudeInFront: boolean) {
   const id = shortcutTarget(latest, attention, applyFocus(), claudeInFront, foldOptions());

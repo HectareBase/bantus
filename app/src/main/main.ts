@@ -401,7 +401,7 @@ app.whenReady().then(() => {
   if (!process.env.WIDGET_SCREENSHOT) {
     startForegroundProbe();
     const ok = globalShortcut.register(CYCLE_SHORTCUT, async () => {
-      // Claude が前面にないときは、次へ進まずに今のセッションを前面に出す。調べられなかったときは前面にあるものとして扱う
+      // 未確認の行がなく Claude が前面にないときは、次へ進まずに今のセッションを前面に出す（決めるのは画面側）。調べられなかったときは前面にあるものとして扱う
       const name = await foregroundProcessName();
       const claudeInFront = name === undefined || name.toLowerCase() === CLAUDE_PROCESS;
       win?.webContents.send('cycle', claudeInFront);

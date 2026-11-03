@@ -294,8 +294,12 @@ describe('displayOrder と nextCycleTarget', () => {
     assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
   });
 
-  it('Claude が前面になければ、未確認があっても今開いている行を前面に出す', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false), 'm1'));
+  it('Claude が前面になくても、未確認の行があればそちらを開く', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false), 't1'));
+  it('未確認が今開いている行だけなら、前面になければ今開いている行を前面に出す', () =>
+    assert.equal(shortcutTarget(sessions, new Set(['m1']), 'm1', false), 'm1'));
+  it('未確認がなく Claude が前面になければ、今開いている行を前面に出す', () =>
+    assert.equal(shortcutTarget(sessions, new Set(), 'm1', false), 'm1'));
   it('Claude が前面にあれば、いつもどおり次へ進む', () =>
     assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', true), 't1'));
   it('前面になくても、今開いている行が一覧にない（停止中）か、わからなければ次へ進む', () => {
