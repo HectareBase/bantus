@@ -31,7 +31,7 @@ export interface Settings {
   showUpdated: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
-  /** 対応待ちになったときに知らせる（音とトースト） */
+  /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
   notifyWaiting: boolean;
   /** 完了した（処理中から待機になった）ときに知らせる。Claude 本体の通知と重なるので、既定は知らせない */
   notifyDone: boolean;
@@ -43,6 +43,8 @@ export interface Settings {
   soundVolume: number;
   /** 知らせるときに Windows の通知（トースト）を出す */
   toast: boolean;
+  /** 知らせるときにタスクバーを数秒だけ点滅させる */
+  flash: boolean;
   /** Claude が前面で、そのセッションを開いているときは知らせない */
   muteWhenOpen: boolean;
   /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
@@ -86,6 +88,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundType: 'chime',
   soundVolume: 60,
   toast: false,
+  flash: true,
   muteWhenOpen: true,
   alwaysShow: [],
 };
@@ -128,7 +131,7 @@ export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
 export type SettingDef =
   | (Base<
       | 'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'openAtLogin'
-      | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'muteWhenOpen'
+      | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -249,6 +252,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'toast', category: 'notify', group: 'Windows の通知', type: 'segmented',
     label: 'トースト通知', description: 'クリックするとそのセッションを開く。通知そのものの音は出さず、上の「音」に従う',
     options: [{ value: true, label: '出す' }, { value: false, label: '出さない' }],
+  },
+  {
+    key: 'flash', category: 'notify', group: 'Windows の通知', type: 'segmented',
+    label: 'タスクバーの点滅', description: '3 秒ほどで止まり、オレンジのままにはしない。ウィジェットが前面にあるときは点滅させない',
+    options: [{ value: true, label: '点滅させる' }, { value: false, label: '点滅させない' }],
   },
 ];
 

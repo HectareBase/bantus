@@ -6,6 +6,7 @@ import {
   NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, changeItems, changesTooltip, displayOrder, foldCounts, foldLabel, formatAgo,
   nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type FoldOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
+  alertActions, hasAlertOutput, openedInClaude,
 } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
@@ -160,6 +161,39 @@ describe('知らせるものの選び方', () => {
     assert.equal(toastContent([], [s1]), undefined);
     assert.equal(toastContent([a('local_gone', 'done')], [s1]), undefined);
   });
+});
+
+describe('音・トースト・点滅の決め方（alertActions）', () => {
+  const on = { sound: true, toast: true, flash: true };
+  const off = { sound: false, toast: false, flash: false };
+  const a = (id: string, reason: Alert['reason']): Alert => ({ id, reason });
+  const s1 = view({ title: 'fix login' });
+
+  it('知らせ方が 1 つでもオンなら動く。すべてオフなら動かない', () => {
+    assert.equal(hasAlertOutput(off), false);
+    assert.equal(hasAlertOutput({ ...off, flash: true }), true);
+  });
+  it('知らせるものがなければ、何もしない（点滅もしない）', () => assert.equal(alertActions([], on, [s1]), undefined));
+  it('すべてオンなら、音・トースト・点滅をそろって出す', () =>
+    assert.deepEqual(alertActions([a(s1.id, 'done')], on, [s1]), {
+      sound: 'done', toast: { id: s1.id, title: 'fix login', body: '完了' }, flash: true,
+    }));
+  it('点滅だけオンなら、点滅だけ', () =>
+    assert.deepEqual(alertActions([a(s1.id, 'waiting')], { ...off, flash: true }, [s1]), { sound: undefined, toast: undefined, flash: true }));
+  it('点滅をオフにすれば、音とトーストだけ', () =>
+    assert.equal(alertActions([a(s1.id, 'waiting')], { ...on, flash: false }, [s1])?.flash, false));
+  it('すべてオフなら undefined（前に知らせた時刻も進めない）', () => assert.equal(alertActions([a(s1.id, 'waiting')], off, [s1]), undefined));
+});
+
+describe('Claude 本体で開いたか（openedInClaude）', () => {
+  it('前に見た時刻より新しくなったら開いた', () => assert.equal(openedInClaude(100, 200), true));
+  it('同じか、戻ったなら開いていない', () => {
+    assert.equal(openedInClaude(200, 200), false);
+    assert.equal(openedInClaude(200, 100), false);
+  });
+  it('開いたことがなかったセッションを初めて開いたら、開いた', () => assert.equal(openedInClaude(0, 50), true));
+  it('初めて見たセッションは、開いたとはみなさない', () => assert.equal(openedInClaude(undefined, 500), false));
+  it('時刻がないままなら開いていない', () => assert.equal(openedInClaude(0, undefined), false));
 });
 
 describe('tooltip と waitingLabel', () => {

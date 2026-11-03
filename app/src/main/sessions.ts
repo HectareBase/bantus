@@ -219,6 +219,8 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const numbered: SessionView[] = [];
   // 今開いているセッション（docs/research/deep-link-and-uia.md）。サイドチャットのときは親の ID にする
   let focused: { id: string; at: number } | undefined;
+  /** セッションごとの最後に開いた時刻。サイドチャットは親に入れ、新しいほうを残す */
+  const focusedAt = new Map<string, number>();
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
@@ -229,6 +231,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const btwParent = d.spawnedFrom?.btw ? d.spawnedFrom.sessionId : undefined;
       const focusId: string = btwParent || d.sessionId;
       if (!archived && at && (!focused || at > focused.at)) focused = { id: focusId, at };
+      if (!archived && at > (focusedAt.get(focusId) ?? 0)) focusedAt.set(focusId, at);
       if (btwParent) continue;
       const r = running.get(d.cliSessionId);
       const state = toState(r);
@@ -275,6 +278,10 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   }
   assignSeq(numbered);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
+  for (const view of views) {
+    const at = focusedAt.get(view.id);
+    if (at) view.focusedAt = at;
+  }
   const focusedId = focused?.id;
   const focusedView = focusedId && views.find((s) => s.id === focusedId);
   if (focusedView) focusedView.focused = true;

@@ -42,6 +42,8 @@ export interface SessionView {
   lastActivityAt: number;
   /** デスクトップで今開いているセッション（`lastFocusedAt` が一番新しいもの）だけ true */
   focused?: boolean;
+  /** デスクトップで最後に開いた時刻（`lastFocusedAt`、Unix ミリ秒）。サイドチャットで開いたときは親の値にする。開いたことがなければ省く */
+  focusedAt?: number;
 }
 
 /** `git status` から数えた件数（src/main/git-status.ts） */
@@ -75,12 +77,14 @@ export interface WidgetApi {
   setPinned(pinned: boolean): void;
   /** セッションを常に表示にするか切り替える。保存され、onLayout で画面に戻ってくる */
   setAlwaysShow(id: string, on: boolean): void;
-  /** 未確認のセッションの ID を知らせる。増えたらタスクバーを点滅させ、なくなったら止める */
-  setAttention(ids: string[]): void;
+  /** タスクバーを数秒だけ点滅させる。知らせる変化があったときに使う。ウィジェットが前面なら何もしない */
+  flashTaskbar(): void;
   /** Claude のウィンドウが前面にあるか。調べられなかったときは false（知らせないより、知らせるほうを選ぶ） */
   isClaudeInFront(): Promise<boolean>;
-  /** Windows の通知（トースト）を出す。クリックすると、そのセッションを開く */
+  /** Windows の通知（トースト）を出す。クリックすると onToastClick に届く */
   showToast(toast: ToastRequest): void;
+  /** トーストがクリックされたとき。開くのは画面側（未確認の帯を消すため） */
+  onToastClick(listener: (id: string) => void): void;
   /** ツールチップを出す。rect は基準の要素（ウィジェットの中の座標）。ツールチップは別のウィンドウで、ウィジェットの外に出る */
   showTip(text: string, rect: TipRect): void;
   hideTip(): void;
@@ -113,7 +117,7 @@ export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'groupLimit' | 'foldScope'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'alwaysShow'
-  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'muteWhenOpen'
+  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen'
 >;
 
 export interface DisplayOption {

@@ -230,6 +230,50 @@ export function alertSound(alerts: Alert[]): AlertReason | undefined {
   return alerts.some((a) => a.reason === 'waiting') ? 'waiting' : 'done';
 }
 
+/** 知らせ方。どれもオフなら何もしない */
+export interface AlertOutputs {
+  sound: boolean;
+  toast: boolean;
+  flash: boolean;
+}
+
+export interface AlertActions {
+  /** 鳴らす音。鳴らさないなら undefined */
+  sound?: AlertReason;
+  /** 出すトースト。出さないなら undefined */
+  toast?: ToastContent;
+  /** タスクバーを点滅させるか */
+  flash: boolean;
+}
+
+/** 知らせ方が 1 つでもオンか */
+export function hasAlertOutput(outputs: AlertOutputs): boolean {
+  return outputs.sound || outputs.toast || outputs.flash;
+}
+
+/**
+ * pickAlerts を通った知らせから、音・トースト・点滅のそれぞれをどうするか決める。
+ * 知らせるものがない（どれも出さない）ときは undefined。音と点滅は、何件でも 1 回だけ
+ */
+export function alertActions(alerts: Alert[], outputs: AlertOutputs, sessions: SessionView[]): AlertActions | undefined {
+  const reason = alertSound(alerts);
+  if (!reason) return undefined;
+  const actions: AlertActions = {
+    sound: outputs.sound ? reason : undefined,
+    toast: outputs.toast ? toastContent(alerts, sessions) : undefined,
+    flash: outputs.flash,
+  };
+  return actions.sound || actions.toast || actions.flash ? actions : undefined;
+}
+
+/**
+ * Claude 本体で開いたか。前に見た focusedAt（まだ見ていなければ undefined）より新しくなったら true。
+ * 初めて見たセッションは、開いたとはみなさない（起動直後に帯を消さないため）
+ */
+export function openedInClaude(prevFocusedAt: number | undefined, focusedAt: number | undefined): boolean {
+  return prevFocusedAt !== undefined && (focusedAt ?? 0) > prevFocusedAt;
+}
+
 export interface ToastContent {
   /** クリックで開くセッション */
   id: string;

@@ -7,8 +7,8 @@ import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
   PROGRESS_RING,
+  alertActions,
   alertDelay,
-  alertSound,
   attentionReason,
   buildCards,
   cardBadge,
@@ -18,13 +18,14 @@ import {
   foldCounts,
   foldLabel,
   formatAgo,
+  hasAlertOutput,
   mergeAlerts,
   nextAttention,
+  openedInClaude,
   pickAlerts,
   shortcutTarget,
   resolveFocus,
   statusIconName,
-  toastContent,
   tooltip,
   type Alert,
   type Card,
@@ -90,6 +91,8 @@ let openFold: string | undefined;
 /** 未確認（左端の帯を出す）セッションの ID と、それを決めるために覚えておく前の状態 */
 const attention = new Set<string>();
 const seenState = new Map<string, SessionView['state']>();
+/** 前に見た、Claude 本体で最後に開いた時刻。進んだら本体で開いたものとして帯を消す */
+const seenFocusedAt = new Map<string, number>();
 /** 一覧の設定（onLayout で届く）。常に表示は、押したときにすぐ変え、保存された値が戻ってきたらそれに合わせる */
 let groupLimit = 0;
 let foldScope: FoldOptions['scope'] = 'repo';
@@ -100,7 +103,7 @@ let latest: SessionView[] = [];
 let pendingFocus: PendingFocus | undefined;
 let pendingTimer: number | undefined;
 /** 通知の設定（onLayout で届く） */
-type NotifyOptions = Pick<WidgetLayout, 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'muteWhenOpen'>;
+type NotifyOptions = Pick<WidgetLayout, 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen'>;
 let notify: NotifyOptions | undefined;
 /** 最初のセッション一覧を受け取ったか。起動した時点の状態では知らせない */
 let primed = false;
@@ -206,23 +209,27 @@ function toggleAlwaysShow(id: string) {
 
 /**
  * 状態の変化から、未確認の帯を付けるか消すかを決める。どの行を折りたたむかに使うので、描く前に済ませる。
+ * Claude 本体で開いた（lastFocusedAt が進んだ）セッションは、帯を消す。
  * 知らせる変化（対応待ちになった、完了した）を返す
  */
 function updateAttention(sessions: SessionView[]): Alert[] {
   const fresh: Alert[] = [];
   for (const s of sessions) {
     const prev = seenState.get(s.id);
-    if (prev === s.state) continue;
-    if (nextAttention(prev, s.state, attention.has(s.id))) attention.add(s.id);
-    else attention.delete(s.id);
-    const reason = attentionReason(prev, s.state);
-    if (reason) fresh.push({ id: s.id, reason });
-    seenState.set(s.id, s.state);
+    if (prev !== s.state) {
+      if (nextAttention(prev, s.state, attention.has(s.id))) attention.add(s.id);
+      else attention.delete(s.id);
+      const reason = attentionReason(prev, s.state);
+      if (reason) fresh.push({ id: s.id, reason });
+      seenState.set(s.id, s.state);
+    }
+    if (openedInClaude(seenFocusedAt.get(s.id), s.focusedAt)) attention.delete(s.id);
+    seenFocusedAt.set(s.id, s.focusedAt ?? 0);
   }
   return fresh;
 }
 
-// ---- 音とトースト ----
+// ---- 音、トースト、タスクバーの点滅 ----
 
 /** 知らせる変化をためておき、少し待ってからまとめて知らせる。続くときは数秒あける（タイマーはそのときだけ使う） */
 function queueAlerts(fresh: Alert[]) {
@@ -236,18 +243,21 @@ async function fireAlerts() {
   const queued = queuedAlerts.filter((a) => attention.has(a.id));
   queuedAlerts = [];
   const n = notify;
-  if (!n || !queued.length || !(n.sound || n.toast)) return;
+  if (!n || !queued.length) return;
   // Claude が前面かどうかは、今開いているセッションが入っているときだけ調べる（PowerShell に問い合わせるため）
   const focused = resolveFocus(latest, pendingFocus).id;
-  const askFront = n.muteWhenOpen && focused !== undefined && queued.some((a) => a.id === focused);
+  const askFront = focused !== undefined && queued.some((a) => a.id === focused);
   const openInFront = askFront && (await window.widget.isClaudeInFront()) ? focused : undefined;
+  // 本体で見ている最中に変わったセッションには、帯を付けない
+  if (openInFront && attention.delete(openInFront)) render(latest);
+  if (!hasAlertOutput(n)) return;
   const alerts = pickAlerts(queued, { waiting: n.notifyWaiting, done: n.notifyDone, muteWhenOpen: n.muteWhenOpen }, openInFront);
-  const reason = alertSound(alerts);
-  if (!reason) return;
+  const actions = alertActions(alerts, n, latest);
+  if (!actions) return;
   lastAlertAt = Date.now();
-  if (n.sound) playSound(n.soundType, reason, n.soundVolume);
-  const toast = n.toast ? toastContent(alerts, latest) : undefined;
-  if (toast) window.widget.showToast(toast);
+  if (actions.sound) playSound(n.soundType, actions.sound, n.soundVolume);
+  if (actions.toast) window.widget.showToast(actions.toast);
+  if (actions.flash) window.widget.flashTaskbar();
 }
 
 function getRow(s: SessionView): RowRefs {
@@ -488,6 +498,7 @@ function render(sessions: SessionView[]) {
   for (const id of rows.keys()) if (!ids.has(id)) rows.delete(id);
   for (const id of attention) if (!ids.has(id)) attention.delete(id);
   for (const id of seenState.keys()) if (!ids.has(id)) seenState.delete(id);
+  for (const id of seenFocusedAt.keys()) if (!ids.has(id)) seenFocusedAt.delete(id);
   const cardKeys = new Set(list.map((c) => c.key));
   for (const key of cards.keys()) if (!cardKeys.has(key)) cards.delete(key);
   for (const map of [subheads, sections, lists] as Map<string, Element>[]) {
@@ -497,7 +508,6 @@ function render(sessions: SessionView[]) {
   if (openFold && !folds.has(openFold)) openFold = undefined;
   applyFocus();
   tooltips.prune();
-  window.widget.setAttention([...attention]);
 }
 
 // ---- 画面の操作 ----
@@ -574,8 +584,8 @@ function applyLayout(layout: WidgetLayout) {
   foldScope = scope;
   sort = { project: layout.projectOrder, worktree: layout.worktreeOrder, session: layout.sessionOrder };
   alwaysShow = new Set(keep);
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen } = layout;
-  notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen };
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = layout;
+  notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen };
   render(latest);
   const root = document.documentElement;
   root.dataset.edge = edge;
@@ -595,3 +605,5 @@ window.widget.onSessions((sessions) => {
   primed = true;
 });
 window.widget.onCycle(openNext);
+// トーストのクリックも、行のクリックと同じく帯を消してから開く
+window.widget.onToastClick(openRow);

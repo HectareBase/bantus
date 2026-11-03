@@ -96,16 +96,16 @@ describe('設定画面のカテゴリ', () => {
     assert.deepEqual(layout('notify'), [
       ['知らせるとき', ['notifyWaiting', 'notifyDone', 'muteWhenOpen']],
       ['音', ['sound', 'soundType', 'soundVolume']],
-      ['Windows の通知', ['toast']],
+      ['Windows の通知', ['toast', 'flash']],
     ]));
 });
 
 describe('normalizeSettings の通知', () => {
-  it('なければ、対応待ちだけを音で知らせ、トーストは出さない', () => {
+  it('なければ、対応待ちだけを音と点滅で知らせ、トーストは出さない', () => {
     const s = normalizeSettings({});
     assert.deepEqual(
-      [s.notifyWaiting, s.notifyDone, s.sound, s.soundType, s.soundVolume, s.toast, s.muteWhenOpen],
-      [true, false, true, 'chime', 60, false, true],
+      [s.notifyWaiting, s.notifyDone, s.sound, s.soundType, s.soundVolume, s.toast, s.flash, s.muteWhenOpen],
+      [true, false, true, 'chime', 60, false, true, true],
     );
   });
   it('選べる値だけを残す', () => {

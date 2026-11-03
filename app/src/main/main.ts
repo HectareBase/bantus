@@ -31,6 +31,8 @@ const APP_USER_MODEL_ID = 'io.github.hectarebase.bantus';
 const CYCLE_SHORTCUT = 'Control+Alt+N';
 /** Claude デスクトップのプロセス名 */
 const CLAUDE_PROCESS = 'claude';
+/** タスクバーを点滅させる長さ。止めたあとはオレンジのまま残さない */
+const FLASH_MS = 3_000;
 
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
@@ -43,8 +45,8 @@ let tray: Tray | undefined;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
-/** 前に知らされた未確認のセッション。新しく増えたときだけ点滅させる */
-let attentionIds = new Set<string>();
+/** タスクバーの点滅を止めるタイマー */
+let flashTimer: NodeJS.Timeout | undefined;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
 const toasts = new Set<Notification>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
@@ -96,10 +98,10 @@ function sidebarBounds() {
 
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow } = s;
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen } = s;
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow,
-    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, muteWhenOpen,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen,
   };
 }
 
@@ -323,15 +325,17 @@ function widthAtCursor(): number {
 }
 
 /**
- * 未確認が増えたらタスクバーのボタンを点滅させ、なくなったら止める。
- * 点滅はウィジェットが前面に来るまで続き、そのあとは止まる（未確認が残っていても、次に増えるまでは点滅させない）
+ * タスクバーのボタンを数秒だけ点滅させる（音やトーストと同じ、1 回だけの知らせ）。
+ * 続けて頼まれたら止める時刻を延ばす。止めるときは flashFrame(false) で、オレンジのまま残さない
  */
-function updateAttention(ids: string[]) {
-  if (!win || win.isDestroyed()) return;
-  const next = new Set(ids);
-  if (!next.size) win.flashFrame(false);
-  else if (ids.some((id) => !attentionIds.has(id)) && !win.isFocused()) win.flashFrame(true);
-  attentionIds = next;
+function flashTaskbar() {
+  if (!win || win.isDestroyed() || win.isFocused()) return;
+  win.flashFrame(true);
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => {
+    flashTimer = undefined;
+    if (win && !win.isDestroyed()) win.flashFrame(false);
+  }, FLASH_MS);
 }
 
 /** Claude のウィンドウが前面にあるか。調べられなかったときは false */
@@ -359,7 +363,11 @@ function showToast(t: ToastRequest) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title: t.title, body: t.body, icon: ICON, silent: true });
   toasts.add(n);
-  n.on('click', () => openSession(t.id));
+  // 画面側の openRow を通して開く（未確認の帯を消す）。画面がなければここで開く
+  n.on('click', () => {
+    if (win && !win.isDestroyed()) win.webContents.send('toast-click', t.id);
+    else openSession(t.id);
+  });
   n.on('close', () => toasts.delete(n));
   n.on('failed', () => toasts.delete(n));
   n.show();
@@ -430,9 +438,7 @@ app.whenReady().then(() => {
     updateSettings({ alwaysShow: on ? [...rest, id] : rest });
   });
 
-  ipcMain.on('set-attention', (_e, ids: unknown) => {
-    if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) updateAttention(ids);
-  });
+  ipcMain.on('flash-taskbar', () => flashTaskbar());
   ipcMain.handle('claude-in-front', () => claudeInFront());
   ipcMain.on('show-toast', (_e, toast: unknown) => {
     if (isToastRequest(toast)) showToast(toast);
