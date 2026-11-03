@@ -133,4 +133,4 @@ PowerShell の `Start-Process -WindowStyle Hidden` で起動すると、Windows 
 | 点滅 1 つとリング 2 つ（見本データ、カードの版） | 0.13%（1 コアの 2.08%） | 約 336MB |
 
 ## 使っている版
-Electron 44.9.0、TypeScript 7.0.2、@types/node 24.19.2（Electron 44 の Node 24 に合わせる）、electron-builder 26.17.0。どれも、出てから 2 週間以上たった版を選んでいます。
+Electron 44.10.1、TypeScript 7.0.2、@types/node 24.19.2（Electron 44 の Node 24 に合わせる）、electron-builder 26.17.0。どれも、出てから 2 週間以上たった版を選んでいます。ただし Electron は、高の脆弱性（GHSA-jr5w-w6x2-84p9）を直すため、同じメジャーの修正版 44.10.1 に 2 週間を待たずに上げました。
