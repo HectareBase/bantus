@@ -12,7 +12,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function enabled(): boolean {
   const root = document.documentElement;
-  return !reducedMotion.matches && !root.classList.contains('paused') && !root.classList.contains('collapsed');
+  return !reducedMotion.matches && !root.classList.contains('paused');
 }
 
 /** 見えている要素だけの位置。たたんだ「停止中」の中など、表示されていないものは測らない */

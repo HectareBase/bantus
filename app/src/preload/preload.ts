@@ -17,7 +17,6 @@ const widget: WidgetApi = {
     ipcRenderer.on('cycle', (_e, claudeInFront: unknown) => listener(claudeInFront !== false));
   },
   openSession: (id) => ipcRenderer.send('open-session', id),
-  setCollapsed: (collapsed) => ipcRenderer.send('set-collapsed', collapsed),
   setClickThrough: (through) => ipcRenderer.send('set-click-through', through),
   resizeStart: () => ipcRenderer.send('resize-start'),
   resizeMove: () => ipcRenderer.send('resize-move'),

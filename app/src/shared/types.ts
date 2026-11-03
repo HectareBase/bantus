@@ -64,7 +64,6 @@ export interface WidgetApi {
   /** ショートカットが押された。claudeInFront は Claude のウィンドウが前面にあったか */
   onCycle(listener: (claudeInFront: boolean) => void): void;
   openSession(id: string): void;
-  setCollapsed(collapsed: boolean): void;
   /** true にすると、ウィジェットへのクリックを後ろのウィンドウへ通す（背景が 0% のとき、何もない所の上で使う） */
   setClickThrough(through: boolean): void;
   /** 内側の端のドラッグで幅を変える。move のたびにメインプロセスがカーソルの位置から幅を決め、end で保存する */

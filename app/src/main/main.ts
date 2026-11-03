@@ -12,7 +12,6 @@ import { tipBounds } from './tip-place';
 import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, TipRect, WidgetLayout } from '../shared/types';
 
-const COLLAPSED_WIDTH = 52;
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
 const SETTINGS_MIN = { width: 520, height: 400 };
@@ -34,7 +33,6 @@ let tipAnchor: TipRect | undefined;
 let tipHideTimer: NodeJS.Timeout | undefined;
 /** 変数に持っておかないと、ガベージコレクションでトレイから消える */
 let tray: Tray | undefined;
-let collapsed = false;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
@@ -59,7 +57,7 @@ function targetDisplay(s: Settings): Display {
 function sidebarBounds() {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
-  const width = collapsed ? COLLAPSED_WIDTH : Math.min(dragWidth ?? s.width, Math.floor(area.width / 2));
+  const width = Math.min(dragWidth ?? s.width, Math.floor(area.width / 2));
   const x = s.edge === 'left' ? area.x : area.x + area.width - width;
   return { x, y: area.y, width, height: area.height };
 }
@@ -340,12 +338,8 @@ app.whenReady().then(() => {
       shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
     }
   });
-  ipcMain.on('set-collapsed', (_e, value: unknown) => {
-    collapsed = value === true;
-    win?.setBounds(sidebarBounds());
-  });
   ipcMain.on('resize-start', () => {
-    if (!collapsed) dragWidth = getSettings().width;
+    dragWidth = getSettings().width;
   });
   ipcMain.on('resize-move', () => {
     if (dragWidth === undefined) return;

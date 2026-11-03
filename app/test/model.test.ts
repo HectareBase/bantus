@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   NO_FOLD, buildCards, buildGroups, cardBadge, cardLayout, changeItems, changesTooltip, displayOrder, foldCounts, foldLabel, formatAgo,
-  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateOfRank, statusIconName, tooltip, waitingLabel, type FoldOptions,
+  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type FoldOptions,
 } from '../src/renderer/model';
 import type { SessionView } from '../src/shared/types';
 import { view } from './helpers';
@@ -136,10 +136,6 @@ describe('formatAgo', () => {
     assert.equal(formatAgo(now - 3_600_000, now), '1 時間前');
     assert.equal(formatAgo(now - 24 * 3_600_000, now), '1 日前');
   });
-});
-
-describe('stateOfRank', () => {
-  it('順位から状態に戻す', () => assert.deepEqual([0, 1, 2, 3].map(stateOfRank), ['waiting', 'busy', 'idle', 'stopped']));
 });
 
 describe('resolveFocus', () => {

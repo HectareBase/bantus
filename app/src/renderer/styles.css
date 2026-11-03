@@ -108,6 +108,12 @@ button { font: inherit; color: inherit; }
 .icon-button:active { background: var(--pressed); }
 /* アイコンは lucide（icon.ts）。線の太さなどは SVG の属性に入っているので、ここでは大きさだけを決める */
 .icon-button svg { width: 14px; height: 14px; }
+/* 固定を外したら、ピンを傾ける（抜けかけて、留まっていない見た目） */
+#pin svg { transition: transform 0.15s cubic-bezier(0, 0, 0, 1); }
+#pin[aria-pressed="false"] svg { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) {
+  #pin svg { transition: none; }
+}
 
 /* ---- カード ---- */
 /* スクロールバー（6px）の場所はいつも空けておき、右の余白をその分減らす。
@@ -375,7 +381,7 @@ html.hide-updated .when { display: none; }
 .row[data-state="waiting"] .status svg { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
-html.floating .card, html.floating .titlebar, html.floating .mini-repo { border-color: rgba(128, 128, 128, 0.35); }
+html.floating .card, html.floating .titlebar { border-color: rgba(128, 128, 128, 0.35); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
@@ -386,54 +392,11 @@ html.floating .card, html.floating .titlebar, html.floating .mini-repo { border-
 @keyframes blink { 50% { opacity: 0.2; } }
 
 /* 見えていないときは止める */
-html.paused .status svg, html.paused .status circle, html.paused .row::before, html.paused .mini-ring.blink { animation-play-state: paused; }
+html.paused .status svg, html.paused .status circle, html.paused .row::before { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
-  .status svg, .status circle, .row::before, .mini-ring.blink { animation: none; }
+  .status svg, .status circle, .row::before { animation: none; }
 }
-
-/* ---- たたんだ表示 ---- */
-#mini { display: none; }
-html.collapsed main { display: none; }
-html.collapsed .app-name { display: none; }
-html.collapsed .app-icon { margin: 4px 0 0; }
-html.collapsed .titlebar { flex-direction: column; height: auto; margin: 8px 6px; padding: 4px 0; gap: 4px; }
-html.collapsed .spacer { display: none; }
-html.collapsed #pin, html.collapsed #settings { display: none; }
-/* たたむボタンの矢印は、置いている端の向き。たたんだら反対を向く */
-html[data-edge="left"] #collapse svg { transform: rotate(180deg); }
-html.collapsed #collapse svg { transform: rotate(180deg); }
-html.collapsed[data-edge="left"] #collapse svg { transform: none; }
-html.collapsed #mini {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding-top: 8px;
-  overflow-y: auto;
-}
-
-.mini-repo {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--card);
-  font-size: 13px;
-  font-weight: 600;
-}
-.mini-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid var(--card-stroke);
-}
-.mini-ring[data-state="waiting"] { border-color: var(--waiting); }
-.mini-ring[data-state="busy"] { border-color: var(--busy); }
-.mini-ring[data-state="idle"] { border-color: var(--idle); }
-.mini-ring.blink { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
 .resize-handle {
@@ -447,4 +410,3 @@ html.collapsed #mini {
 }
 html[data-edge="left"] .resize-handle { left: auto; right: 0; }
 html.resizing, html.resizing * { cursor: ew-resize !important; }
-html.collapsed .resize-handle { display: none; }

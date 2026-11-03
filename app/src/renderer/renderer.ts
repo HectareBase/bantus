@@ -18,7 +18,6 @@ import {
   nextAttention,
   shortcutTarget,
   resolveFocus,
-  stateOfRank,
   statusIconName,
   tooltip,
   type Card,
@@ -65,7 +64,6 @@ interface FoldRefs {
 }
 
 const cardsEl = document.getElementById('cards')!;
-const miniEl = document.getElementById('mini')!;
 const rowTemplate = document.getElementById('row-template') as HTMLTemplateElement;
 const cardTemplate = document.getElementById('card-template') as HTMLTemplateElement;
 const subheadTemplate = document.getElementById('subhead-template') as HTMLTemplateElement;
@@ -411,24 +409,6 @@ function renderCard(card: Card, opts: FoldOptions): HTMLElement {
   return refs.el;
 }
 
-function renderMini(list: Card[]) {
-  const nodes = list.map((card) => {
-    const item = document.createElement('div');
-    item.className = 'mini-repo';
-    item.dataset.tip = card.name;
-    item.textContent = [...card.name][0]?.toUpperCase() ?? '?';
-    const ring = document.createElement('span');
-    ring.className = 'mini-ring';
-    const state = stateOfRank(card.rank);
-    ring.dataset.state = state;
-    ring.classList.toggle('blink', state === 'waiting');
-    item.append(ring);
-    item.addEventListener('click', () => setCollapsed(false));
-    return item;
-  });
-  miniEl.replaceChildren(...nodes);
-}
-
 /** 並べ替えで動かす要素。親（カード）を子より先に */
 function* animatedElements(): Iterable<HTMLElement> {
   for (const c of cards.values()) yield c.el;
@@ -448,7 +428,6 @@ function render(sessions: SessionView[]) {
   // 並びが変わった行・小見出し・折りたたみ・カードを、前の位置からすべらせる
   flip(animatedElements, () => {
     syncChildren(cardsEl, list.map((card) => renderCard(card, opts)));
-    renderMini(list);
   });
 
   // なくなったものは捨てる
@@ -482,14 +461,6 @@ const updatePaused = () => document.documentElement.classList.toggle('paused', d
 document.addEventListener('visibilitychange', updatePaused);
 updatePaused();
 
-let collapsed = false;
-function setCollapsed(value: boolean) {
-  collapsed = value;
-  if (collapsed) setOpenFold(undefined);
-  document.documentElement.classList.toggle('collapsed', collapsed);
-  window.widget.setCollapsed(collapsed);
-}
-document.getElementById('collapse')!.addEventListener('click', () => setCollapsed(!collapsed));
 document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
 
 // 最前面への固定。押した見た目はすぐ変え、保存された値が onLayout で戻ってきたらそれに合わせる
@@ -497,7 +468,6 @@ const pinButton = document.getElementById('pin')!;
 let pinned = true;
 function showPinned(value: boolean) {
   pinned = value;
-  setIcon(pinButton, pinned ? 'pin' : 'pin-off');
   pinButton.setAttribute('aria-pressed', String(pinned));
   pinButton.dataset.tip = pinned ? '最前面に固定中（クリックで外す）' : '最前面に固定する';
 }
@@ -509,7 +479,7 @@ pinButton.addEventListener('click', () => {
 // 内側の端をドラッグして幅を変える。カーソルがウィンドウの外へ出ても、ポインターをつかんだまま追う
 const resizeHandle = document.getElementById('resize-handle')!;
 resizeHandle.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || collapsed) return;
+  if (e.button !== 0) return;
   resizeHandle.setPointerCapture(e.pointerId);
   document.documentElement.classList.add('resizing');
   window.widget.resizeStart();
@@ -532,7 +502,7 @@ function setClickThrough(value: boolean) {
 }
 document.addEventListener('mousemove', (e) => {
   if (!floating) return;
-  const solid = (e.target as Element).closest('.card, .titlebar, .mini-repo, .resize-handle');
+  const solid = (e.target as Element).closest('.card, .titlebar, .resize-handle');
   setClickThrough(!solid);
 });
 

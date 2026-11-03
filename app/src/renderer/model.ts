@@ -65,10 +65,6 @@ export function compareSessions(order: SortOrder) {
   };
 }
 
-export function stateOfRank(rank: number): SessionState {
-  return (Object.keys(RANK) as SessionState[]).find((k) => RANK[k] === rank) ?? 'stopped';
-}
-
 export function formatAgo(ms: number, now = Date.now()): string {
   if (!ms) return '';
   const min = Math.floor((now - ms) / 60_000);
