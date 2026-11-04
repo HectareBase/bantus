@@ -25,6 +25,8 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 let current: FlyShow | undefined;
 let open = false;
+/** この時刻（performance.now）を過ぎてから動かしたら、下の段にまとめを出す。開いて変形している間は出さない */
+let summaryArmedAt = 0;
 let items = new Map<string, FlyItem>();
 
 function rectOf(el: HTMLElement): TipRect {
@@ -96,7 +98,11 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     el.append(act);
   }
   el.addEventListener('click', () => window.flyoutApi.action({ type: 'open', id: item.id }));
-  el.addEventListener('pointerenter', () => showSummary(item.id));
+  // 開いたときは一覧がカーソルの下に広がるので、乗っただけでは出さない。カーソルを動かしたときだけ、下の段にまとめを出す
+  // 中身が変わったときに Chromium が送る動きのない pointermove も、動かしたとは見なさない
+  el.addEventListener('pointermove', (e) => {
+    if (performance.now() >= summaryArmedAt && (e.movementX || e.movementY)) showSummary(item.id);
+  });
   return el;
 }
 
@@ -187,6 +193,7 @@ function morph() {
 
 function setOpen(animate: boolean) {
   open = true;
+  summaryArmedAt = performance.now() + MORPH_MS;
   list.hidden = false;
   flap.classList.add('pinned');
   placeList();

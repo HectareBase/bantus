@@ -358,7 +358,7 @@ export interface WorktreeCard {
   sessions: SessionView[];
   /** アーカイブしたセッション（新しく作ったものが上）。重なりの件数 */
   archived: SessionView[];
-  /** 一覧に出す行。ワークツリーは全部（新しく作ったものが上、起点が下）、main はアーカイブしたものだけ */
+  /** 一覧に出す行。ワークツリーは全部（新しく作ったものが上、起点が下）、main はアーカイブしたものと、ワークツリーのカードへ移した起点 */
   timeline: TimelineItem[];
   /**
    * 一覧にあって、このカードの行に出ていないものの数（重なりとめくれの件数）。アーカイブしたものと、main に残した起点。
@@ -513,10 +513,14 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       let timeline: TimelineItem[];
       if (isMain) {
         const stay = own.filter((s) => !movedIds.has(s.id));
-        if (!stay.length) continue;
+        // ワークツリーのカードへ移した起点も、main の一覧に出す（main で始めたセッションなので、main からもたどれるように）
+        const origins = own.filter((s) => movedIds.has(s.id));
         shown = stay.filter((s) => !mainArchived(s, opts));
         archived = stay.filter((s) => mainArchived(s, opts)).sort(byCreatedDesc);
-        timeline = archived.map((session) => ({ session, archived: true, origin: false }));
+        timeline = [
+          ...archived.map((session) => ({ session, archived: true, origin: false })),
+          ...origins.map((session) => ({ session, archived: true, origin: true })),
+        ].sort((a, b) => byCreatedDesc(a.session, b.session));
       } else {
         const newest = own.reduce((a, b) => (b.lastActivityAt > a.lastActivityAt ? b : a));
         const flags = own.map((s) => ({ session: s, archived: worktreeArchived(s, s === newest, opts), origin: false }));

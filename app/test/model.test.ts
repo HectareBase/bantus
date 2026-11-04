@@ -130,6 +130,8 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     const x = repo!.cards.find((c) => !c.isMain)!;
     assert.equal(x.stackCount, 1);
     assert.deepEqual(main.sessions.map((s) => s.id), ['q']);
+    assert.deepEqual(main.timeline.map((t) => [t.session.id, t.origin]), [['origin', true]], 'main の一覧にも起点を出す');
+    assert.equal(main.stackCount, 1);
     assert.deepEqual(x.archived.map((s) => s.id), ['origin']);
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.origin, t.link]), [['w1', false, 'solid'], ['origin', true, undefined]]);
   });
@@ -150,9 +152,10 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     assert.deepEqual([x.archived.length, x.stackCount], [0, 1]);
   });
 
-  it('main のセッションがすべて起点として移ったら、main のカードは出さない', () => {
+  it('main のセッションがすべて起点として移っても、main のカードは行なしで出し、一覧から起点をたどれる', () => {
     const [repo] = buildRepos([list()[0]!, list()[2]!].map((s) => ({ ...s })));
-    assert.deepEqual(repo!.cards.map((c) => c.isMain), [false]);
+    const main = repo!.cards.find((c) => c.isMain)!;
+    assert.deepEqual([main.sessions.length, main.stackCount], [0, 1]);
   });
 });
 
