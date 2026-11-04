@@ -360,7 +360,8 @@ function setChanges(el: HTMLElement, c: GitChanges | undefined) {
   el.replaceChildren(...items.map((i) => {
     const item = document.createElement('span');
     item.className = 'changes-item';
-    item.append(createIcon(i.icon), String(i.count));
+    item.append(createIcon(i.icon));
+    if (i.count) item.append(String(i.count));
     return item;
   }));
   if (items.length) el.dataset.tip = changesTooltip(c);

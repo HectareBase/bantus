@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createGitStatus, parseCounts, parseStatus, readBranchInfo } from '../src/main/git-status';
+import { createGitStatus, hasUpstream, parseCounts, parseStatus, readBranchInfo } from '../src/main/git-status';
 import { view } from './helpers';
 
 describe('parseStatus', () => {
@@ -44,7 +44,7 @@ function fakeGit(outputs: Record<string, string>) {
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
-const noBranch = async () => ({ behind: 0, merged: false });
+const noBranch = async () => ({ behind: 0, ahead: 0, merged: false });
 
 describe('createGitStatus', () => {
   it('作業フォルダごとに 1 回だけ調べ、終わったら onUpdate を呼んで結果を付ける', async () => {
@@ -138,27 +138,27 @@ describe('元のブランチとの差', () => {
   const first = 'rev-list --first-parent --reverse HEAD..refs/heads/main';
 
   it('ワークツリーにしかないコミットがあれば、マージ済みではない', async () =>
-    assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [counts]: '2\t1\n' })), { behind: 2, merged: false }));
+    assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [counts]: '2\t1\n' })), { behind: 2, ahead: 1, merged: false }));
   it('作ったばかり（元のブランチと同じ）なら、マージ済みではない', async () =>
-    assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [counts]: '0\t0\n' })), { behind: 0, merged: false }));
+    assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [counts]: '0\t0\n' })), { behind: 0, ahead: 0, merged: false }));
   it('元のブランチの線の上にある（進んだ main から作っただけ）なら、マージ済みではない', async () =>
     assert.deepEqual(
       await readBranchInfo('C:/W', 'main', fake({ [counts]: '2\t0\n', [first]: 'c1\nc2\n', 'rev-parse c1^1 HEAD': 'h\nh\n' })),
-      { behind: 2, merged: false },
+      { behind: 2, ahead: 0, merged: false },
     ));
   it('マージコミットで元のブランチに入ったら、マージ済み', async () =>
     assert.deepEqual(
       await readBranchInfo('C:/W', 'main', fake({ [counts]: '1\t0\n', [first]: 'm\n', 'rev-parse m^1 HEAD': 'p\nh\n' })),
-      { behind: 1, merged: true },
+      { behind: 1, ahead: 0, merged: true },
     ));
   it('元のブランチが手元になければ、差なし', async () =>
-    assert.deepEqual(await readBranchInfo('C:/W', 'gone', fake({})), { behind: 0, merged: false }));
+    assert.deepEqual(await readBranchInfo('C:/W', 'gone', fake({})), { behind: 0, ahead: 0, merged: false }));
 
   it('元のブランチがあるフォルダだけ、差も調べて件数に入れる', async () => {
     const calls: string[] = [];
     const branch = async (dir: string, base: string) => {
       calls.push(`${dir}:${base}`);
-      return { behind: 5, merged: true };
+      return { behind: 5, ahead: 3, merged: true };
     };
     const status = createGitStatus(() => {}, async () => '', () => 0, branch, () => true);
     const list = () => [view({ workDir: 'C:/W', baseBranch: 'main' }), view({ workDir: 'C:/M' })];
@@ -166,16 +166,24 @@ describe('元のブランチとの差', () => {
     await tick();
     await tick();
     assert.deepEqual(calls, ['C:/W:main']);
+    // 追跡するブランチがない（status の出力に branch.upstream がない）ので、元のブランチとの差を ahead にする
     assert.deepEqual(status.apply(list()).map((s) => s.changes), [
-      { changed: 0, untracked: 0, ahead: 0, behind: 5, merged: true },
+      { changed: 0, untracked: 0, ahead: 3, behind: 5, merged: true, aheadOfBase: true },
       { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false },
     ]);
   });
 
   it('フォルダがもうなければ、ないことを印にする', async () => {
-    const status = createGitStatus(() => {}, async () => { throw new Error('no'); }, () => 0, async () => ({ behind: 0, merged: false }), () => false);
+    const status = createGitStatus(() => {}, async () => { throw new Error('no'); }, () => 0, async () => ({ behind: 0, ahead: 0, merged: false }), () => false);
     status.apply([view({ workDir: 'C:/Gone' })]);
     await tick();
     assert.equal(status.apply([view({ workDir: 'C:/Gone' })])[0]!.changes?.gone, true);
+  });
+});
+
+describe('hasUpstream', () => {
+  it('追跡するブランチがあるか', () => {
+    assert.equal(hasUpstream('# branch.oid 1\n# branch.head x\n# branch.upstream origin/x\n'), true);
+    assert.equal(hasUpstream('# branch.oid 1\n# branch.head x\n'), false);
   });
 });

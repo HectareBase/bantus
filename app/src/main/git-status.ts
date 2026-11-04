@@ -29,11 +29,18 @@ export function parseStatus(output: string): GitChanges {
   return changes;
 }
 
+/** `git status --porcelain=v2 --branch` の出力に、追跡するブランチがあるか */
+export function hasUpstream(output: string): boolean {
+  return /^# branch\.upstream /m.test(output);
+}
+
 export type RunStatus = (dir: string) => Promise<string>;
 
 /** 元のブランチ（base）と比べた結果 */
 export interface BranchInfo {
   behind: number;
+  /** HEAD にあって、元のブランチにまだ入っていないコミット */
+  ahead: number;
   merged: boolean;
 }
 
@@ -73,16 +80,16 @@ export async function readBranchInfo(dir: string, base: string, run = git): Prom
   try {
     counts = parseCounts(await run(dir, ['rev-list', '--left-right', '--count', `${ref}...HEAD`]));
   } catch {
-    return { behind: 0, merged: false };
+    return { behind: 0, ahead: 0, merged: false };
   }
-  if (counts.right > 0 || counts.left === 0) return { behind: counts.left, merged: false };
+  if (counts.right > 0 || counts.left === 0) return { behind: counts.left, ahead: counts.right, merged: false };
   try {
     const first = (await run(dir, ['rev-list', '--first-parent', '--reverse', `HEAD..${ref}`])).split('\n')[0]?.trim();
-    if (!first) return { behind: counts.left, merged: false };
+    if (!first) return { behind: counts.left, ahead: 0, merged: false };
     const [parent, head] = (await run(dir, ['rev-parse', `${first}^1`, 'HEAD'])).trim().split(/\s+/);
-    return { behind: counts.left, merged: !!parent && parent !== head };
+    return { behind: counts.left, ahead: 0, merged: !!parent && parent !== head };
   } catch {
-    return { behind: counts.left, merged: false };
+    return { behind: counts.left, ahead: 0, merged: false };
   }
 }
 
@@ -118,8 +125,19 @@ export function createGitStatus(
       const { key, dir, base } = queue.shift()!;
       let changes: GitChanges | undefined;
       try {
-        changes = parseStatus(await run(dir));
-        if (base) Object.assign(changes, await branch(dir, base));
+        const output = await run(dir);
+        changes = parseStatus(output);
+        if (base) {
+          const info = await branch(dir, base);
+          changes.behind = info.behind;
+          changes.merged = info.merged;
+          // Claude が作るワークツリーのブランチには、ふつう追跡するブランチがない。そのときは push していないコミットの代わりに、
+          // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）
+          if (!hasUpstream(output)) {
+            changes.ahead = info.ahead;
+            changes.aheadOfBase = true;
+          }
+        }
       } catch {
         // ワークツリーのフォルダを消したときは、カードごとアーカイブできるよう印を付ける
         changes = exists(dir) ? undefined : { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false, gone: true };

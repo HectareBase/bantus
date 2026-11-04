@@ -98,9 +98,10 @@ export interface ChangeItem {
   count: number;
 }
 
-/** 印に並べる内訳。0 のものは出さない。空なら印を出さない */
+/** 印に並べる内訳。0 のものは出さない。空なら印を出さない。マージ済みなら、内訳の代わりにマージのアイコンだけ（件数 0 は数を出さない） */
 export function changeItems(c: GitChanges | undefined): ChangeItem[] {
   if (!c) return [];
+  if (c.merged) return [{ icon: 'git-merge', count: 0 }];
   const items: ChangeItem[] = [
     { icon: 'file-pen-line', count: c.changed },
     { icon: 'file-plus', count: c.untracked },
@@ -113,11 +114,12 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
 /** 印とセッションのツールチップに添える内訳。何もなければ空 */
 export function changesTooltip(c: GitChanges | undefined): string {
   if (!c) return '';
+  if (c.merged) return 'マージ済み（元のブランチに入った）';
   const parts: string[] = [];
   if (c.changed) parts.push(`変更 ${c.changed}`);
   if (c.untracked) parts.push(`未追跡 ${c.untracked}`);
   const lines = parts.length ? [`コミットされていない変更：${parts.join('・')}`] : [];
-  if (c.ahead) lines.push(`push していないコミット：${c.ahead}`);
+  if (c.ahead) lines.push(c.aheadOfBase ? `元のブランチにまだ入っていないコミット：${c.ahead}` : `push していないコミット：${c.ahead}`);
   if (c.behind) lines.push(`元のブランチからの遅れ：${c.behind}`);
   return lines.join('\n');
 }

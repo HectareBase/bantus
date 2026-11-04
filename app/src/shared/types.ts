@@ -58,8 +58,10 @@ export interface GitChanges {
   changed: number;
   /** 未追跡のファイル（.gitignore に入っているものは除く） */
   untracked: number;
-  /** まだ push していないコミット（追跡するブランチがなければ 0） */
+  /** まだ push していないコミット。追跡するブランチがないワークツリーでは、元のブランチにまだ入っていないコミット（aheadOfBase） */
   ahead: number;
+  /** ahead を元のブランチと比べて数えた（追跡するブランチがない） */
+  aheadOfBase?: boolean;
   /** 元のブランチ（baseBranch）にあって、まだ取り込んでいないコミット。元のブランチがわからなければ 0 */
   behind: number;
   /** 元のブランチにマージコミットで入った（docs/design/worktree-cards.md） */

@@ -492,6 +492,12 @@ describe('コミットされていない変更と、元のブランチとの差'
     assert.equal(changesTooltip({ ...clean, untracked: 1 }), 'コミットされていない変更：未追跡 1');
     assert.equal(changesTooltip(clean), '');
   });
+  it('マージ済みなら、内訳の代わりにマージのアイコンだけ', () => {
+    assert.deepEqual(changeItems({ ...some, merged: true }), [{ icon: 'git-merge', count: 0 }]);
+    assert.equal(changesTooltip({ ...clean, merged: true }), 'マージ済み（元のブランチに入った）');
+  });
+  it('追跡するブランチがないワークツリーは、元のブランチにまだ入っていないコミットとして説明する', () =>
+    assert.equal(changesTooltip({ ...clean, ahead: 2, aheadOfBase: true }), '元のブランチにまだ入っていないコミット：2'));
   it('セッションのツールチップの最後に添える', () => {
     assert.equal(tooltip(view({ title: 't', changes: { ...clean, changed: 1 } })), 't\nコミットされていない変更：変更 1');
   });
