@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { Settings } from './settings';
+import type { ArchiveMark, Settings } from './settings';
 
 /** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
@@ -23,6 +23,12 @@ export interface SessionView {
     /** 元のブランチ名（ツールチップ用） */
     branch: string;
   };
+  /** ワークツリーを作った元のブランチ（`sourceBranch`。なければ元のフォルダのブランチ）。遅れとマージ済みを調べるのに使う */
+  baseBranch?: string;
+  /** 別のセッションから作られたときの、元のセッションの ID（`spawnedFrom.sessionId`。サイドチャットは除く） */
+  spawnedFrom?: string;
+  /** 最後のターンのまとめの文章（`turnWrapUp.description`）。一覧の下の段に出す */
+  summary?: string;
   /** git status を調べる作業フォルダ（git 管理でなければ undefined） */
   workDir?: string;
   /** 作業フォルダのコミットされていない変更。まだ調べていない、または調べられなかったときは undefined */
@@ -54,11 +60,17 @@ export interface GitChanges {
   untracked: number;
   /** まだ push していないコミット（追跡するブランチがなければ 0） */
   ahead: number;
+  /** 元のブランチ（baseBranch）にあって、まだ取り込んでいないコミット。元のブランチがわからなければ 0 */
+  behind: number;
+  /** 元のブランチにマージコミットで入った（docs/design/worktree-cards.md） */
+  merged: boolean;
+  /** 作業フォルダがもうない（ワークツリーを消した） */
+  gone?: boolean;
 }
 
 export interface WidgetApi {
   onSessions(listener: (sessions: SessionView[]) => void): void;
-  /** ウィジェットの見た目に関わる設定（置く側、不透明度、一覧の表示数と折りたたみ、常に表示）と、通知の設定が変わったとき */
+  /** ウィジェットの見た目に関わる設定（置く側、不透明度、並び順、アーカイブ）と、通知の設定が変わったとき */
   onLayout(listener: (layout: WidgetLayout) => void): void;
   /** 起動時に今の見た目の設定を取りに行く（起動直後に送られた onLayout を取りこぼさないため） */
   getLayout(): Promise<WidgetLayout>;
@@ -75,8 +87,20 @@ export interface WidgetApi {
   openSettings(): void;
   /** 最前面への固定を切り替える。保存され、onLayout で画面に戻ってくる */
   setPinned(pinned: boolean): void;
-  /** セッションを常に表示にするか切り替える。保存され、onLayout で画面に戻ってくる */
-  setAlwaysShow(id: string, on: boolean): void;
+  /** セッションのアーカイブの印を変える（null で外して自動の決まりに戻す）。保存され、onLayout で画面に戻ってくる */
+  setArchive(id: string, mark: ArchiveMark | null): void;
+  /** カードのアーカイブの印を変える */
+  setCardArchive(key: string, mark: ArchiveMark | null): void;
+  /** 重なりに乗った・一覧を開くとき。めくれと一覧のウィンドウ（flyout.html）に出す */
+  showFlyout(request: FlyRequest): void;
+  /** 開いている（めくれを出している）一覧の中身だけを差し替える */
+  updateFlyout(key: string, content: FlyContent, count: number): void;
+  /** めくれの前に重なりから外れたとき。めくれを出していれば消す */
+  leaveFlyout(key: string): void;
+  /** 一覧の中の操作（行を押した、トグルを押した） */
+  onFlyAction(listener: (action: FlyAction) => void): void;
+  /** めくれ・一覧の出し入れ。key は出しているもの（消えたら undefined）、open は一覧を開いているか */
+  onFlyState(listener: (key: string | undefined, open: boolean) => void): void;
   /** タスクバーを数秒だけ点滅させる。知らせる変化があったときに使う。ウィジェットが前面なら何もしない */
   flashTaskbar(): void;
   /** Claude のウィンドウが前面にあるか。調べられなかったときは false（知らせないより、知らせるほうを選ぶ） */
@@ -113,10 +137,89 @@ export interface TipApi {
   reportSize(width: number, height: number): void;
 }
 
+// ---- めくれと一覧のウィンドウ（flyout） ----
+
+/** 一覧の 1 行 */
+export interface FlyItem {
+  id: string;
+  title: string;
+  state: SessionState;
+  waitingFor?: string;
+  /** Bantus の中でアーカイブしているか */
+  archived: boolean;
+  /** main で始めたセッション（起点） */
+  origin: boolean;
+  /** デスクトップで今開いている */
+  focused: boolean;
+  /** 1 つ下の行（より古いもの）とのつなぎ方。solid は spawnedFrom、dashed は時刻の順で並べただけ。一番下はなし */
+  link?: 'solid' | 'dashed';
+  /** 下の段（「1 時間前」など） */
+  sub: string;
+  /** 乗せたときに一覧の下の段に出す、最後のターンのまとめ */
+  summary?: string;
+}
+
+/** マージ済み・手でアーカイブしたカード（リポジトリの見出しから開く一覧） */
+export interface FlyCard {
+  key: string;
+  label: string;
+  merged: boolean;
+  items: FlyItem[];
+}
+
+export type FlyContent =
+  | { kind: 'timeline'; items: FlyItem[] }
+  | { kind: 'plain'; items: FlyItem[] }
+  | { kind: 'cards'; cards: FlyCard[] };
+
+export interface FlyRequest {
+  /** カードの目印（リポジトリの見出しから開くときは `repo:<目印>`） */
+  key: string;
+  /** めくれに出す件数 */
+  count: number;
+  /** カード（または見出し）の位置。ウィジェットの中の座標 */
+  anchor: TipRect;
+  content: FlyContent;
+  /** true なら、めくれを出さずにすぐ一覧を開く（リポジトリの見出し） */
+  open: boolean;
+}
+
+export type FlyAction =
+  | { type: 'open'; id: string }
+  | { type: 'toggle'; id: string }
+  | { type: 'toggle-card'; key: string };
+
+/** めくれと一覧のウィンドウ（flyout.html）の API */
+export interface FlyoutApi {
+  /** 出す。side は開く向き（ウィジェットが右端なら left） */
+  onShow(listener: (show: FlyShow) => void): void;
+  onContent(listener: (content: FlyContent, count: number) => void): void;
+  /** めくれから一覧へ変形する */
+  onOpen(listener: () => void): void;
+  onHide(listener: () => void): void;
+  /** クリックを受け取る場所（ウィンドウの中の座標）。ほかはクリックを下へ通す */
+  reportSolid(rects: TipRect[]): void;
+  /** めくれが押された */
+  requestOpen(): void;
+  action(action: FlyAction): void;
+  close(): void;
+}
+
+export interface FlyShow {
+  key: string;
+  side: 'left' | 'right';
+  /** カードの上端と高さ（ウィンドウの中の座標） */
+  top: number;
+  height: number;
+  count: number;
+  content: FlyContent;
+  open: boolean;
+}
+
 export type WidgetLayout = Pick<
   Settings,
-  | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'groupLimit' | 'foldScope'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'alwaysShow'
+  | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'archive' | 'archivedCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen'
 >;
 
@@ -146,5 +249,6 @@ declare global {
     widget: WidgetApi;
     settingsApi: SettingsApi;
     tipApi: TipApi;
+    flyoutApi: FlyoutApi;
   }
 }

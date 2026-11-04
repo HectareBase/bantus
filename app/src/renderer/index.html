@@ -18,62 +18,51 @@
   <!-- 内側の端。ドラッグで幅を変える -->
   <div id="resize-handle" class="resize-handle" data-tip="ドラッグで幅を変える"></div>
 
-  <!-- リポジトリごとのカード。data-icon の要素には icon.ts が lucide のアイコンを入れる -->
+  <!-- リポジトリの見出しと、ワークツリーごとのカード。data-icon の要素には icon.ts が lucide のアイコンを入れる -->
   <main id="cards"></main>
 
-  <template id="card-template">
-    <section class="card">
-      <h2 class="card-header">
-        <span class="card-icon" data-icon="folder"></span>
+  <!-- リポジトリ：見出し（名前、カードごとアーカイブした件数、バッジ）とカードの並び -->
+  <template id="repo-template">
+    <section class="repo">
+      <h2 class="repo-header">
+        <span class="repo-icon" data-icon="folder"></span>
         <span class="repo-name"></span>
-        <span class="changes" tabindex="0" hidden></span>
+        <button class="repo-archived" hidden><span class="repo-archived-icon" data-icon="archive"></span><span class="n"></span></button>
+        <span class="spacer"></span>
         <span class="badge"></span>
       </h2>
-      <div class="card-body"></div>
+      <div class="repo-cards"></div>
     </section>
   </template>
 
-  <!-- 折りたたみ：上限で隠したセッションと停止中。行を選ぶか、外をクリックするか、Esc で閉じる -->
-  <template id="fold-template">
-    <div class="fold">
-      <button class="fold-toggle">
-        <span class="fold-icon" data-icon="chevron-right"></span>
-        <span class="fold-text"><span class="when-closed">すべて表示</span><span class="when-open">折りたたむ</span></span>
-        <span class="fold-counts">
-          <span class="fold-count" data-state="busy"><span class="status"></span><span class="n"></span></span>
-          <span class="fold-count" data-state="idle"><span class="status"></span><span class="n"></span></span>
-          <span class="fold-count" data-state="stopped"><span class="status"></span><span class="n"></span></span>
-          <span class="fold-changes" hidden><span class="fold-changes-icon" data-icon="file-pen-line"></span><span class="n"></span></span>
-        </span>
-      </button>
-      <div class="fold-body">
-        <ul class="rows fold-hidden"></ul>
-        <div class="fold-sep">停止中</div>
-        <ul class="rows fold-stopped"></ul>
-      </div>
-    </div>
-  </template>
-
-  <template id="subhead-template">
-    <div class="subhead">
-      <span class="subhead-icon"></span>
-      <span class="subhead-label"></span>
-      <span class="changes" tabindex="0" hidden></span>
+  <!-- ワークツリー（元のフォルダを含む）のカード。以前のセッションがあれば、後ろに重なりを 1 枚出す。
+       重なりに乗せると、めくれと一覧を別のウィンドウ（flyout.html）に出す -->
+  <template id="card-template">
+    <div class="card-wrap">
+      <div class="stack" aria-hidden="true"></div>
+      <div class="stack-hit"></div>
+      <section class="card">
+        <div class="card-header">
+          <span class="card-icon"></span>
+          <span class="card-label"></span>
+          <span class="changes" tabindex="0" hidden></span>
+          <button class="act card-act" tabindex="-1" aria-label="カードをアーカイブ" data-tip="カードをアーカイブ" data-icon="archive"></button>
+        </div>
+        <ul class="rows"></ul>
+      </section>
     </div>
   </template>
 
   <template id="row-template">
     <li class="row" tabindex="0">
       <span class="status"></span>
-      <span class="seq"></span>
       <span class="text">
         <span class="title"></span>
-        <span class="meta"><span class="branch"></span><span class="when"></span></span>
+        <span class="meta"><span class="when"></span></span>
       </span>
-      <button class="keep" tabindex="-1" aria-label="常に表示" data-icon="star"></button>
+      <button class="act" tabindex="-1" aria-label="アーカイブ" data-icon="archive"></button>
     </li>
   </template>
-
 
   <script type="module" src="renderer.js"></script>
 </body>

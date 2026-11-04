@@ -68,6 +68,8 @@ describe('readSessions（偽のデータフォルダ）', () => {
       worktreeName: 'fix-login',
       worktreePath: join(repo, '.claude', 'worktrees', 'fix-login'),
       branch: 'claude/fix-login-1a2b3c',
+      sourceBranch: 'develop',
+      turnWrapUp: { description: 'ログインの修正を終えた。' },
       lastFocusedAt: 300,
     });
     local(3, { title: 'no git', cliSessionId: 'cli-3', originCwd: join(tmp.path, 'plain') });
@@ -183,6 +185,19 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(byTitle('other repo')?.worktree, undefined);
     assert.equal(byTitle('other repo')?.workDir, join(tmp.path, 'Repo'));
     assert.equal(byTitle('other repo')?.seq, 4);
+  });
+
+  it('元のブランチ：アプリのワークツリーは sourceBranch、自分で作ったものは元のフォルダのブランチ、main にはない', () => {
+    assert.equal(byTitle('worktree')?.baseBranch, 'develop');
+    assert.equal(byTitle('outside worktree')?.baseBranch, 'main');
+    assert.equal(byTitle('waiting')?.baseBranch, undefined);
+  });
+
+  it('spawnedFrom と最後のターンのまとめを読む', () => {
+    assert.equal(byTitle('spawned')?.spawnedFrom, 'local_x');
+    assert.equal(byTitle('worktree')?.summary, 'ログインの修正を終えた。');
+    assert.equal(byTitle('waiting')?.spawnedFrom, undefined);
+    assert.equal(byTitle('waiting')?.summary, undefined);
   });
 
   it('git の情報がなければ元の作業フォルダでまとめる', () => {

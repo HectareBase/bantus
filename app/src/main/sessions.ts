@@ -197,6 +197,8 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
   const step = cycle ? Math.floor(now / cycle) : 0;
   const views: SessionView[] = items.map(({ minutesAgo, ...s }, i) => ({
     ...s,
+    // 前の形の見本データ（遅れとマージ済みがない）も読めるようにする
+    ...(s.changes && { changes: { behind: 0, merged: false, ...s.changes } }),
     createdAt: i + 1,
     lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000,
   }));
@@ -272,6 +274,14 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         createdAt: Number(d.createdAt) || 0,
         lastActivityAt: Number(d.lastActivityAt) || 0,
       };
+      const mainBranch = view.mainBranch;
+      // 遅れとマージ済みを調べる元のブランチ。アプリが作ったワークツリーは sourceBranch、自分で作ったものは元のフォルダのブランチ
+      if (view.worktree) {
+        const base = typeof d.sourceBranch === 'string' && d.sourceBranch ? d.sourceBranch : mainBranch;
+        if (base && base !== view.worktree.branch) view.baseBranch = base;
+      }
+      if (typeof d.spawnedFrom?.sessionId === 'string') view.spawnedFrom = d.spawnedFrom.sessionId;
+      if (typeof d.turnWrapUp?.description === 'string' && d.turnWrapUp.description) view.summary = d.turnWrapUp.description;
       numbered.push(view);
       if (!archived) views.push(view);
     }

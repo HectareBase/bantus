@@ -31,3 +31,27 @@ export function tipBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anch
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
 }
+
+// ---- めくれと一覧のウィンドウ（flyout） ----
+
+/** めくれと一覧のウィンドウの幅（一覧の幅と影の余白） */
+export const FLY_WIDTH = 340;
+
+/**
+ * めくれと一覧のウィンドウを置く場所。カードの端（画面の内側の端）から外へ、作業領域の高さいっぱいに取る。
+ * 縦の位置は一覧の画面が決めるので、ウィンドウは動かさずに済む。top はカードの上端（ウィンドウの中の座標）
+ * @param anchor カード（ウィジェットの中の座標）
+ */
+export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect): { bounds: Rect; top: number } {
+  // ウィジェットが右端なら、カードの左端から左へ。左端なら、カードの右端から右へ
+  const x = edge === 'right' ? widget.x + anchor.x - FLY_WIDTH : widget.x + anchor.x + anchor.width;
+  return {
+    bounds: { x: Math.round(x), y: area.y, width: FLY_WIDTH, height: area.height },
+    top: Math.round(widget.y + anchor.y - area.y),
+  };
+}
+
+/** 点が四角の中にあるか */
+export function contains(r: Rect, x: number, y: number): boolean {
+  return x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
+}

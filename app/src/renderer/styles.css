@@ -29,6 +29,12 @@
   --busy-bg: rgba(0, 95, 184, 0.12);
   --idle: #0f7b0f;
   --stopped: #8a8a8a;
+  /* 以前のセッションの重なり。色は状態だけを表すので、カードより一段濃い灰色にする */
+  --stack: #c8c8c8;
+  --stack-strong: #b4b4b4;
+  --stack-edge: rgba(0, 0, 0, 0.18);
+  /* デスクトップで今開いている行の透かし */
+  --stripe: rgba(0, 0, 0, 0.025);
   color-scheme: light dark;
 }
 
@@ -53,6 +59,10 @@
     --busy-bg: rgba(96, 205, 255, 0.14);
     --idle: #6ccb5f;
     --stopped: #9a9a9a;
+    --stack: #4c4c4c;
+    --stack-strong: #5c5c5c;
+    --stack-edge: rgba(255, 255, 255, 0.18);
+    --stripe: rgba(255, 255, 255, 0.03);
   }
 }
 
@@ -116,42 +126,54 @@ button { font: inherit; color: inherit; }
 }
 
 /* ---- カード ---- */
-/* スクロールバー（6px）の場所はいつも空けておき、右の余白をその分減らす。
-   スクロールしてもしなくても、カードの右端がタイトルバーと同じ 8px の位置にそろう */
+/* スクロールバー（6px）の場所はいつも空けておき、外側（画面の端の側）に置く。内側の余白 8px には、カードの後ろの重なりを見せる。
+   ウィジェットが左端のときは direction で左右を入れ替え、スクロールバーを左（外側）に出す */
 main {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-gutter: stable;
   padding: 0 2px 12px 8px;
 }
+html[data-edge="left"] main { direction: rtl; padding: 0 8px 12px 2px; }
+html[data-edge="left"] main > * { direction: ltr; }
 main::-webkit-scrollbar { width: 6px; }
 main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3px; }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--card-stroke);
-  border-radius: 8px;
-  padding: 0 0 4px;
-  margin-bottom: 8px;
-}
-
-/* 見出しは帯にして、下に区切り線を引く。上の角はカードの枠の内側に合わせて丸める */
-.card-header {
+/* リポジトリの見出し。カードの上に、名前とバッジを出す */
+.repo { margin-bottom: 6px; }
+.repo-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 4px;
-  padding: 7px 10px 7px 12px;
-  font-size: 13px;
+  margin: 0;
+  padding: 4px 4px 6px 4px;
+  font-size: 12px;
   font-weight: 600;
-  background: var(--header);
-  border-bottom: 1px solid var(--divider);
-  border-radius: 7px 7px 0 0;
+  color: var(--text-secondary);
 }
-/* 印の列（16px）にそろえ、名前が小見出しの文字と同じ位置から始まるようにする */
-.card-icon { flex: none; display: flex; justify-content: center; width: 16px; margin-right: 2px; color: var(--text-secondary); }
-.card-icon svg { width: 14px; height: 14px; }
-.repo-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.repo-icon { flex: none; display: flex; color: var(--text-tertiary); }
+.repo-icon svg { width: 13px; height: 13px; }
+.repo-name { min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* カードごとアーカイブした件数。押すとその一覧を開く */
+.repo-archived {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  color: var(--text-secondary);
+}
+.repo-archived:hover { background: var(--hover); }
+.repo-archived[hidden] { display: none; }
+.repo-archived-icon { display: flex; }
+.repo-archived-icon svg { width: 11px; height: 11px; }
 
 .badge {
   flex: none;
@@ -165,46 +187,48 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .badge[data-state="waiting"] { background: var(--waiting-bg); color: var(--waiting); }
 .badge[data-state="busy"] { background: var(--busy-bg); color: var(--busy); }
 
-/* ---- ワークツリーの枠。小見出しのあるワークツリーを、カードの中でもう 1 段の枠で囲む ---- */
-.worktree {
-  margin: 0 6px 6px;
-  padding: 2px 0;
-  border: 1px solid var(--divider);
-  border-radius: 6px;
-}
-.worktree:last-child { margin-bottom: 2px; }
-/* 枠の中では、行と小見出しの左右の余白を詰めて、狭くなった幅を取り戻す */
-.worktree .subhead, .worktree .row, .worktree .fold-toggle { margin-left: 2px; margin-right: 2px; }
-.worktree .fold-toggle { width: calc(100% - 4px); }
-
-/* ---- 小見出し（ワークツリー） ---- */
-/* 見出し、小見出し、行、折りたたみのボタンは、どれも「16px の印の列 + 8px + 文字」の並び。
-   見出しの類は左の列にそろえ、セッションの行はいつも 1 段（12px）下げる。ワークツリーのあるなしで字下げを変えない */
-.subhead {
+/* ワークツリー（元のフォルダを含む）のカード。後ろの重なりと押せる的を、カードと同じ高さで重ねる */
+.card-wrap { position: relative; margin-bottom: 8px; }
+.card {
   position: relative;
-  display: grid;
-  grid-template-columns: 16px 1fr auto;
+  background: var(--card);
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
+  padding: 0 0 4px;
+}
+
+/* 以前のセッションの重なり（1 枚）。画面の内側の余白（8px）いっぱいに見せ、ウィジェットの内側の端にそろえる。
+   カードの塗りは半透明なので、カードの下には入れない */
+.stack, .stack-hit { display: none; position: absolute; top: 6px; bottom: 6px; }
+.card-wrap[data-stack] .stack, .card-wrap[data-stack] .stack-hit { display: block; }
+.stack { width: 9px; background: var(--stack); border: 1px solid var(--stack-edge); }
+html:not([data-edge="left"]) .stack { left: -8px; border-right: 0; border-radius: 7px 0 0 7px; }
+html[data-edge="left"] .stack { right: -8px; border-left: 0; border-radius: 0 7px 7px 0; }
+.card-wrap[data-fly] .stack { background: var(--stack-strong); }
+/* 押せる的は見えている幅より広く、ウィジェットの端からカードの中まで少しかかる。幅を変える取っ手より上に置く */
+.stack-hit { width: 12px; z-index: 11; }
+html:not([data-edge="left"]) .stack-hit { left: -8px; }
+html[data-edge="left"] .stack-hit { right: -8px; }
+
+/* カードの見出し：ブランチ名と git の印だけ。押しても何も開かない */
+.card-header {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 5px 6px 5px 12px;
+  min-height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--header);
+  border-bottom: 1px solid var(--divider);
+  border-radius: 7px 7px 0 0;
 }
-/* ワークツリーの間の区切り線。最初の小見出しは見出しのすぐ下なので引かない */
-.subhead:not(:first-child) { margin-top: 6px; padding-top: 8px; }
-.subhead:not(:first-child)::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 8px;
-  right: 8px;
-  height: 1px;
-  background: var(--divider);
-}
-.subhead-icon { justify-self: center; display: flex; }
-.subhead-icon svg { width: 12px; height: 12px; }
-.subhead-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 印の列（16px）にそろえ、名前が行の文字と同じ位置から始まるようにする */
+.card-icon { flex: none; display: flex; justify-content: center; width: 16px; margin-right: 2px; color: var(--text-secondary); }
+.card-icon svg { width: 13px; height: 13px; }
+.card-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-act[hidden] { display: none; }
 
 /* ---- コミットされていない変更の内訳（見出しと小見出しの右）。色は状態だけを表すので、印は灰色の枠にする ---- */
 .changes {
@@ -227,12 +251,12 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .changes-item svg { width: 11px; height: 11px; flex: none; }
 
 /* ---- 行 ---- */
-.rows { list-style: none; margin: 0; padding: 0 0 0 12px; }
+.rows { list-style: none; margin: 0; padding: 0; }
 
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 16px auto 1fr auto;
+  grid-template-columns: 16px 1fr auto;
   align-items: center;
   gap: 8px;
   margin: 0 4px;
@@ -246,10 +270,10 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row:hover { background: var(--hover); }
 .row:active { background: var(--pressed); }
 .row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
-/* デスクトップで今開いているセッション */
-.row[data-focused] { background: var(--selected); }
-.row[data-focused]:hover { background: var(--selected-hover); }
-.row[data-focused]:active { background: var(--pressed); }
+/* デスクトップで今開いているセッション：ごく薄い斜めのストライプの透かし（色相は使わない） */
+.row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px); }
+.row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--hover); }
+.row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--pressed); }
 
 /* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付けて点滅させる。クリックするか処理中になると消える */
 .row::before {
@@ -284,33 +308,12 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .row[data-state="idle"] .sweep-light { --sweep-color: var(--idle); }
 
 .text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
-/* ワークツリーごとの通し番号。状態のアイコンの右に、細い枠で囲んで薄く出す。
-   タイトルの先頭がそろうよう、幅は一覧でいちばん多い桁数に合わせる（renderer が --seq-digits を決める） */
-.seq {
-  /* 枠と余白（左右 3px ずつ）の分を足す（box-sizing は border-box） */
-  width: calc(var(--seq-digits, 1) * 1ch + 6px);
-  margin-left: -4px;
-  padding: 0 2px;
-  border: 1px solid var(--text-tertiary);
-  border-radius: 2px;
-  font-size: 9px;
-  line-height: 11px;
-  text-align: center;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-/* 番号がないときも列の幅は残し、枠だけ消す */
-.seq:empty { visibility: hidden; }
-/* 設定で番号を出さないときは、列ごとなくす */
-html.hide-seq .row { grid-template-columns: 16px 1fr auto; }
-html.hide-seq .seq { display: none; }
 /* 設定で更新日時を出さないとき */
 html.hide-updated .when { display: none; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
-.branch { overflow: hidden; text-overflow: ellipsis; }
-.branch:empty { display: none; }
 .when { flex: none; }
+html.hide-updated .meta { display: none; }
 
 .row[data-state="stopped"] .title { color: var(--text-secondary); }
 
@@ -339,8 +342,8 @@ html.hide-updated .when { display: none; }
   will-change: transform;
 }
 
-/* 常に表示の星。ふだんはマウスを乗せた行にだけ出し、常に表示の行には塗った星を出し続ける */
-.keep {
+/* アーカイブのトグル（行とカードの見出しの右端、縦の真ん中）。マウスを乗せたときだけ出し、出ていないときは幅も取らない */
+.act {
   width: 22px;
   height: 22px;
   margin-right: -4px;
@@ -352,57 +355,11 @@ html.hide-updated .when { display: none; }
   place-items: center;
   opacity: 0;
 }
-.keep svg { width: 12px; height: 12px; }
-.keep:hover { background: var(--hover); color: var(--text); }
-.row:hover .keep, .row[data-keep] .keep { opacity: 1; }
-/* 常に表示でない行は、マウスを乗せるまで星の幅（と前の隙間）を取らず、タイトルを右端まで出す */
-.row:not([data-keep]):not(:hover) .keep { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
-.row[data-keep] .keep svg { fill: currentColor; }
-
-/* ---- 折りたたみ（上限で隠したセッションと停止中） ---- */
-.fold-toggle {
-  display: grid;
-  grid-template-columns: 16px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - 8px);
-  margin: 2px 4px 0;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  text-align: left;
-}
-.fold-toggle:hover { background: var(--hover); }
-.fold-icon { justify-self: center; display: flex; transition: transform 0.1s; }
-.fold-icon svg { width: 12px; height: 12px; }
-.fold.open .fold-icon { transform: rotate(90deg); }
-/* 左の文字は、開いているかどうかで「すべて表示」と「折りたたむ」を切り替える */
-.fold-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fold .when-open, .fold.open .when-closed { display: none; }
-.fold.open .when-open { display: inline; }
-/* 右端の、状態ごとの印と件数。印と色は行と同じ。処理中の弧は、行と見分けやすいよう回さずに止めておく */
-.fold-counts { display: flex; gap: 10px; }
-.fold-count { display: flex; align-items: center; gap: 3px; }
-.fold-count[hidden] { display: none; }
-.fold-count .status { width: 12px; height: 12px; }
-.fold-count .status svg { width: 12px; height: 12px; }
-.fold-count[data-state="busy"] .status { color: var(--busy); }
-.fold-count[data-state="idle"] .status { color: var(--idle); }
-.fold-count[data-state="stopped"] .status { color: var(--stopped); }
-/* 変更が残る作業フォルダの数。色は状態だけを表すので灰色 */
-.fold-changes { display: flex; align-items: center; gap: 3px; }
-.fold-changes[hidden] { display: none; }
-.fold-changes-icon { display: flex; }
-.fold-changes-icon svg { width: 12px; height: 12px; }
-.fold-count .progress-ring, .fold-count .progress-ring .arc { animation: none; }
-.fold-count .progress-ring .arc { stroke-dasharray: 18 30; }
-.fold-body { display: none; }
-.fold.open .fold-body { display: block; }
-.fold-sep { margin: 4px 4px 0 24px; padding: 2px 8px; font-size: 11px; color: var(--text-tertiary); }
-.fold-sep[hidden] { display: none; }
+.act svg { width: 12px; height: 12px; }
+.act:hover { background: var(--hover); color: var(--text); }
+.row:hover .act, .card-header:hover .act { opacity: 1; }
+.row:not(:hover) .act { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
+.card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
 
 /* ---- 状態の印（lucide のアイコン。どれを出すかは model.ts の statusIconName） ---- */
 .status {
@@ -426,6 +383,8 @@ html.hide-updated .when { display: none; }
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
 html.floating .card, html.floating .titlebar { border-color: rgba(128, 128, 128, 0.35); }
+/* 背景がないときは、リポジトリの見出しも小さな札にして、壁紙の上でも読めるようにする */
+html.floating .repo-header { width: fit-content; max-width: 100%; margin-bottom: 4px; padding: 2px 8px; background: var(--card); border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {

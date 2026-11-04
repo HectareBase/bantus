@@ -15,18 +15,14 @@ export interface Settings {
   headerShade: number;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
-  /** ワークツリーのグループごとに見せるセッションの数。0 ならすべて。残りは折りたたみに入れる */
-  groupLimit: number;
-  /** 隠したセッションと停止中をまとめる折りたたみの単位。repo はカード（プロジェクト）に 1 つ、worktree は小見出しごと */
-  foldScope: 'repo' | 'worktree';
+  /** main（元のフォルダ）のセッションを、落ち着いてから自動でアーカイブするまでの分。0 ならしない */
+  mainArchiveMinutes: number;
   /** カード（プロジェクト）の並び。fixed は名前順 */
   projectOrder: SortOrder;
-  /** 小見出し（ワークツリー）の並び。fixed は元のフォルダを先頭に、あとは名前順 */
+  /** プロジェクトの中のカード（ワークツリー）の並び。fixed は元のフォルダを先頭に、あとは名前順 */
   worktreeOrder: SortOrder;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
-  /** 行に、ワークツリーごとの通し番号を出す */
-  showSeq: boolean;
   /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
   showUpdated: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
@@ -47,14 +43,22 @@ export interface Settings {
   flash: boolean;
   /** Claude が前面で、そのセッションを開いているときは知らせない */
   muteWhenOpen: boolean;
-  /** 上限に関係なく、いつも一覧に出すセッションの ID。設定画面には出さず、行の星で切り替える */
-  alwaysShow: string[];
+  /**
+   * Bantus の中だけのアーカイブで、手で決めたもの（セッションの ID → 手でアーカイブした／手で戻した）。
+   * 自動の決まりより優先する。設定画面には出さず、行のトグルで切り替える。デスクトップの isArchived には書かない
+   */
+  archive: Record<string, ArchiveMark>;
+  /** カード（ワークツリー）を手でアーカイブした／戻したもの（カードの目印 → 印）。設定画面には出さない */
+  archivedCards: Record<string, ArchiveMark>;
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
 
 /** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
+
+/** 手で決めたアーカイブ。archived は手でアーカイブした、shown は手で戻した（自動ではアーカイブしない） */
+export type ArchiveMark = 'archived' | 'shown';
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -74,12 +78,10 @@ export const DEFAULT_SETTINGS: Settings = {
   cardOpacity: 50,
   headerShade: 5,
   pinned: true,
-  groupLimit: 5,
-  foldScope: 'repo',
+  mainArchiveMinutes: 10,
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
   sessionOrder: 'fixed',
-  showSeq: true,
   showUpdated: true,
   openAtLogin: false,
   notifyWaiting: true,
@@ -90,7 +92,8 @@ export const DEFAULT_SETTINGS: Settings = {
   toast: false,
   flash: true,
   muteWhenOpen: true,
-  alwaysShow: [],
+  archive: {},
+  archivedCards: {},
 };
 
 /** ドラッグで変えられる幅の範囲（px） */
@@ -125,12 +128,17 @@ interface Base<K extends keyof Settings> {
   packagedOnly?: boolean;
 }
 
-/** 常に表示にできるセッションの ID。見本データの ID（`local_all-01` など）も通す */
-export const ALWAYS_SHOW_ID = /^local_[\w-]{1,64}$/;
+/** アーカイブの印を付けられるセッションの ID。見本データの ID（`local_all-01` など）も通す */
+export const SESSION_KEY_ID = /^local_[\w-]{1,64}$/;
+
+/** カードの目印として受け付ける文字列（リポジトリのフォルダとワークツリーの目印を | でつないだもの） */
+export function isCardKey(key: unknown): key is string {
+  return typeof key === 'string' && key.length > 0 && key.length <= 1024 && !/[\x00-\x1f]/.test(key);
+}
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'foldScope' | 'groupLimit' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showSeq' | 'showUpdated' | 'openAtLogin'
+      | 'edge' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'openAtLogin'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -185,14 +193,10 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
   },
   {
-    key: 'groupLimit', category: 'cards', group: '一覧', type: 'segmented',
-    label: 'グループごとの表示数', description: '残りは折りたたみに入る。対応待ち、未確認、開いているもの、常に表示のものはいつも出る',
-    options: [{ value: 3, label: '3' }, { value: 5, label: '5' }, { value: 8, label: '8' }, { value: 0, label: 'すべて' }],
-  },
-  {
-    key: 'foldScope', category: 'cards', group: '一覧', type: 'segmented',
-    label: '折りたたみのまとめ方', description: '残りと停止中を、カードの下にまとめるか、ワークツリーごとに分けるか',
-    options: [{ value: 'repo', label: 'プロジェクト' }, { value: 'worktree', label: 'ワークツリー' }],
+    key: 'mainArchiveMinutes', category: 'cards', group: 'アーカイブ', type: 'segmented',
+    label: 'main を自動でアーカイブ',
+    description: '元のフォルダのセッションを、落ち着いてから（確認してから）この時間で隠す。ワークツリーは最後に動いたもの以外をすぐに隠す。Bantus の中だけで、デスクトップのアーカイブには触れない',
+    options: [{ value: 10, label: '10 分' }, { value: 30, label: '30 分' }, { value: 60, label: '1 時間' }, { value: 0, label: 'しない' }],
   },
   {
     key: 'projectOrder', category: 'cards', group: '並び順', type: 'segmented',
@@ -201,22 +205,17 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     key: 'worktreeOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'ワークツリー', description: '小見出しの並び。固定は元のフォルダを先頭に、あとは名前順',
+    label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。固定は元のフォルダを先頭に、あとは名前順',
     options: ORDER_OPTIONS,
   },
   {
     key: 'sessionOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'セッション', description: '行の並び。固定は新しく作ったものが上。表示数を超えたときに折りたたむものは、どの並びでも優先度で選ぶ',
+    label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上',
     options: ORDER_OPTIONS,
   },
   {
-    key: 'showSeq', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: 'セッションの番号', description: 'ワークツリーごとに作った順の番号。状態のアイコンの右に出す',
-    options: SHOW_OPTIONS,
-  },
-  {
     key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: '更新日時', description: '2 行目の「◯分前」。ブランチ名も出ない行は 1 行になる',
+    label: '更新日時', description: '2 行目の「◯分前」',
     options: SHOW_OPTIONS,
   },
   {
@@ -282,11 +281,26 @@ export function normalizeSettings(input: unknown): Settings {
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
+  out.archive = normalizeMarks(src.archive, (id) => SESSION_KEY_ID.test(id));
+  out.archivedCards = normalizeMarks(src.archivedCards, isCardKey);
+  // 前の版の「常に表示」の星は、手で戻したものとして引き継ぐ
   if (Array.isArray(src.alwaysShow)) {
-    out.alwaysShow = [...new Set(src.alwaysShow.filter((id): id is string => typeof id === 'string' && ALWAYS_SHOW_ID.test(id)))];
+    for (const id of src.alwaysShow) {
+      if (typeof id === 'string' && SESSION_KEY_ID.test(id) && !out.archive[id]) out.archive[id] = 'shown';
+    }
   }
   const bounds = normalizeBounds(src.settingsWindow);
   if (bounds) out.settingsWindow = bounds;
+  return out;
+}
+
+/** 印の表から、目印と値が正しいものだけを残す */
+function normalizeMarks(input: unknown, validKey: (key: string) => boolean): Record<string, ArchiveMark> {
+  const out: Record<string, ArchiveMark> = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  for (const [key, mark] of Object.entries(input)) {
+    if ((mark === 'archived' || mark === 'shown') && validKey(key)) out[key] = mark;
+  }
   return out;
 }
 

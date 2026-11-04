@@ -1,6 +1,7 @@
 // 開発用：見本データ（fixtures/*.json）でウィジェットを起動する。実データは読まない。
 //   node scripts/debug.mjs [見本の名前] [--cycle 秒] [--screenshot 保存先.png] [--focus セレクター]
 //   --focus：撮る前にその要素へフォーカスする（ツールチップは 〈保存先〉-tooltip.png に別に撮る）
+//   --fly：撮る前にその要素を押す（重なりの的なら一覧が開き、〈保存先〉-flyout.png に別に撮る）
 // 見本の名前の既定は all-states。ファイルを書き換えると、すぐ表示に出る。
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -12,7 +13,7 @@ import { parseArgs } from 'node:util';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { cycle: { type: 'string' }, screenshot: { type: 'string' }, focus: { type: 'string' } },
+  options: { cycle: { type: 'string' }, screenshot: { type: 'string' }, focus: { type: 'string' }, fly: { type: 'string' } },
 });
 
 const name = positionals[0] ?? 'all-states';
@@ -29,6 +30,7 @@ if (values.screenshot) {
   mkdirSync(dirname(env.WIDGET_SCREENSHOT), { recursive: true });
 }
 if (values.focus) env.WIDGET_SCREENSHOT_FOCUS = values.focus;
+if (values.fly) env.WIDGET_SCREENSHOT_FLY = values.fly;
 
 const electron = createRequire(import.meta.url)('electron');
 const child = spawn(electron, ['.'], { cwd: root, env, stdio: 'inherit' });

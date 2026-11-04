@@ -4,6 +4,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createFlyout, isContent, isFlyRequest, type Flyout } from './flyout';
 import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
@@ -11,7 +12,8 @@ import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
-import { ALWAYS_SHOW_ID, WIDTH_MAX, WIDTH_MIN, type Settings, type WindowBounds } from '../shared/settings';
+import { cardKeyOf } from '../shared/card-key';
+import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, type ArchiveMark, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
@@ -39,6 +41,8 @@ const FLASH_MS = 3_000;
 let win: BrowserWindow | undefined;
 let settingsWin: BrowserWindow | undefined;
 let tipWin: BrowserWindow | undefined;
+/** めくれと一覧のウィンドウ（flyout.ts） */
+let flyout: Flyout | undefined;
 /** 今出そうとしているツールチップの基準の要素。消したら undefined にし、遅れて届いた大きさは捨てる */
 let tipAnchor: TipRect | undefined;
 let tipHideTimer: NodeJS.Timeout | undefined;
@@ -145,10 +149,10 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, pinned, groupLimit, foldScope, projectOrder, worktreeOrder, sessionOrder, showSeq, showUpdated, alwaysShow,
+    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen,
   };
 }
@@ -256,11 +260,9 @@ function isTipRect(v: unknown): v is TipRect {
   return ['x', 'y', 'width', 'height'].every((k) => typeof r[k] === 'number' && Number.isFinite(r[k]));
 }
 
-/** 開発用：折りたたみもすべて開いた画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
+/** 開発用：画面を PNG に保存して終わる（WIDGET_SCREENSHOT に保存先） */
 async function captureAndQuit(w: BrowserWindow, path: string) {
   await new Promise((r) => setTimeout(r, 500));
-  // ふだんは 1 つしか開けないので、ボタンは押さずに見た目だけ開く
-  await w.webContents.executeJavaScript("document.querySelectorAll('.fold').forEach((f) => f.classList.add('open'))");
   // 点滅や回転の途中で撮らないよう、アニメーションを止める
   await w.webContents.insertCSS('*, *::before, *::after { animation: none !important; }');
   // 画面に収まらない分も撮れるよう、ウィンドウを中身の高さまで伸ばす（スクロールする要素のいちばん大きな高さ）
@@ -272,12 +274,18 @@ async function captureAndQuit(w: BrowserWindow, path: string) {
   // ウィンドウの大きさを変えると消えるので、伸ばしたあとに出す
   const focus = process.env.WIDGET_SCREENSHOT_FOCUS;
   if (focus) await w.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(focus)})?.focus()`);
-  await new Promise((r) => setTimeout(r, 300));
+  // 一覧を見たいときは、その要素を押して開く（WIDGET_SCREENSHOT_FLY に CSS セレクター。重なりの的など）
+  const fly = process.env.WIDGET_SCREENSHOT_FLY;
+  if (fly) await w.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(fly)})?.click()`);
+  await new Promise((r) => setTimeout(r, fly ? 600 : 300));
   try {
     const image = await w.webContents.capturePage();
     writeFileSync(path, image.toPNG());
     // ツールチップは別のウィンドウなので、出ていれば別のファイルに撮る
     if (tipWin?.isVisible()) writeFileSync(path.replace(/(\.png)?$/i, '-tooltip.png'), (await tipWin.webContents.capturePage()).toPNG());
+    // めくれと一覧も別のウィンドウなので、出ていれば別のファイルに撮る
+    const flyWin = flyout?.window();
+    if (flyWin?.isVisible()) writeFileSync(path.replace(/(\.png)?$/i, '-flyout.png'), (await flyWin.webContents.capturePage()).toPNG());
   } catch (e) {
     console.error('画面を保存できませんでした：', e);
     app.exit(1);
@@ -428,6 +436,7 @@ function showToast(t: ToastRequest) {
 /** ビルドし直した画面を読み込み直す。一覧は読み込み終えたら送り直す（前と同じでも送る） */
 function reloadWindows() {
   hideTip();
+  flyout?.reload();
   if (win && !win.isDestroyed()) {
     win.webContents.once('did-finish-load', () => sendSessions(true));
     win.webContents.reload();
@@ -458,13 +467,31 @@ function sendSessions(force = false) {
   if (!force && json === lastSent) return;
   lastSent = json;
   win.webContents.send('sessions', sessions);
-  // 一覧から消えた（アーカイブや削除された）セッションは、常に表示からも外す。読めずに空のときは外さない
-  const { alwaysShow } = getSettings();
-  if (sessions.length && alwaysShow.length) {
+  // 一覧から消えた（デスクトップでアーカイブや削除された）セッションとカードは、アーカイブの印からも外す。読めずに空のときは外さない
+  if (sessions.length) {
+    const { archive, archivedCards } = getSettings();
     const ids = new Set(sessions.map((s) => s.id));
-    const kept = alwaysShow.filter((id) => ids.has(id));
-    if (kept.length !== alwaysShow.length) updateSettings({ alwaysShow: kept });
+    const cardKeys = new Set(sessions.map(cardKeyOf));
+    const keptSessions = pruneMarks(archive, ids);
+    const keptCards = pruneMarks(archivedCards, cardKeys);
+    if (keptSessions || keptCards) updateSettings({ ...(keptSessions && { archive: keptSessions }), ...(keptCards && { archivedCards: keptCards }) });
   }
+}
+
+/** 今ない目印の印を外す。外すものがなければ undefined */
+function pruneMarks(marks: Record<string, ArchiveMark>, keys: ReadonlySet<string>): Record<string, ArchiveMark> | undefined {
+  const entries = Object.entries(marks);
+  const kept = entries.filter(([k]) => keys.has(k));
+  return kept.length === entries.length ? undefined : Object.fromEntries(kept);
+}
+
+/** 印を付けるか外す（null で外す） */
+function setMark(marks: Record<string, ArchiveMark>, key: string, mark: unknown): Record<string, ArchiveMark> | undefined {
+  if (mark !== null && mark !== 'archived' && mark !== 'shown') return undefined;
+  const next = { ...marks };
+  if (mark === null) delete next[key];
+  else next[key] = mark;
+  return next;
 }
 
 // ---- 起動 ----
@@ -472,6 +499,17 @@ function sendSessions(force = false) {
 app.whenReady().then(() => {
   win = createWidget();
   tipWin = createTipWindow();
+  flyout = createFlyout({
+    preload: PRELOAD,
+    web: WEB,
+    widget: () => win,
+    edge: () => getSettings().edge,
+    area: () => targetDisplay(getSettings()).workArea,
+    onAction: (action) => win?.webContents.send('fly-action', action),
+    onState: (key, open) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
+    },
+  });
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
   const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
@@ -512,10 +550,24 @@ app.whenReady().then(() => {
   ipcMain.on('set-pinned', (_e, value: unknown) => {
     if (typeof value === 'boolean') updateSettings({ pinned: value });
   });
-  ipcMain.on('set-always-show', (_e, id: unknown, on: unknown) => {
-    if (typeof id !== 'string' || !ALWAYS_SHOW_ID.test(id) || typeof on !== 'boolean') return;
-    const rest = getSettings().alwaysShow.filter((x) => x !== id);
-    updateSettings({ alwaysShow: on ? [...rest, id] : rest });
+  ipcMain.on('set-archive', (_e, id: unknown, mark: unknown) => {
+    if (typeof id !== 'string' || !SESSION_KEY_ID.test(id)) return;
+    const archive = setMark(getSettings().archive, id, mark);
+    if (archive) updateSettings({ archive });
+  });
+  ipcMain.on('set-card-archive', (_e, key: unknown, mark: unknown) => {
+    if (!isCardKey(key)) return;
+    const archivedCards = setMark(getSettings().archivedCards, key, mark);
+    if (archivedCards) updateSettings({ archivedCards });
+  });
+  ipcMain.on('fly-show', (e, request: unknown) => {
+    if (e.sender === win?.webContents && isFlyRequest(request)) flyout?.show(request);
+  });
+  ipcMain.on('fly-update', (e, key: unknown, content: unknown, count: unknown) => {
+    if (e.sender === win?.webContents && typeof key === 'string' && isContent(content) && typeof count === 'number') flyout?.update(key, content, count);
+  });
+  ipcMain.on('fly-leave', (e, key: unknown) => {
+    if (e.sender === win?.webContents && typeof key === 'string') flyout?.leave(key);
   });
 
   ipcMain.on('flash-taskbar', () => flashTaskbar());
@@ -535,9 +587,18 @@ app.whenReady().then(() => {
     if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
   });
   // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
-  win.on('move', () => hideTip());
-  win.on('resize', () => hideTip());
-  win.on('hide', () => hideTip());
+  win.on('move', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  win.on('resize', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  win.on('hide', () => {
+    hideTip();
+    flyout?.hide();
+  });
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));

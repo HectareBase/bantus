@@ -8,14 +8,14 @@ import { icons } from 'lucide';
 /** lucide.dev での名前 */
 const NAMES = [
   'settings', 'chevron-right', 'pin', 'folder', 'house', 'git-branch', 'list', 'info',
-  // 行の「常に表示」
-  'star',
+  // 行とカードのアーカイブのトグル、一覧の起点の印、マージ済みのカード
+  'archive', 'diamond', 'git-merge',
   // 設定の「通知」と、音の試聴
   'bell', 'volume-2',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
-  'file-pen-line', 'file-plus', 'arrow-up',
+  'file-pen-line', 'file-plus', 'arrow-up', 'arrow-down',
 ];
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());

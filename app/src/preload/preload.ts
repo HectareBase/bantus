@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Settings } from '../shared/settings';
-import type { SessionView, SettingsApi, TipApi, WidgetApi, WidgetLayout } from '../shared/types';
+import type { FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
   onSessions: (listener) => {
@@ -23,7 +23,17 @@ const widget: WidgetApi = {
   resizeEnd: () => ipcRenderer.send('resize-end'),
   openSettings: () => ipcRenderer.send('open-settings'),
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
-  setAlwaysShow: (id, on) => ipcRenderer.send('set-always-show', id, on),
+  setArchive: (id, mark) => ipcRenderer.send('set-archive', id, mark),
+  setCardArchive: (key, mark) => ipcRenderer.send('set-card-archive', key, mark),
+  showFlyout: (request) => ipcRenderer.send('fly-show', request),
+  updateFlyout: (key, content, count) => ipcRenderer.send('fly-update', key, content, count),
+  leaveFlyout: (key) => ipcRenderer.send('fly-leave', key),
+  onFlyAction: (listener) => {
+    ipcRenderer.on('fly-action', (_e, action: FlyAction) => listener(action));
+  },
+  onFlyState: (listener) => {
+    ipcRenderer.on('fly-state', (_e, key: string | undefined, open: boolean) => listener(key, open === true));
+  },
   flashTaskbar: () => ipcRenderer.send('flash-taskbar'),
   isClaudeInFront: () => ipcRenderer.invoke('claude-in-front'),
   showToast: (toast) => ipcRenderer.send('show-toast', toast),
@@ -44,6 +54,25 @@ const tipApi: TipApi = {
   reportSize: (width, height) => ipcRenderer.send('tip:size', width, height),
 };
 
+const flyoutApi: FlyoutApi = {
+  onShow: (listener) => {
+    ipcRenderer.on('fly:show', (_e, show: FlyShow) => listener(show));
+  },
+  onContent: (listener) => {
+    ipcRenderer.on('fly:content', (_e, content: FlyContent, count: number) => listener(content, count));
+  },
+  onOpen: (listener) => {
+    ipcRenderer.on('fly:open', () => listener());
+  },
+  onHide: (listener) => {
+    ipcRenderer.on('fly:hide', () => listener());
+  },
+  reportSolid: (rects) => ipcRenderer.send('fly:solid', rects),
+  requestOpen: () => ipcRenderer.send('fly:request-open'),
+  action: (action) => ipcRenderer.send('fly:action', action),
+  close: () => ipcRenderer.send('fly:close'),
+};
+
 const settingsApi: SettingsApi = {
   get: () => ipcRenderer.invoke('settings:get'),
   set: (patch) => ipcRenderer.send('settings:set', patch),
@@ -57,3 +86,4 @@ const settingsApi: SettingsApi = {
 contextBridge.exposeInMainWorld('widget', widget);
 contextBridge.exposeInMainWorld('settingsApi', settingsApi);
 contextBridge.exposeInMainWorld('tipApi', tipApi);
+contextBridge.exposeInMainWorld('flyoutApi', flyoutApi);

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Bantus — 以前のセッション</title>
+  <link rel="stylesheet" href="flyout.css">
+</head>
+<body>
+  <!-- めくれと一覧（flyout.ts）。ウィンドウはメインプロセスがカードの端から外へ置く（src/main/flyout.ts） -->
+  <div id="flap" class="flap" hidden><span class="flap-count"></span><span class="flap-arrow"></span></div>
+  <div id="list" class="list" hidden>
+    <div class="list-body"></div>
+    <div class="list-foot" hidden></div>
+  </div>
+  <script type="module" src="flyout.js"></script>
+</body>
+</html>
