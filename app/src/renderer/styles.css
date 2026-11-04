@@ -205,6 +205,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 html:not([data-edge="left"]) .stack { left: -8px; border-right: 0; border-radius: 7px 0 0 7px; }
 html[data-edge="left"] .stack { right: -8px; border-left: 0; border-radius: 0 7px 7px 0; }
 .card-wrap[data-fly] .stack { background: var(--stack-strong); }
+.card-wrap[data-fly-open] .stack { visibility: hidden; }
 /* 押せる的は見えている幅より広く、ウィジェットの端からカードの中まで少しかかる。幅を変える取っ手より上に置く */
 .stack-hit { width: 12px; z-index: 11; }
 html:not([data-edge="left"]) .stack-hit { left: -8px; }

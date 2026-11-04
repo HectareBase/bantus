@@ -15,6 +15,8 @@ import { flyoutBounds, inHoverZone, type Rect } from './tip-place';
 const POLL_MS = 30;
 /** 外のクリックで閉じてから、同じものを開き直さない長さ */
 const REOPEN_GUARD_MS = 400;
+/** 一覧を開いたまま、ほかの重なりに乗ったとき、切り替えるまでとどまるのを待つ長さ */
+const SWITCH_DWELL_MS = 150;
 /** 出し入れの記録（FLY_DEBUG を付けたときだけ。docs/design/worktree-cards.md の「手で確かめること」） */
 const dbg = (...a: unknown[]) => {
   if (process.env.FLY_DEBUG) console.log('[fly]', ...a);
@@ -152,6 +154,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
 
   function hide() {
     dbg('hide', key);
+    cancelSwitch();
     clearInterval(poll);
     poll = undefined;
     const had = key !== undefined;
@@ -191,6 +194,32 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     deps.onState(key, true);
   }
 
+  /** 一覧を開いたまま、ほかの重なりに乗ったときの切り替え */
+  let pendingSwitch: { key: string; timer: NodeJS.Timeout } | undefined;
+
+  function cancelSwitch() {
+    if (!pendingSwitch) return;
+    clearTimeout(pendingSwitch.timer);
+    pendingSwitch = undefined;
+  }
+
+  function scheduleSwitch(request: FlyRequest) {
+    if (pendingSwitch?.key === request.key) return;
+    cancelSwitch();
+    const timer = setTimeout(() => {
+      pendingSwitch = undefined;
+      const widget = deps.widget();
+      if (!open || !widget || widget.isDestroyed()) return;
+      const wb = widget.getBounds();
+      const target = { x: wb.x + request.hit.x - 1, y: wb.y + request.hit.y - 1, width: request.hit.width + 2, height: request.hit.height + 2 };
+      // まだその重なりの的の上にいるときだけ切り替える
+      if (!inHoverZone(screen.getCursorScreenPoint(), win.getBounds(), [], target).hit) return;
+      hide();
+      api.show(request);
+    }, SWITCH_DWELL_MS);
+    pendingSwitch = { key: request.key, timer };
+  }
+
   win.on('blur', () => {
     dbg('blur', open);
     if (!open) return;
@@ -225,13 +254,18 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     if (e.sender === win.webContents) hide();
   });
 
-  return {
+  const api: Flyout = {
     show(request) {
       dbg('show', request.key, request.open, 'current', key, open);
       // 開いている一覧を外のクリック（重なりを押した）で閉じた直後は、同じものを開き直さない（押すたびに開け閉めする）
       if (request.open && closedByBlur?.key === request.key && Date.now() - closedByBlur.at < REOPEN_GUARD_MS) return;
-      // 開いている一覧があるときは、ほかの重なりに乗っても出さない（開けるのは 1 つだけ）。見出しから開くときは置き換える
-      if (open && !request.open) return;
+      // 一覧を開いているときに、ほかの重なりに乗った：少しとどまったら一覧を閉じて、その重なりのめくれを出す（開けるのは 1 つだけ）。
+      // 一覧からウィジェットへカーソルを戻すときに、通りがかった重なりで一覧が閉じないよう、とどまるのを待つ
+      if (open && !request.open && key !== request.key) {
+        scheduleSwitch(request);
+        return;
+      }
+      cancelSwitch();
       if (key === request.key) {
         // 同じ重なりの上を動いているだけなら何もしない。押されたら、出ているめくれをそのまま一覧へ変形させる
         // （上下の具合でクリックがめくれでなくウィジェットに届いても、同じ動きにする）
@@ -285,4 +319,5 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       win.webContents.reload();
     },
   };
+  return api;
 }

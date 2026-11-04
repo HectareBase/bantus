@@ -657,6 +657,9 @@ window.widget.onFlyAction(onFlyAction);
 window.widget.onFlyState((key, open) => {
   flyKey = key;
   flyOpen = open;
-  // めくれ・一覧を出している間は、そのカードの重なりを濃くする
-  for (const [k, refs] of cards) refs.el.toggleAttribute('data-fly', k === key);
+  // めくれを出している間は、そのカードの重なりを濃くする。一覧を開いている間は、重なりが飛び出して一覧になったものとして隠す
+  for (const [k, refs] of cards) {
+    refs.el.toggleAttribute('data-fly', k === key);
+    refs.el.toggleAttribute('data-fly-open', k === key && open);
+  }
 });

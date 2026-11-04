@@ -191,6 +191,8 @@ function setOpen(animate: boolean) {
   flap.classList.add('pinned');
   placeList();
   if (animate) morph();
+  // めくれは飛び出して一覧になったので、開いている間は隠す（一覧が短いと、下からはみ出して見えるため）
+  flap.hidden = true;
   reportSolid();
 }
 
