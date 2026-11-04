@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FLY_WIDTH, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, tipBounds } from '../src/main/tip-place';
+import { FLY_WIDTH, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, tipBounds } from '../src/main/tip-place';
 
 const area = { x: 0, y: 0, width: 1920, height: 1040 };
 const size = { width: 200, height: 40 };
@@ -56,4 +56,16 @@ describe('flyoutBounds', () => {
     assert.equal(contains({ x: 0, y: 0, width: 10, height: 10 }, 9, 9), true);
     assert.equal(contains({ x: 0, y: 0, width: 10, height: 10 }, 10, 5), false);
   });
+});
+
+describe('inHoverZone', () => {
+  // 右端のウィジェット：めくれのウィンドウはカードの端（x=1664）から左。重なりの的はカードの中へ 4px かかる
+  const win = { x: 1324, y: 0, width: 340, height: 1040 };
+  const flap = { x: 310, y: 126, width: 30, height: 68 };
+  const hit = { x: 1656, y: 126, width: 12, height: 68 };
+  it('ウィジェット側から乗せた（的のうちカードにかかった所）ときは、めくれの外でも的の中', () =>
+    assert.deepEqual(inHoverZone({ x: 1666, y: 150 }, win, [flap], hit), { solid: false, hit: true }));
+  it('めくれの上ではクリックを受け取る', () => assert.deepEqual(inHoverZone({ x: 1640, y: 150 }, win, [flap], hit), { solid: true, hit: false }));
+  it('どちらからも外れた', () => assert.deepEqual(inHoverZone({ x: 1700, y: 150 }, win, [flap], hit), { solid: false, hit: false }));
+  it('的がなければ、めくれだけで決める', () => assert.deepEqual(inHoverZone({ x: 1660, y: 150 }, win, [flap], undefined), { solid: true, hit: false }));
 });

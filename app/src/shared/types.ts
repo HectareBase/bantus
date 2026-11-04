@@ -95,7 +95,7 @@ export interface WidgetApi {
   showFlyout(request: FlyRequest): void;
   /** 開いている（めくれを出している）一覧の中身だけを差し替える */
   updateFlyout(key: string, content: FlyContent, count: number): void;
-  /** めくれの前に重なりから外れたとき。めくれを出していれば消す */
+  /** 出しているめくれ・一覧を消す（ウィジェットの一覧をスクロールしたとき） */
   leaveFlyout(key: string): void;
   /** 一覧の中の操作（行を押した、トグルを押した） */
   onFlyAction(listener: (action: FlyAction) => void): void;
@@ -179,6 +179,8 @@ export interface FlyRequest {
   count: number;
   /** カード（または見出し）の位置。ウィジェットの中の座標 */
   anchor: TipRect;
+  /** 重なりの的（見出しから開くときは見出し）。ウィジェットの中の座標。ここかめくれの上にいる間は、めくれを消さない */
+  hit: TipRect;
   content: FlyContent;
   /** true なら、めくれを出さずにすぐ一覧を開く（リポジトリの見出し） */
   open: boolean;

@@ -285,7 +285,7 @@ async function captureAndQuit(w: BrowserWindow, path: string) {
     if (tipWin?.isVisible()) writeFileSync(path.replace(/(\.png)?$/i, '-tooltip.png'), (await tipWin.webContents.capturePage()).toPNG());
     // めくれと一覧も別のウィンドウなので、出ていれば別のファイルに撮る
     const flyWin = flyout?.window();
-    if (flyWin?.isVisible()) writeFileSync(path.replace(/(\.png)?$/i, '-flyout.png'), (await flyWin.webContents.capturePage()).toPNG());
+    if (flyWin && flyout?.showing()) writeFileSync(path.replace(/(\.png)?$/i, '-flyout.png'), (await flyWin.webContents.capturePage()).toPNG());
   } catch (e) {
     console.error('画面を保存できませんでした：', e);
     app.exit(1);
@@ -597,8 +597,11 @@ app.whenReady().then(() => {
   });
   win.on('hide', () => {
     hideTip();
-    flyout?.hide();
+    flyout?.setWidgetVisible(false);
   });
+  // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
+  win.on('show', () => flyout?.setWidgetVisible(true));
+  if (win.isVisible()) flyout.setWidgetVisible(true);
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));

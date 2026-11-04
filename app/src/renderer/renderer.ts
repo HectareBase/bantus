@@ -411,7 +411,7 @@ function showCardFlyout(key: string, open: boolean) {
   const refs = cards.get(key);
   const card = refs?.data;
   if (!refs || !card || !card.archived.length) return;
-  window.widget.showFlyout({ key, count: card.archived.length, anchor: rectOf(refs.card), content: cardContent(card), open });
+  window.widget.showFlyout({ key, count: card.archived.length, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), content: cardContent(card), open });
 }
 
 function showRepoFlyout(repoKey: string) {
@@ -420,7 +420,7 @@ function showRepoFlyout(repoKey: string) {
   if (!refs || !repo || !repo.hiddenCards.length) return;
   const key = `repo:${repoKey}`;
   if (flyKey === key && flyOpen) return;
-  window.widget.showFlyout({ key, count: repo.hiddenCards.length, anchor: rectOf(refs.header), content: repoContent(repo), open: true });
+  window.widget.showFlyout({ key, count: repo.hiddenCards.length, anchor: rectOf(refs.header), hit: rectOf(refs.archived), content: repoContent(repo), open: true });
 }
 
 /** 出しているめくれ・一覧の中身を、描き直したものに合わせる。中身がなくなったら閉じる */
@@ -488,9 +488,12 @@ function getCard(card: WorktreeCard): CardRefs {
       rows: el.querySelector('.rows')!,
     };
     const key = card.key;
-    // 重なりに乗せたらめくれを出す。めくれが出る前に外れたら出すのをやめる（出たあとはメインプロセスがカーソルを見る）
+    // 重なりの的に乗せたらめくれを出す。消すのはメインプロセス（カーソルが的とめくれのどちらからも外れたとき）。
+    // 的の上で動いている間にめくれが消えていたら（一覧を閉じたあとなど）、出し直す
     refs.stackHit.addEventListener('pointerenter', () => showCardFlyout(key, false));
-    refs.stackHit.addEventListener('pointerleave', () => window.widget.leaveFlyout(key));
+    refs.stackHit.addEventListener('pointermove', () => {
+      if (flyKey !== key) showCardFlyout(key, false);
+    });
     // めくれが出る前に押したときは、すぐ一覧を開く
     refs.stackHit.addEventListener('click', () => showCardFlyout(key, true));
     refs.act.addEventListener('click', (e) => {

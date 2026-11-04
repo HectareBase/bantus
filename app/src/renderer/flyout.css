@@ -92,9 +92,9 @@ html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8p
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
-/* 一覧はめくれの横に並べ、めくれは濃くして見せたままにする（もう一度押すと閉じる） */
-html[data-side="left"] .list { right: 32px; transform-origin: right top; }
-html[data-side="right"] .list { left: 32px; transform-origin: left top; }
+/* 一覧はめくれと同じ端（カードの端）から開く。めくれの形から一覧の形へ変形し、めくれは一覧の下に隠れる */
+html[data-side="left"] .list { right: 0; transform-origin: right top; }
+html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .list-body { overflow-y: auto; min-height: 0; }
 .list-body::-webkit-scrollbar { width: 6px; }
 .list-body::-webkit-scrollbar-thumb { background: var(--stroke); border-radius: 3px; }

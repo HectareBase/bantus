@@ -167,12 +167,15 @@ function placeFlap(show: FlyShow) {
 /** めくれの形から一覧の形へ変形する */
 function morph() {
   if (reducedMotion.matches || flap.hidden) return;
-  const from = flap.getBoundingClientRect();
-  const to = list.getBoundingClientRect();
+  // めくれが伸びている途中で押されても、伸びる動き（transform）を除いた形から始める（モックと同じ）
+  const from = rectOf(flap);
+  const to = rectOf(list);
   const sx = from.width / to.width;
   const sy = from.height / to.height;
-  const dx = document.documentElement.dataset.side === 'left' ? from.right - to.right : from.left - to.left;
-  const dy = from.top - to.top;
+  const dx = document.documentElement.dataset.side === 'left'
+    ? from.x + from.width - (to.x + to.width)
+    : from.x - to.x;
+  const dy = from.y - to.y;
   list.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }], {
     duration: MORPH_MS,
     easing: 'cubic-bezier(.2, .8, .2, 1)',

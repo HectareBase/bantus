@@ -55,3 +55,19 @@ export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, a
 export function contains(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
 }
+
+/**
+ * カーソルがどこにいるか。solid はめくれと一覧（ウィンドウの中の座標）、hit は重なりの的（画面の座標）。
+ * 的はカードの中へ少しかかっていて、めくれのウィンドウの外にある。ウィジェット側からゆっくり乗せたときもめくれを消さないよう、両方を見る
+ */
+export function inHoverZone(
+  cursor: { x: number; y: number },
+  win: Rect,
+  solid: Rect[],
+  hit: Rect | undefined,
+): { solid: boolean; hit: boolean } {
+  return {
+    solid: solid.some((r) => contains(r, cursor.x - win.x, cursor.y - win.y)),
+    hit: !!hit && contains(hit, cursor.x, cursor.y),
+  };
+}
