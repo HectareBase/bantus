@@ -410,8 +410,8 @@ function rectOf(el: Element) {
 function showCardFlyout(key: string, open: boolean) {
   const refs = cards.get(key);
   const card = refs?.data;
-  if (!refs || !card || !card.archived.length) return;
-  window.widget.showFlyout({ key, count: card.archived.length, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), content: cardContent(card), open });
+  if (!refs || !card || !card.stackCount) return;
+  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), content: cardContent(card), open });
 }
 
 function showRepoFlyout(repoKey: string) {
@@ -432,7 +432,7 @@ function updateFlyout() {
     return;
   }
   const card = cards.get(flyKey)?.data;
-  if (card) window.widget.updateFlyout(flyKey, cardContent(card), card.archived.length);
+  if (card) window.widget.updateFlyout(flyKey, cardContent(card), card.stackCount);
 }
 
 function onFlyAction(action: FlyAction) {
@@ -508,8 +508,8 @@ function getCard(card: WorktreeCard): CardRefs {
   // 動いている（処理中・対応待ちの）セッションがあるカードはアーカイブできないので、トグルを出さない
   refs.act.hidden = card.isMain || card.sessions.some((s) => s.state === 'busy' || s.state === 'waiting');
   setChanges(refs.changes, card.changes);
-  refs.el.toggleAttribute('data-stack', card.archived.length > 0);
-  refs.stackHit.dataset.count = String(card.archived.length);
+  refs.el.toggleAttribute('data-stack', card.stackCount > 0);
+  refs.stackHit.dataset.count = String(card.stackCount);
   syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));
   refs.data = card;
   return refs;

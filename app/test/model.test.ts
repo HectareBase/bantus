@@ -128,6 +128,7 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     const [repo] = buildRepos(list());
     const main = repo!.cards.find((c) => c.isMain)!;
     const x = repo!.cards.find((c) => !c.isMain)!;
+    assert.equal(x.stackCount, 1);
     assert.deepEqual(main.sessions.map((s) => s.id), ['q']);
     assert.deepEqual(x.archived.map((s) => s.id), ['origin']);
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.origin, t.link]), [['w1', false, 'solid'], ['origin', true, undefined]]);
@@ -138,12 +139,15 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     assert.deepEqual(repo!.cards.find((c) => c.isMain)!.sessions.map((s) => s.id).sort(), ['origin', 'q']);
     const x = repo!.cards.find((c) => !c.isMain)!;
     assert.deepEqual(x.archived, []);
+    assert.equal(x.stackCount, 1, '起点が main に出ていても、重なりは残す');
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.archived]), [['w1', false], ['origin', false]]);
   });
 
-  it('手で戻したものは main に残す', () => {
+  it('手で戻したものは main に残す。ワークツリーのカードの重なりは残す', () => {
     const [repo] = buildRepos(list(), opts({ marks: { origin: 'shown' } }));
     assert.ok(repo!.cards.find((c) => c.isMain)!.sessions.some((s) => s.id === 'origin'));
+    const x = repo!.cards.find((c) => !c.isMain)!;
+    assert.deepEqual([x.archived.length, x.stackCount], [0, 1]);
   });
 
   it('main のセッションがすべて起点として移ったら、main のカードは出さない', () => {

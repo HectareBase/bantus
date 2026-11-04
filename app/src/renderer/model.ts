@@ -360,6 +360,11 @@ export interface WorktreeCard {
   archived: SessionView[];
   /** 一覧に出す行。ワークツリーは全部（新しく作ったものが上、起点が下）、main はアーカイブしたものだけ */
   timeline: TimelineItem[];
+  /**
+   * 一覧にあって、このカードの行に出ていないものの数（重なりとめくれの件数）。アーカイブしたものと、main に残した起点。
+   * 0 なら重なりを出さない。起点をアーカイブから戻しても、つながりは一覧で見られるよう重なりを残す
+   */
+  stackCount: number;
   /** カードごとアーカイブしている（マージ済み、ワークツリーがない、手でアーカイブした） */
   hidden: boolean;
   /** マージ済み（ワークツリーがないものも含む） */
@@ -537,6 +542,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         sessions: shown.sort(order),
         archived,
         timeline,
+        stackCount: timeline.filter((t) => !shown.includes(t.session)).length,
         hidden,
         merged,
         rank,

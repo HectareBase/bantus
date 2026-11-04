@@ -125,8 +125,8 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .node.linked { padding-left: 30px; }
 .node:hover { background: var(--hover); }
 /* デスクトップで今開いているセッション：ごく薄い斜めのストライプ（色相は使わない） */
-.node[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px); }
-.node[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--hover); }
+.node[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--hover); }
+.node[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--selected); }
 .node .dot {
   position: absolute;
   left: 12px;
