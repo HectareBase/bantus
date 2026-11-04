@@ -18,8 +18,6 @@ flap.querySelector('.flap-arrow')!.append(createIcon('chevron-right'));
 
 /** めくれはカードの上下からこれだけ内側（重なりと同じ） */
 const FLAP_INSET = 6;
-/** 一覧はカードの上端からこれだけ上に出す */
-const LIST_LIFT = 4;
 /** ウィンドウの端と一覧の間（影の分） */
 const EDGE_MARGIN = 8;
 const MORPH_MS = 220;
@@ -83,7 +81,9 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   if (item.sub) sub.append(item.sub);
   txt.append(title, sub);
   el.append(txt);
-  if (kind !== 'cards') {
+  // 処理中・対応待ちのものはアーカイブできない（動いているものは隠さない）ので、トグルを出さない
+  const live = !item.archived && (item.state === 'busy' || item.state === 'waiting');
+  if (kind !== 'cards' && !live) {
     const act = document.createElement('button');
     act.className = 'act';
     act.setAttribute('aria-pressed', String(item.archived));
@@ -155,7 +155,7 @@ function showSummary(id: string | undefined) {
 function placeList() {
   if (!current) return;
   const max = window.innerHeight - list.offsetHeight - EDGE_MARGIN;
-  list.style.top = `${Math.max(EDGE_MARGIN, Math.min(current.top - LIST_LIFT, max))}px`;
+  list.style.top = `${Math.max(EDGE_MARGIN, Math.min(current.top, max))}px`;
 }
 
 function placeFlap(show: FlyShow) {
@@ -200,6 +200,9 @@ window.flyoutApi.onShow((show) => {
   current = show;
   open = false;
   document.documentElement.dataset.side = show.side;
+  // 一覧はウィジェットの端からすき間をあけて開く（めくれはカードの端から伸びる）
+  list.style.right = show.side === 'left' ? `${show.inset}px` : '';
+  list.style.left = show.side === 'right' ? `${show.inset}px` : '';
   renderContent(show.content);
   list.hidden = true;
   flap.classList.remove('pinned', 'peek');

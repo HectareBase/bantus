@@ -142,6 +142,9 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 
 /* リポジトリの見出し。カードの上に、名前とバッジを出す */
 .repo { margin-bottom: 6px; }
+/* カードは見出しより字下げして、プロジェクトの中のワークツリーだとわかるようにする */
+:root { --card-indent: 12px; }
+.repo-cards { padding-left: var(--card-indent); }
 .repo-header {
   display: flex;
   align-items: center;
@@ -208,7 +211,8 @@ html[data-edge="left"] .stack { right: -8px; border-left: 0; border-radius: 0 7p
 .card-wrap[data-fly-open] .stack { visibility: hidden; }
 /* 押せる的は見えている幅より広く、ウィジェットの端からカードの中まで少しかかる。幅を変える取っ手より上に置く */
 .stack-hit { width: 12px; z-index: 11; }
-html:not([data-edge="left"]) .stack-hit { left: -8px; }
+/* 右端に置いたときは、重なりの側（左）に字下げの分の余白があるので、的をウィジェットの端まで広げる */
+html:not([data-edge="left"]) .stack-hit { left: calc(-8px - var(--card-indent)); width: calc(12px + var(--card-indent)); }
 html[data-edge="left"] .stack-hit { right: -8px; }
 
 /* カードの見出し：ブランチ名と git の印だけ。押しても何も開かない */
@@ -360,6 +364,8 @@ html.hide-updated .meta { display: none; }
 .act:hover { background: var(--hover); color: var(--text); }
 .row:hover .act, .card-header:hover .act { opacity: 1; }
 .row:not(:hover) .act { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
+/* 処理中・対応待ちの行はアーカイブできない（動いているものは隠さない）ので、トグルを出さない */
+.row[data-state="busy"] .act, .row[data-state="waiting"] .act { display: none; }
 .card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
 
 /* ---- 状態の印（lucide のアイコン。どれを出すかは model.ts の statusIconName） ---- */

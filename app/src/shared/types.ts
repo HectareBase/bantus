@@ -212,6 +212,8 @@ export interface FlyShow {
   side: 'left' | 'right';
   /** カードの上端と高さ（ウィンドウの中の座標） */
   top: number;
+  /** ウィンドウのカード側の端から一覧までの距離（一覧はウィジェットの端からすき間をあけて開く） */
+  inset: number;
   height: number;
   count: number;
   content: FlyContent;

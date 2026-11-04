@@ -34,20 +34,29 @@ function clamp(value: number, min: number, max: number): number {
 
 // ---- めくれと一覧のウィンドウ（flyout） ----
 
-/** めくれと一覧のウィンドウの幅（一覧の幅と影の余白） */
-export const FLY_WIDTH = 340;
+/** 一覧の幅 */
+export const FLY_LIST_WIDTH = 300;
+/** ウィジェットの端と一覧のすき間 */
+export const FLY_GAP = 6;
+/** 一覧の外側の、影を描く余白 */
+export const FLY_SHADOW = 8;
 
 /**
  * めくれと一覧のウィンドウを置く場所。カードの端（画面の内側の端）から外へ、作業領域の高さいっぱいに取る。
- * 縦の位置は一覧の画面が決めるので、ウィンドウは動かさずに済む。top はカードの上端（ウィンドウの中の座標）
+ * めくれはカードの端から伸び、一覧はウィジェットの端からすき間をあけて開くので、ウィンドウはその両方が入る幅にする。
+ * 縦の位置は一覧の画面が決めるので、ウィンドウは動かさずに済む。top はカードの上端（ウィンドウの中の座標）、
+ * inset はウィンドウのカード側の端から一覧までの距離
  * @param anchor カード（ウィジェットの中の座標）
  */
-export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect): { bounds: Rect; top: number } {
+export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect): { bounds: Rect; top: number; inset: number } {
   // ウィジェットが右端なら、カードの左端から左へ。左端なら、カードの右端から右へ
-  const x = edge === 'right' ? widget.x + anchor.x - FLY_WIDTH : widget.x + anchor.x + anchor.width;
+  const inset = Math.round(edge === 'right' ? anchor.x : widget.width - (anchor.x + anchor.width)) + FLY_GAP;
+  const width = inset + FLY_LIST_WIDTH + FLY_SHADOW;
+  const x = edge === 'right' ? widget.x + anchor.x - width : widget.x + anchor.x + anchor.width;
   return {
-    bounds: { x: Math.round(x), y: area.y, width: FLY_WIDTH, height: area.height },
+    bounds: { x: Math.round(x), y: area.y, width, height: area.height },
     top: Math.round(widget.y + anchor.y - area.y),
+    inset,
   };
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FLY_WIDTH, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, tipBounds } from '../src/main/tip-place';
+import { FLY_GAP, FLY_LIST_WIDTH, FLY_SHADOW, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, tipBounds } from '../src/main/tip-place';
 
 const area = { x: 0, y: 0, width: 1920, height: 1040 };
 const size = { width: 200, height: 40 };
@@ -38,15 +38,22 @@ describe('tipBounds', () => {
 
 describe('flyoutBounds', () => {
   const card = { x: 8, y: 120, width: 254, height: 80 };
-  it('右端のウィジェットなら、カードの左端から左へ、作業領域の高さいっぱいに置く', () => {
+  it('右端のウィジェットなら、カードの左端から左へ、作業領域の高さいっぱいに置く。一覧はウィジェットの端からすき間をあける', () => {
+    // 字下げしたカード（左端が 20）
     const widget = { x: 1656, y: 0, width: 264, height: 1040 };
-    const { bounds, top } = flyoutBounds('right', widget, area, card);
-    assert.deepEqual(bounds, { x: 1656 + 8 - FLY_WIDTH, y: 0, width: FLY_WIDTH, height: 1040 });
+    const { bounds, top, inset } = flyoutBounds('right', widget, area, { ...card, x: 20, width: 242 });
+    assert.equal(inset, 20 + FLY_GAP);
+    const width = inset + FLY_LIST_WIDTH + FLY_SHADOW;
+    assert.deepEqual(bounds, { x: 1656 + 20 - width, y: 0, width, height: 1040 });
     assert.equal(top, 120);
+    // 一覧のウィジェット側の端は、ウィジェットの左端からすき間の分だけ離れる
+    assert.equal(bounds.x + bounds.width - inset, widget.x - FLY_GAP);
   });
   it('左端のウィジェットなら、カードの右端から右へ', () => {
     const widget = { x: 0, y: 0, width: 264, height: 1040 };
-    assert.equal(flyoutBounds('left', widget, area, card).bounds.x, 262);
+    const { bounds, inset } = flyoutBounds('left', widget, area, card);
+    assert.equal(bounds.x, 262);
+    assert.equal(bounds.x + inset, 264 + FLY_GAP);
   });
   it('作業領域が画面の上から始まらないときは、その分を引いた位置をカードの上端にする', () => {
     const top = flyoutBounds('left', { x: 0, y: 40, width: 264, height: 1000 }, { ...area, y: 40, height: 1000 }, card).top;

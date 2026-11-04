@@ -505,7 +505,8 @@ function getCard(card: WorktreeCard): CardRefs {
   setIcon(refs.icon, card.isMain ? 'house' : 'git-branch');
   refs.label.textContent = card.label;
   refs.header.dataset.tip = card.tooltip;
-  refs.act.hidden = card.isMain;
+  // 動いている（処理中・対応待ちの）セッションがあるカードはアーカイブできないので、トグルを出さない
+  refs.act.hidden = card.isMain || card.sessions.some((s) => s.state === 'busy' || s.state === 'waiting');
   setChanges(refs.changes, card.changes);
   refs.el.toggleAttribute('data-stack', card.archived.length > 0);
   refs.stackHit.dataset.count = String(card.archived.length);

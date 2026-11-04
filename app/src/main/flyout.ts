@@ -133,12 +133,12 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   }
 
   /** ウィジェットに合わせた場所。カードによらず同じなので、変わったとき（幅や端を変えた）だけ置き直す */
-  function place(anchor: TipRect): number | undefined {
+  function place(anchor: TipRect): { top: number; inset: number } | undefined {
     const widget = deps.widget();
     if (!widget || widget.isDestroyed()) return undefined;
-    const { bounds, top } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), anchor);
+    const { bounds, top, inset } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), anchor);
     if (!sameRect(win.getBounds(), bounds)) win.setBounds(bounds);
-    return top;
+    return { top, inset };
   }
 
   function tick() {
@@ -274,9 +274,9 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       }
       if (key) hide();
       ensureShown();
-      const top = place(request.anchor);
+      const placed = place(request.anchor);
       const widget = deps.widget();
-      if (top === undefined || !widget) return;
+      if (!placed || !widget) return;
       const wb = widget.getBounds();
       key = request.key;
       open = request.open;
@@ -287,7 +287,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       const show: FlyShow = {
         key: request.key,
         side: deps.edge() === 'right' ? 'left' : 'right',
-        top,
+        top: placed.top,
+        inset: placed.inset,
         height: Math.round(request.anchor.height),
         count: request.count,
         content: request.content,
