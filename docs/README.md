@@ -21,6 +21,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [widget-app-plan.md](design/widget-app-plan.md) | ウィジェットアプリの計画（Electron、サイドバー型）、表示ルール、これから決めること |
 | [data-usage.md](design/data-usage.md) | ウィジェットが読むもの、動かすもの、書くもの、しないこと |
 | [git-changes.md](design/git-changes.md) | コミットされていない変更の調べ方（`git status`）と表示 |
+| [worktree-cards.md](design/worktree-cards.md) | ワークツリー単位のカードと Bantus のアーカイブ（実現性の確認と仕様） |
 | [packaging-plan.md](design/packaging-plan.md) | exe 化とインストーラーの計画（electron-builder、NSIS）と、確かめた結果 |
 
 ## 開発の決まり
