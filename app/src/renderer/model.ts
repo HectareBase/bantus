@@ -311,6 +311,11 @@ export interface ArchiveOptions {
   confirmedAt: ReadonlyMap<string, number>;
   /** main で自動でアーカイブするまでの分。0 ならしない */
   mainMinutes: number;
+  /**
+   * アーカイブから動き出して戻ったセッション。落ち着いて（最後に動いたか確認してから）しばらくは、どの決まりでもアーカイブしない。
+   * 開いて結果を読んでいる間に、帯が消えたとたん隠れないようにする
+   */
+  revived: ReadonlySet<string>;
   now: number;
   sort: SortOptions;
 }
@@ -332,6 +337,7 @@ export const NO_ARCHIVE: ArchiveOptions = {
   attention: new Set(),
   confirmedAt: new Map(),
   mainMinutes: 0,
+  revived: new Set(),
   now: 0,
   sort: PRIORITY_SORT,
 };
@@ -392,6 +398,21 @@ export function isLive(s: SessionView, attention: ReadonlySet<string>): boolean 
   return s.state === 'busy' || s.state === 'waiting' || attention.has(s.id);
 }
 
+/** 戻ったセッションを出しておく分（main の自動アーカイブがオフのとき） */
+export const REVIVE_GRACE_MINUTES = 10;
+
+/** 落ち着いた時刻。最後に動いた時刻と、ウィジェットで確認した時刻の新しいほう */
+function settledAt(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt'>): number {
+  return Math.max(s.lastActivityAt, opts.confirmedAt.get(s.id) ?? 0);
+}
+
+/** 隠さずに出しておくもの：動いているものと、戻ってから落ち着いてまだ間もないもの（main の自動アーカイブと同じ分） */
+export function isKept(s: SessionView, opts: Pick<ArchiveOptions, 'attention' | 'revived' | 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
+  if (isLive(s, opts.attention)) return true;
+  if (!opts.revived.has(s.id)) return false;
+  return opts.now - settledAt(s, opts) < (opts.mainMinutes || REVIVE_GRACE_MINUTES) * 60_000;
+}
+
 /** 手でアーカイブしたのに動き出したセッションの ID。印を外して自動の決まりに戻す（画面側が保存する） */
 export function revivedSessions(sessions: SessionView[], opts: Pick<ArchiveOptions, 'marks' | 'attention'>): string[] {
   return sessions.filter((s) => opts.marks[s.id] === 'archived' && isLive(s, opts.attention)).map((s) => s.id);
@@ -409,7 +430,7 @@ export function revivedCards(sessions: SessionView[], opts: Pick<ArchiveOptions,
 
 /** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする */
 function worktreeArchived(s: SessionView, newest: boolean, opts: ArchiveOptions): boolean {
-  if (isLive(s, opts.attention)) return false;
+  if (isKept(s, opts)) return false;
   const mark = opts.marks[s.id];
   if (mark) return mark === 'archived';
   return !newest;
@@ -417,17 +438,16 @@ function worktreeArchived(s: SessionView, newest: boolean, opts: ArchiveOptions)
 
 /** main のセッション：手の印がなければ、落ち着いて（確認して）から決めた分がたったらアーカイブする */
 function mainArchived(s: SessionView, opts: ArchiveOptions): boolean {
-  if (isLive(s, opts.attention)) return false;
+  if (isKept(s, opts)) return false;
   const mark = opts.marks[s.id];
   if (mark) return mark === 'archived';
   if (!opts.mainMinutes) return false;
-  const settled = Math.max(s.lastActivityAt, opts.confirmedAt.get(s.id) ?? 0);
-  return opts.now - settled >= opts.mainMinutes * 60_000;
+  return opts.now - settledAt(s, opts) >= opts.mainMinutes * 60_000;
 }
 
 /** 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。動いている・手で戻したものは main に残す */
 function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
-  return !isLive(s, opts.attention) && opts.marks[s.id] !== 'shown';
+  return !isKept(s, opts) && opts.marks[s.id] !== 'shown';
 }
 
 function byCreatedDesc(a: SessionView, b: SessionView): number {
@@ -536,7 +556,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         timeline = timelineOf([...flags, ...origins, ...kept]);
       }
       const merged = !isMain && !!(changes?.merged || changes?.gone);
-      const anyLive = own.some((s) => isLive(s, opts.attention));
+      const anyLive = own.some((s) => isKept(s, opts));
       const mark = opts.cardMarks[key];
       const hidden = !isMain && !anyLive && (mark ? mark === 'archived' : merged);
       cards.push({
