@@ -367,6 +367,8 @@ html.hide-updated .meta { display: none; }
 .row:not(:hover) .act { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
 /* 処理中・対応待ちの行はアーカイブできない（動いているものは隠さない）ので、トグルを出さない */
 .row[data-state="busy"] .act, .row[data-state="waiting"] .act { display: none; }
+/* 見出しは右の余白が行より 2px 狭い（6px と 8px）ので、行のトグルと同じ位置（カードの端から 4px）にそろえる */
+.card-header .act { margin-right: -2px; }
 .card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
 
 /* ---- 状態の印（lucide のアイコン。どれを出すかは model.ts の statusIconName） ---- */
