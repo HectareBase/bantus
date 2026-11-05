@@ -187,12 +187,14 @@ export interface FlyRequest {
   anchor: TipRect;
   /** 重なりの的（見出しから開くときは見出し）。ウィジェットの中の座標。ここかめくれの上にいる間は、めくれを消さない */
   hit: TipRect;
+  /** めくれ（つまみ）が飛び出す所。ウィジェットの中の座標。めくれが隠れていても、ここに乗せれば出す */
+  tab?: TipRect;
   content: FlyContent;
   /** true なら、めくれを出さずにすぐ一覧を開く（リポジトリの見出し） */
   open: boolean;
 }
 
-/** 重なりに反応する範囲（ウィジェットの中の座標）。ウィジェットの外へはみ出す所はメインプロセスがカーソルを見る */
+/** めくれが飛び出す所（ウィジェットの中の座標）。ウィジェットの外へはみ出す所はメインプロセスがカーソルを見る */
 export interface FlyTarget {
   key: string;
   zone: TipRect;

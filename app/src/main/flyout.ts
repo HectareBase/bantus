@@ -58,7 +58,7 @@ export function isFlyRequest(v: unknown): v is FlyRequest {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
   return typeof r.key === 'string' && typeof r.count === 'number' && typeof r.open === 'boolean'
-    && isRect(r.anchor) && isRect(r.hit) && isContent(r.content);
+    && isRect(r.anchor) && isRect(r.hit) && (r.tab === undefined || isRect(r.tab)) && isContent(r.content);
 }
 
 export function isContent(v: unknown): v is FlyContent {
@@ -82,6 +82,11 @@ function isAction(v: unknown): v is FlyAction {
   const a = v as Record<string, unknown>;
   if (a.type === 'open' || a.type === 'toggle') return typeof a.id === 'string';
   return a.type === 'toggle-card' && typeof a.key === 'string';
+}
+
+/** 重なりの的とめくれが飛び出す所を、画面の座標にする。画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる */
+function hitRects(widget: Rect, request: FlyRequest): Rect[] {
+  return [request.hit, ...(request.tab ? [request.tab] : [])].map((r) => ({ x: widget.x + r.x - 1, y: widget.y + r.y - 1, width: r.width + 2, height: r.height + 2 }));
 }
 
 function sameRect(a: Rect, b: Rect): boolean {
@@ -120,8 +125,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   let ready = false;
   /** クリックを受け取る場所（ウィンドウの中の座標）。めくれと一覧 */
   let solid: TipRect[] = [];
-  /** 重なりの的（画面の座標）。ここかめくれの上にいる間は、めくれを消さない */
-  let hit: Rect | undefined;
+  /** 重なりの的とめくれが飛び出す所（画面の座標）。ここかめくれの上にいる間は、めくれを消さない */
+  let hit: Rect[] = [];
   let ignoring = true;
   let poll: NodeJS.Timeout | undefined;
   /** 重なりに反応する範囲 */
@@ -206,7 +211,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     open = false;
     ready = false;
     solid = [];
-    hit = undefined;
+    hit = [];
     if (escRegistered) {
       globalShortcut.unregister('Escape');
       escRegistered = false;
@@ -256,7 +261,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       const widget = deps.widget();
       if (!open || !widget || widget.isDestroyed()) return;
       const wb = widget.getBounds();
-      const target = { x: wb.x + request.hit.x - 1, y: wb.y + request.hit.y - 1, width: request.hit.width + 2, height: request.hit.height + 2 };
+      const target = hitRects(wb, request);
       // まだその重なりの的の上にいるときだけ切り替える
       if (!inHoverZone(screen.getCursorScreenPoint(), win.getBounds(), [], target).hit) return;
       hide();
@@ -327,7 +332,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       ready = false;
       solid = [];
       // 画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる
-      hit = { x: wb.x + request.hit.x - 1, y: wb.y + request.hit.y - 1, width: request.hit.width + 2, height: request.hit.height + 2 };
+      hit = hitRects(wb, request);
       const show: FlyShow = {
         key: request.key,
         side: deps.edge() === 'right' ? 'left' : 'right',

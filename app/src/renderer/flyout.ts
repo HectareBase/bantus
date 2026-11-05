@@ -5,7 +5,7 @@
 // クリックを受け取る場所（めくれと一覧）はメインプロセスに知らせ、ほかはクリックを下へ通してもらう。
 
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
-import { FLAP_INSET, FLAP_WIDTH } from '../shared/flap.js';
+import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { createIcon } from './icon.js';
 import { statusIconName, waitingLabel } from './model.js';
 import { setStatus } from './status-icon.js';
@@ -166,7 +166,7 @@ function placeList() {
 function placeFlap(show: FlyShow) {
   flap.style.top = `${show.top + FLAP_INSET}px`;
   flap.style.width = `${FLAP_WIDTH}px`;
-  flap.style.height = `${Math.max(16, show.height - FLAP_INSET * 2)}px`;
+  flap.style.height = `${flapHeight(show.height)}px`;
   flapCount.textContent = String(show.count);
 }
 

@@ -66,17 +66,17 @@ export function contains(r: Rect, x: number, y: number): boolean {
 }
 
 /**
- * カーソルがどこにいるか。solid はめくれと一覧（ウィンドウの中の座標）、hit は重なりの的（画面の座標）。
+ * カーソルがどこにいるか。solid はめくれと一覧（ウィンドウの中の座標）、hit は重なりの的とめくれが飛び出す所（画面の座標）。
  * 的はカードの中へ少しかかっていて、めくれのウィンドウの外にある。ウィジェット側からゆっくり乗せたときもめくれを消さないよう、両方を見る
  */
 export function inHoverZone(
   cursor: { x: number; y: number },
   win: Rect,
   solid: Rect[],
-  hit: Rect | undefined,
+  hit: Rect[],
 ): { solid: boolean; hit: boolean } {
   return {
     solid: solid.some((r) => contains(r, cursor.x - win.x, cursor.y - win.y)),
-    hit: !!hit && contains(hit, cursor.x, cursor.y),
+    hit: hit.some((r) => contains(r, cursor.x, cursor.y)),
   };
 }

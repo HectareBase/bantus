@@ -71,8 +71,8 @@ describe('inHoverZone', () => {
   const flap = { x: 310, y: 126, width: 30, height: 68 };
   const hit = { x: 1656, y: 126, width: 12, height: 68 };
   it('ウィジェット側から乗せた（的のうちカードにかかった所）ときは、めくれの外でも的の中', () =>
-    assert.deepEqual(inHoverZone({ x: 1666, y: 150 }, win, [flap], hit), { solid: false, hit: true }));
-  it('めくれの上ではクリックを受け取る', () => assert.deepEqual(inHoverZone({ x: 1640, y: 150 }, win, [flap], hit), { solid: true, hit: false }));
-  it('どちらからも外れた', () => assert.deepEqual(inHoverZone({ x: 1700, y: 150 }, win, [flap], hit), { solid: false, hit: false }));
-  it('的がなければ、めくれだけで決める', () => assert.deepEqual(inHoverZone({ x: 1660, y: 150 }, win, [flap], undefined), { solid: true, hit: false }));
+    assert.deepEqual(inHoverZone({ x: 1666, y: 150 }, win, [flap], [hit]), { solid: false, hit: true }));
+  it('めくれの上ではクリックを受け取る', () => assert.deepEqual(inHoverZone({ x: 1640, y: 150 }, win, [flap], [hit]), { solid: true, hit: false }));
+  it('どちらからも外れた', () => assert.deepEqual(inHoverZone({ x: 1700, y: 150 }, win, [flap], [hit]), { solid: false, hit: false }));
+  it('的がなければ、めくれだけで決める', () => assert.deepEqual(inHoverZone({ x: 1660, y: 150 }, win, [flap], []), { solid: true, hit: false }));
 });
