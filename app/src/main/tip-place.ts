@@ -37,7 +37,7 @@ function clamp(value: number, min: number, max: number): number {
 /** 一覧の幅 */
 export const FLY_LIST_WIDTH = 300;
 /** ウィジェットの端と一覧のすき間 */
-export const FLY_GAP = 6;
+export const FLY_GAP = 3;
 /** 一覧の外側の、影を描く余白 */
 export const FLY_SHADOW = 8;
 

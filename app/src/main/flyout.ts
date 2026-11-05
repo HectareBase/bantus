@@ -4,14 +4,16 @@
 //   乗せるたびにウィンドウを出すと、Windows の表示のアニメーション（下から浮き上がる動き）がかかるため
 // - 乗せただけではフォーカスを取らない。押して一覧を開いたときだけ取り、外のクリック（blur）と Esc で閉じる
 // - めくれと一覧の上だけクリックを受け取り、ほかは下（ウィジェットや後ろのウィンドウ）へ通す
-// - めくれを出している間だけカーソルの位置を見て、重なりの的とめくれのどちらからも外れたら、すぐ消す（動きは付けない）
+// - めくれを出している間は、カーソルが重なりに反応する範囲とめくれのどちらからも外れたら、すぐ消す（動きは付けない）
+// - めくれが隠れていても、ウィジェットの外の、めくれが飛び出す所にカーソルが入ったら、ウィジェットの画面に知らせて出してもらう
+//   （ウィジェットの外はウィジェットの画面からは見えないので、ウィジェットが出ている間はいつもカーソルの位置を見る）
 
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
 import { join } from 'node:path';
-import type { FlyAction, FlyContent, FlyRequest, FlyShow, TipRect } from '../shared/types';
-import { flyoutBounds, inHoverZone, type Rect } from './tip-place';
+import type { FlyAction, FlyContent, FlyRequest, FlyShow, FlyTarget, TipRect } from '../shared/types';
+import { contains, flyoutBounds, inHoverZone, type Rect } from './tip-place';
 
-/** めくれを出している間に、カーソルの位置を見る間隔 */
+/** カーソルの位置を見る間隔 */
 const POLL_MS = 30;
 /** 外のクリックで閉じてから、同じものを開き直さない長さ */
 const REOPEN_GUARD_MS = 400;
@@ -30,6 +32,8 @@ export interface FlyoutDeps {
   area: () => Rect;
   /** 一覧の中の操作を、ウィジェットの画面へ渡す */
   onAction: (action: FlyAction) => void;
+  /** ウィジェットの外で、重なりに反応する範囲にカーソルが入った */
+  onHover: (key: string) => void;
   /** 出しているもの（消えたら undefined）と、一覧を開いているか */
   onState: (key: string | undefined, open: boolean) => void;
 }
@@ -40,6 +44,8 @@ export interface Flyout {
   /** 出しているものが key なら消す（ウィジェットの一覧をスクロールした） */
   leave(key: string): void;
   hide(): void;
+  /** 重なりに反応する範囲（ウィジェットの中の座標） */
+  setTargets(targets: FlyTarget[]): void;
   /** めくれか一覧を出しているか（撮影用） */
   showing(): boolean;
   /** ウィジェットが出た・隠れたときに、ウィンドウも出す・隠す */
@@ -59,6 +65,10 @@ export function isContent(v: unknown): v is FlyContent {
   if (!v || typeof v !== 'object') return false;
   const c = v as Record<string, unknown>;
   return (c.kind === 'timeline' || c.kind === 'plain') ? Array.isArray(c.items) : c.kind === 'cards' && Array.isArray(c.cards);
+}
+
+export function isFlyTargets(v: unknown): v is FlyTarget[] {
+  return Array.isArray(v) && v.every((t) => t && typeof t === 'object' && typeof (t as FlyTarget).key === 'string' && isRect((t as FlyTarget).zone));
 }
 
 function isRect(v: unknown): v is TipRect {
@@ -114,6 +124,10 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   let hit: Rect | undefined;
   let ignoring = true;
   let poll: NodeJS.Timeout | undefined;
+  /** 重なりに反応する範囲 */
+  let targets: FlyTarget[] = [];
+  /** ウィジェットの外で、カーソルが入っている範囲（入ったときに 1 度だけ知らせる） */
+  let hovered: string | undefined;
   /** フォーカスを取れなかったときだけ、開いている間 Esc を登録する */
   let escRegistered = false;
   /** 外のクリックで閉じたもの（同じ重なりを押して閉じたときに、開き直さないため） */
@@ -141,22 +155,52 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     return { top, inset };
   }
 
+  /** ウィジェットが出ていて、めくれを出しているか反応する範囲があるときだけカーソルを見る */
+  function syncPoll() {
+    const want = widgetVisible && !win.isDestroyed() && (key !== undefined || targets.length > 0);
+    if (want && !poll) poll = setInterval(tick, POLL_MS);
+    if (!want && poll) {
+      clearInterval(poll);
+      poll = undefined;
+    }
+  }
+
+  /** ウィジェットの外で、重なりに反応する範囲に入ったら知らせる。ウィジェットの中は、ウィジェットの画面が自分で見る */
+  function watchOutside(c: Electron.Point, onSolid: boolean) {
+    const widget = deps.widget();
+    let found: string | undefined;
+    if (widget && !widget.isDestroyed() && !onSolid) {
+      const wb = widget.getBounds();
+      if (!contains(wb, c.x, c.y)) {
+        found = targets.find((t) => contains({ x: wb.x + t.zone.x, y: wb.y + t.zone.y, width: t.zone.width, height: t.zone.height }, c.x, c.y))?.key;
+      }
+    }
+    if (found && found !== hovered && found !== key) {
+      dbg('hover outside', found);
+      deps.onHover(found);
+    }
+    hovered = found;
+  }
+
   function tick() {
-    if (!key || !ready) return;
     const c = screen.getCursorScreenPoint();
+    if (!key || !ready) {
+      if (!key) watchOutside(c, false);
+      return;
+    }
     const zone = inHoverZone(c, win.getBounds(), solid, hit);
     // カーソルがめくれや一覧に入ったら一番上へ上げ直す。ウィジェットを押したあとは、Windows がウィジェットを上にするため
     if (zone.solid && ignoring) win.moveTop();
     setIgnore(!zone.solid);
     // めくれだけのときは、重なりの的とめくれのどちらからも外れたら、すぐ消す
     if (!open && !zone.solid && !zone.hit) hide();
+    // めくれや一覧の上では、ほかの重なりの範囲に重なっていても反応しない
+    watchOutside(c, zone.solid);
   }
 
   function hide() {
     dbg('hide', key);
     cancelSwitch();
-    clearInterval(poll);
-    poll = undefined;
     const had = key !== undefined;
     key = undefined;
     open = false;
@@ -171,6 +215,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       setIgnore(true);
       win.webContents.send('fly:hide');
     }
+    syncPoll();
     if (had) deps.onState(undefined, false);
   }
 
@@ -234,8 +279,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     if (!ready) {
       ready = true;
       win.moveTop();
-      clearInterval(poll);
-      poll = setInterval(tick, POLL_MS);
+      syncPoll();
       if (open) takeFocus();
     }
     tick();
@@ -304,12 +348,18 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       if (k === key) hide();
     },
     hide,
+    setTargets(next) {
+      targets = next;
+      syncPoll();
+    },
     showing: () => key !== undefined,
     setWidgetVisible(visible) {
       widgetVisible = visible;
       if (win.isDestroyed()) return;
-      if (visible) ensureShown();
-      else {
+      if (visible) {
+        ensureShown();
+        syncPoll();
+      } else {
         hide();
         win.hide();
       }

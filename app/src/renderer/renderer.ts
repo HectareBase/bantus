@@ -35,6 +35,7 @@ import {
   type TimelineItem,
   type WorktreeCard,
 } from './model.js';
+import { flapZone } from '../shared/flap.js';
 import { flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { playSound } from './sound.js';
@@ -408,11 +409,43 @@ function rectOf(el: Element) {
   return { x, y, width, height };
 }
 
+/** ウィジェットを置いた端 */
+function edgeOf(): 'left' | 'right' {
+  return document.documentElement.dataset.edge === 'left' ? 'left' : 'right';
+}
+
+/** 重なりに反応する範囲。重なりの的と、めくれが飛び出す所（ウィジェットの外へはみ出す） */
+function zoneOf(refs: CardRefs) {
+  return flapZone(edgeOf(), rectOf(refs.card), rectOf(refs.stackHit));
+}
+
 function showCardFlyout(key: string, open: boolean) {
   const refs = cards.get(key);
   const card = refs?.data;
   if (!refs || !card || !card.stackCount) return;
-  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), content: cardContent(card), open });
+  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: zoneOf(refs), content: cardContent(card), open });
+}
+
+/**
+ * 重なりに反応する範囲をメインプロセスへ知らせる。ウィジェットの外へはみ出す所はウィジェットの画面からは見えないので、
+ * メインプロセスがカーソルを見て、入ったら知らせてくる（onFlyHover）。一覧の見えている所にあるカードだけ。
+ * カードが動く動き（flip.ts、0.22 秒）が終わってから測る
+ */
+let targetsTimer: ReturnType<typeof setTimeout> | undefined;
+function reportTargets() {
+  clearTimeout(targetsTimer);
+  targetsTimer = setTimeout(() => {
+    const view = cardsEl.getBoundingClientRect();
+    const targets = [];
+    for (const [key, refs] of cards) {
+      if (!refs.data?.stackCount || !refs.el.isConnected) continue;
+      const zone = zoneOf(refs);
+      if (zone.y + zone.height <= view.top || zone.y >= view.bottom) continue;
+      const top = Math.max(zone.y, view.top);
+      targets.push({ key, zone: { ...zone, y: top, height: Math.min(zone.y + zone.height, view.bottom) - top } });
+    }
+    window.widget.setFlyTargets(targets);
+  }, 250);
 }
 
 function showRepoFlyout(repoKey: string) {
@@ -558,6 +591,7 @@ function render(sessions: SessionView[]) {
   for (const [key, refs] of repos) if (!refs.el.isConnected) repos.delete(key);
   applyFocus();
   updateFlyout();
+  reportTargets();
   tooltips.prune();
 }
 
@@ -624,6 +658,12 @@ document.addEventListener('mousemove', (e) => {
 // スクロールするとカードの位置がずれるので、めくれと一覧を消す
 cardsEl.addEventListener('scroll', () => {
   if (flyKey) window.widget.leaveFlyout(flyKey);
+  reportTargets();
+});
+new ResizeObserver(() => reportTargets()).observe(cardsEl);
+// ウィジェットの外で、重なりに反応する範囲にカーソルが入った
+window.widget.onFlyHover((key) => {
+  if (flyKey !== key) showCardFlyout(key, false);
 });
 
 function applyLayout(layout: WidgetLayout) {
@@ -638,6 +678,7 @@ function applyLayout(layout: WidgetLayout) {
   render(latest);
   const root = document.documentElement;
   root.dataset.edge = edge;
+  reportTargets();
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));

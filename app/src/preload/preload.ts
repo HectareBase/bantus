@@ -28,6 +28,10 @@ const widget: WidgetApi = {
   showFlyout: (request) => ipcRenderer.send('fly-show', request),
   updateFlyout: (key, content, count) => ipcRenderer.send('fly-update', key, content, count),
   leaveFlyout: (key) => ipcRenderer.send('fly-leave', key),
+  setFlyTargets: (targets) => ipcRenderer.send('fly-targets', targets),
+  onFlyHover: (listener) => {
+    ipcRenderer.on('fly-hover', (_e, key: string) => listener(key));
+  },
   onFlyAction: (listener) => {
     ipcRenderer.on('fly-action', (_e, action: FlyAction) => listener(action));
   },

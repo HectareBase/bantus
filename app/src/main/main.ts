@@ -4,7 +4,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFlyout, isContent, isFlyRequest, type Flyout } from './flyout';
+import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
@@ -506,6 +506,9 @@ app.whenReady().then(() => {
     edge: () => getSettings().edge,
     area: () => targetDisplay(getSettings()).workArea,
     onAction: (action) => win?.webContents.send('fly-action', action),
+    onHover: (key) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
+    },
     onState: (key, open) => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
     },
@@ -565,6 +568,9 @@ app.whenReady().then(() => {
   });
   ipcMain.on('fly-update', (e, key: unknown, content: unknown, count: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string' && isContent(content) && typeof count === 'number') flyout?.update(key, content, count);
+  });
+  ipcMain.on('fly-targets', (e, targets: unknown) => {
+    if (e.sender === win?.webContents && isFlyTargets(targets)) flyout?.setTargets(targets);
   });
   ipcMain.on('fly-leave', (e, key: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string') flyout?.leave(key);

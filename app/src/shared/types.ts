@@ -99,6 +99,10 @@ export interface WidgetApi {
   updateFlyout(key: string, content: FlyContent, count: number): void;
   /** 出しているめくれ・一覧を消す（ウィジェットの一覧をスクロールしたとき） */
   leaveFlyout(key: string): void;
+  /** 重なりに反応する範囲を知らせる（描き直したとき、スクロールしたとき、大きさが変わったとき） */
+  setFlyTargets(targets: FlyTarget[]): void;
+  /** ウィジェットの外で、重なりに反応する範囲にカーソルが入った */
+  onFlyHover(listener: (key: string) => void): void;
   /** 一覧の中の操作（行を押した、トグルを押した） */
   onFlyAction(listener: (action: FlyAction) => void): void;
   /** めくれ・一覧の出し入れ。key は出しているもの（消えたら undefined）、open は一覧を開いているか */
@@ -186,6 +190,12 @@ export interface FlyRequest {
   content: FlyContent;
   /** true なら、めくれを出さずにすぐ一覧を開く（リポジトリの見出し） */
   open: boolean;
+}
+
+/** 重なりに反応する範囲（ウィジェットの中の座標）。ウィジェットの外へはみ出す所はメインプロセスがカーソルを見る */
+export interface FlyTarget {
+  key: string;
+  zone: TipRect;
 }
 
 export type FlyAction =

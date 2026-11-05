@@ -5,6 +5,7 @@
 // クリックを受け取る場所（めくれと一覧）はメインプロセスに知らせ、ほかはクリックを下へ通してもらう。
 
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
+import { FLAP_INSET, FLAP_WIDTH } from '../shared/flap.js';
 import { createIcon } from './icon.js';
 import { statusIconName, waitingLabel } from './model.js';
 import { setStatus } from './status-icon.js';
@@ -16,8 +17,6 @@ const body = list.querySelector<HTMLElement>('.list-body')!;
 const foot = list.querySelector<HTMLElement>('.list-foot')!;
 flap.querySelector('.flap-arrow')!.append(createIcon('chevron-right'));
 
-/** めくれはカードの上下からこれだけ内側（重なりと同じ） */
-const FLAP_INSET = 6;
 /** ウィンドウの端と一覧の間（影の分） */
 const EDGE_MARGIN = 8;
 const MORPH_MS = 220;
@@ -166,6 +165,7 @@ function placeList() {
 
 function placeFlap(show: FlyShow) {
   flap.style.top = `${show.top + FLAP_INSET}px`;
+  flap.style.width = `${FLAP_WIDTH}px`;
   flap.style.height = `${Math.max(16, show.height - FLAP_INSET * 2)}px`;
   flapCount.textContent = String(show.count);
 }
