@@ -168,7 +168,8 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .progress-ring .arc { stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 18 30; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* アーカイブのトグル。一覧ではいつも出し、アーカイブ中かどうかで濃さや塗りを変えない */
+/* アーカイブのトグル。アーカイブ中の行ではいつも出し（印と戻すボタンを兼ねる）、アーカイブしていない行では乗せたときだけ出す。
+   場所は空けたままにして、乗せたときに題名の幅が変わらないようにする */
 .act {
   flex: none;
   width: 22px;
@@ -183,6 +184,7 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 }
 .act svg { width: 12px; height: 12px; }
 .act:hover { background: var(--selected); color: var(--text); }
+.node:not([data-archived]):not(:hover) .act:not(:focus-visible) { visibility: hidden; }
 
 /* ---- カードごとアーカイブしたもの（リポジトリの見出しから開く） ---- */
 .fcard { margin: 2px 6px 6px; border: 1px solid var(--divider); border-radius: 6px; padding-bottom: 2px; }
