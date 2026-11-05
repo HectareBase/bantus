@@ -2,7 +2,7 @@
 
 import type { TipRect } from './types';
 
-/** めくれがカードの端から外へ飛び出す幅。隠れている重なり（見えている幅 7px）のおよそ 2 倍 */
+/** めくれがカードの端から外へ飛び出す幅。隠れている重なり（見えている幅 6px）のおよそ 2 倍 */
 export const FLAP_WIDTH = 18;
 /** めくれはカードの上下からこれだけ内側（重なりと同じ） */
 export const FLAP_INSET = 6;

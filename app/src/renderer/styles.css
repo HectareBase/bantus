@@ -200,13 +200,13 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   padding: 0 0 4px;
 }
 
-/* 以前のセッションの重なり（1 枚）。画面の内側の余白（8px）に、ウィジェットの内側の端から 1px あけて見せる。
+/* 以前のセッションの重なり（1 枚）。画面の内側の余白（8px）に、ウィジェットの内側の端から 2px あけて見せる。
    カードの塗りは半透明なので、カードの下には入れない */
 .stack, .stack-hit { display: none; position: absolute; top: 6px; bottom: 6px; }
 .card-wrap[data-stack] .stack, .card-wrap[data-stack] .stack-hit { display: block; }
-.stack { width: 8px; background: var(--stack); border: 1px solid var(--stack-edge); }
-html:not([data-edge="left"]) .stack { left: -7px; border-right: 0; border-radius: 7px 0 0 7px; }
-html[data-edge="left"] .stack { right: -7px; border-left: 0; border-radius: 0 7px 7px 0; }
+.stack { width: 7px; background: var(--stack); border: 1px solid var(--stack-edge); }
+html:not([data-edge="left"]) .stack { left: -6px; border-right: 0; border-radius: 7px 0 0 7px; }
+html[data-edge="left"] .stack { right: -6px; border-left: 0; border-radius: 0 7px 7px 0; }
 .card-wrap[data-fly] .stack { background: var(--stack-strong); }
 .card-wrap[data-fly-open] .stack { visibility: hidden; }
 /* 押せる的は見えている幅より広く、ウィジェットの端からカードの中まで少しかかる。幅を変える取っ手より上に置く */
