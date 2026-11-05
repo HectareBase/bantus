@@ -113,6 +113,11 @@ describe('readSessions（偽のデータフォルダ）', () => {
     writeJson(join(other, '.git'), `gitdir: ${join(tmp.path, 'Other', '.git', 'worktrees', 'x')}\n`);
     writeJson(join(paths.runningDir, '7.json'), { pid, sessionId: 'cli-7', status: 'idle', cwd: other });
     local(11, { title: 'other repo', cliSessionId: 'cli-7', cwd: repo, originCwd: repo, gitAnchors: [anchor], createdAt: 40 });
+    // ワークツリーのセッションが、作業フォルダを分けずに始めたセッション。ワークツリーの名前を持たず、gitRoot も元のリポジトリ
+    const fixLogin = join(repo, '.claude', 'worktrees', 'fix-login');
+    writeJson(join(fixLogin, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'fix-login')}\n`);
+    writeJson(join(repo, '.git', 'worktrees', 'fix-login', 'HEAD'), 'ref: refs/heads/claude/fix-login-1a2b3c\n');
+    local(12, { title: 'shared worktree', cwd: fixLogin, originCwd: fixLogin, gitAnchors: [anchor], createdAt: 50, spawnedFrom: { sessionId: localId(2) } });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
 
@@ -122,13 +127,13 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
     assert.deepEqual(sessions.map((s) => s.title).sort(), [
-      '(無題)', 'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'spawned', 'waiting', 'worktree',
+      '(無題)', 'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'shared worktree', 'spawned', 'waiting', 'worktree',
     ]);
   });
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
     assert.deepEqual(sessions.map((s) => s.state), [
-      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped',
+      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped',
     ]);
   });
 
@@ -179,6 +184,14 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(wt.worktree?.branch, 'worktree-moved');
     assert.equal(wt.workDir, join(tmp.path, 'Repo', '.claude', 'worktrees', 'moved'));
     assert.equal(wt.seq, 1);
+  });
+
+  it('ワークツリーで作業フォルダを分けずに始めたセッションは、そのワークツリーと同じカードにまとめる', () => {
+    const wt = byTitle('shared worktree')!;
+    assert.deepEqual(wt.worktree, byTitle('worktree')?.worktree);
+    assert.equal(wt.baseBranch, 'develop');
+    assert.equal(wt.workDir, join(tmp.path, 'Repo', '.claude', 'worktrees', 'fix-login'));
+    assert.equal(wt.seq, 2);
   });
 
   it('別のリポジトリのワークツリーに移ったセッションは、メインのまま', () => {

@@ -223,6 +223,17 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   let focused: { id: string; at: number } | undefined;
   /** セッションごとの最後に開いた時刻。サイドチャットは親に入れ、新しいほうを残す */
   const focusedAt = new Map<string, number>();
+  /** 作業フォルダから探したワークツリーのフォルダ（同じフォルダを何度も探さない） */
+  const roots = new Map<string, string | undefined>();
+  const worktreeRootOf = (folder: string, commonDir: string) => {
+    const k = `${folderKey(folder)}|${folderKey(commonDir)}`;
+    if (!roots.has(k)) roots.set(k, findWorktreeRoot(folder, commonDir));
+    return roots.get(k);
+  };
+  /** アプリが作ったワークツリーのフォルダ → そのセッションのワークツリー（同じフォルダで始めたセッションを同じカードにまとめる） */
+  const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
+  /** ワークツリーの名前を持たず、フォルダから見つけたセッション → そのフォルダ */
+  const byFolder = new Map<SessionView, string>();
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
       const d = readJson(file);
@@ -244,13 +255,15 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const commonDir: string | undefined = anchor?.commonDir;
       const repoRoot = commonDir && basename(commonDir).toLowerCase() === '.git' ? dirname(commonDir) : anchor?.gitRoot;
       const root: string = repoRoot || d.originCwd || d.cwd || '';
-      // 動いている CLI が途中でワークツリーに入ったとき（EnterWorktree）は local_*.json が元のままなので、CLI の今の作業フォルダから探す
+      // 動いている CLI が途中でワークツリーに入ったとき（EnterWorktree）は local_*.json が元のままなので、CLI の今の作業フォルダから探す。
+      // ワークツリーのセッションが作業フォルダを分けずに始めたセッション（use_worktree: false）は、名前を持たず、
+      // gitRoot も元のリポジトリを指すので、セッションの作業フォルダ（cwd）から探す
       const outside: string | undefined = d.worktreeName
         ? undefined
         : anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root)
           ? anchor.gitRoot
-          : commonDir && r?.cwd
-            ? findWorktreeRoot(r.cwd, commonDir)
+          : commonDir && (r?.cwd || d.cwd)
+            ? worktreeRootOf(r?.cwd || d.cwd, commonDir)
             : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const view: SessionView = {
@@ -280,11 +293,22 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         const base = typeof d.sourceBranch === 'string' && d.sourceBranch ? d.sourceBranch : mainBranch;
         if (base && base !== view.worktree.branch) view.baseBranch = base;
       }
+      if (view.worktree && d.worktreeName && typeof d.worktreePath === 'string' && d.worktreePath) {
+        named.set(`${view.repoKey}|${folderKey(d.worktreePath)}`, { worktree: view.worktree, baseBranch: view.baseBranch });
+      } else if (view.worktree && outside) byFolder.set(view, `${view.repoKey}|${folderKey(outside)}`);
       if (typeof d.spawnedFrom?.sessionId === 'string') view.spawnedFrom = d.spawnedFrom.sessionId;
       if (typeof d.turnWrapUp?.description === 'string' && d.turnWrapUp.description) view.summary = d.turnWrapUp.description;
       numbered.push(view);
       if (!archived) views.push(view);
     }
+  }
+  // フォルダから見つけたワークツリーが、アプリが作ったワークツリーと同じフォルダなら、同じ目印（名前）にそろえて 1 枚のカードにまとめる
+  for (const [view, folder] of byFolder) {
+    const same = named.get(folder);
+    if (!same?.worktree) continue;
+    view.worktree = same.worktree;
+    if (same.baseBranch) view.baseBranch = same.baseBranch;
+    else delete view.baseBranch;
   }
   assignSeq(numbered);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
