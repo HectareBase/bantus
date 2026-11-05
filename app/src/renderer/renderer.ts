@@ -23,6 +23,7 @@ import {
   pickAlerts,
   revivedCards,
   revivedSessions,
+  isLive,
   shortcutTarget,
   resolveFocus,
   statusIconName,
@@ -97,6 +98,8 @@ const seenState = new Map<string, SessionView['state']>();
 const seenFocusedAt = new Map<string, number>();
 /** 帯が消えた（確認した）時刻。main の自動アーカイブを数え始める時刻に使う。ウィジェットの中だけで覚える */
 const confirmedAt = new Map<string, number>();
+/** アーカイブから動き出して戻ったセッション（model.ts の ArchiveOptions.revived） */
+const revived = new Set<string>();
 /** 一覧の設定（onLayout で届く）。アーカイブの印は、押したときにすぐ変え、保存された値が戻ってきたらそれに合わせる */
 let sort: SortOptions = PRIORITY_SORT;
 let marks: Record<string, ArchiveMark> = {};
@@ -149,7 +152,7 @@ function setAttention(refs: RowRefs, id: string, on: boolean) {
 }
 
 function archiveOptions(): ArchiveOptions {
-  return { marks, cardMarks, attention, confirmedAt, mainMinutes, now: Date.now(), sort };
+  return { marks, cardMarks, attention, confirmedAt, mainMinutes, revived, now: Date.now(), sort };
 }
 
 /** セッションの印を変えて保存する（null で外して自動の決まりに戻す） */
@@ -183,6 +186,8 @@ function isArchivedNow(id: string): boolean {
 function toggleArchive(id: string) {
   const archive = !isArchivedNow(id);
   if (archive) clearAttention(id);
+  // 手で決めたら、戻ったときの猶予はやめる
+  revived.delete(id);
   setMark(id, archive ? 'archived' : 'shown');
   render(latest);
 }
@@ -190,12 +195,19 @@ function toggleArchive(id: string) {
 function toggleCard(key: string) {
   const card = lastRepos.flatMap((r) => [...r.cards, ...r.hiddenCards]).find((c) => c.key === key);
   if (!card) return;
+  if (!card.hidden) for (const s of [...card.sessions, ...card.archived]) revived.delete(s.id);
   setCardMark(key, card.hidden ? 'shown' : 'archived');
   render(latest);
 }
 
-/** 手でアーカイブしたのに動き出したものは、印を外して自動の決まりに戻す */
+/**
+ * 手でアーカイブしたのに動き出したものは、印を外して自動の決まりに戻す。
+ * アーカイブしていた（手でも自動でも、カードごとでも）ものが動き出したら、落ち着いてしばらくは出しておく
+ */
 function reviveMarks(sessions: SessionView[]) {
+  for (const s of sessions) {
+    if (isLive(s, attention) && (marks[s.id] === 'archived' || isArchivedNow(s.id))) revived.add(s.id);
+  }
   for (const id of revivedSessions(sessions, { marks, attention })) setMark(id, null);
   for (const key of revivedCards(sessions, { cardMarks, attention })) setCardMark(key, null);
 }
@@ -584,6 +596,7 @@ function render(sessions: SessionView[]) {
   const ids = new Set(sessions.map((s) => s.id));
   for (const [id, refs] of rows) if (!ids.has(id) || !refs.el.isConnected) rows.delete(id);
   for (const id of attention) if (!ids.has(id)) attention.delete(id);
+  for (const id of revived) if (!ids.has(id)) revived.delete(id);
   for (const map of [seenState, seenFocusedAt, confirmedAt] as Map<string, unknown>[]) {
     for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
   }

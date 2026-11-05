@@ -241,6 +241,42 @@ describe('動き出したものの印を外す', () => {
   });
 });
 
+describe('戻ったセッションの猶予', () => {
+  const now = 100 * MIN;
+  const revived = new Set(['r']);
+  it('ワークツリーで一番新しくなくても、落ち着いてから決めた分はアーカイブしない', () => {
+    const sessions = [
+      view({ id: 'r', worktree: wt('x'), state: 'idle', lastActivityAt: now - 5 * MIN }),
+      view({ id: 'n', worktree: wt('x'), state: 'idle', lastActivityAt: now - 1 * MIN }),
+    ];
+    const card = (o: Partial<ArchiveOptions>) => buildRepos(sessions, opts({ now, mainMinutes: 10, ...o }))[0]!.cards[0]!;
+    assert.deepEqual(card({ revived }).sessions.map((s) => s.id).sort(), ['n', 'r']);
+    assert.deepEqual(card({}).archived.map((s) => s.id), ['r'], '戻っていなければ今までどおり');
+    assert.deepEqual(card({ revived, now: now + 6 * MIN }).archived.map((s) => s.id), ['r'], '猶予がすぎたらアーカイブする');
+    assert.deepEqual(card({ revived, confirmedAt: new Map([['r', now + 3 * MIN]]), now: now + 6 * MIN }).sessions.length, 2, '確認した時刻から数える');
+  });
+  it('main の自動アーカイブがオフでも、10 分の猶予を使う', () => {
+    const sessions = [
+      view({ id: 'r', worktree: wt('x'), state: 'idle', lastActivityAt: now - 9 * MIN }),
+      view({ id: 'n', worktree: wt('x'), state: 'idle', lastActivityAt: now }),
+    ];
+    assert.equal(buildRepos(sessions, opts({ now, mainMinutes: 0, revived }))[0]!.cards[0]!.sessions.length, 2);
+  });
+  it('起点は、猶予の間は main に残す', () => {
+    const sessions = [
+      view({ id: 'r', state: 'idle', lastActivityAt: now - 1 * MIN }),
+      view({ id: 'w', worktree: wt('x'), spawnedFrom: 'r', lastActivityAt: now }),
+    ];
+    const [repo] = buildRepos(sessions, opts({ now, mainMinutes: 10, revived }));
+    assert.deepEqual(repo!.cards.find((c) => c.isMain)!.sessions.map((s) => s.id), ['r']);
+  });
+  it('マージ済みのカードも、猶予の間は隠さない', () => {
+    const sessions = [view({ id: 'r', worktree: wt('x'), state: 'idle', lastActivityAt: now, changes: { ...clean, merged: true } })];
+    assert.equal(buildRepos(sessions, opts({ now, revived }))[0]!.hiddenCards.length, 0);
+    assert.equal(buildRepos(sessions, opts({ now }))[0]!.hiddenCards.length, 1);
+  });
+});
+
 describe('cardBadge', () => {
   const badge = (...patches: Partial<SessionView>[]) => cardBadge(patches.map((p) => view(p)));
   it('対応待ちがあれば件数を出す', () =>
