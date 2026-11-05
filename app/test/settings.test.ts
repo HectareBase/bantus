@@ -40,24 +40,43 @@ describe('normalizeSettings の openAtLogin', () => {
 describe('normalizeSettings の一覧の項目', () => {
   it('なければ既定値', () => {
     const s = normalizeSettings({});
-    assert.deepEqual([s.groupLimit, s.foldScope, s.alwaysShow], [5, 'repo', []]);
+    assert.deepEqual([s.mainArchiveMinutes, s.archive, s.archivedCards], [10, {}, {}]);
     assert.deepEqual([s.projectOrder, s.worktreeOrder, s.sessionOrder], ['fixed', 'fixed', 'fixed']);
-    assert.deepEqual([s.showSeq, s.showUpdated], [true, true]);
+    assert.equal(s.showUpdated, true);
   });
   it('選べる値だけを残す', () => {
-    assert.equal(normalizeSettings({ groupLimit: 0 }).groupLimit, 0);
-    assert.equal(normalizeSettings({ groupLimit: 4 }).groupLimit, 5);
-    assert.equal(normalizeSettings({ groupLimit: '3' }).groupLimit, 5);
-    assert.equal(normalizeSettings({ foldScope: 'worktree' }).foldScope, 'worktree');
-    assert.equal(normalizeSettings({ foldScope: 'x' }).foldScope, 'repo');
+    assert.equal(normalizeSettings({ mainArchiveMinutes: 0 }).mainArchiveMinutes, 0);
+    assert.equal(normalizeSettings({ mainArchiveMinutes: 60 }).mainArchiveMinutes, 60);
+    assert.equal(normalizeSettings({ mainArchiveMinutes: 5 }).mainArchiveMinutes, 10);
     assert.equal(normalizeSettings({ sessionOrder: 'recent' }).sessionOrder, 'recent');
     assert.equal(normalizeSettings({ projectOrder: 'name' }).projectOrder, 'fixed');
-    assert.equal(normalizeSettings({ showSeq: false }).showSeq, false);
     assert.equal(normalizeSettings({ showUpdated: 'false' }).showUpdated, true);
   });
-  it('常に表示は、セッションの ID の形をした文字列だけを、重ねずに残す', () =>
-    assert.deepEqual(normalizeSettings({ alwaysShow: ['local_a-1', 'local_a-1', 'x', 3, 'local_b'] }).alwaysShow, ['local_a-1', 'local_b']));
-  it('配列でなければ空', () => assert.deepEqual(normalizeSettings({ alwaysShow: 'local_a' }).alwaysShow, []));
+  it('前の版の項目（表示数、折りたたみ、番号）は読み捨てる', () => {
+    const s = normalizeSettings({ groupLimit: 3, foldScope: 'worktree', showSeq: false }) as unknown as Record<string, unknown>;
+    assert.deepEqual([s.groupLimit, s.foldScope, s.showSeq], [undefined, undefined, undefined]);
+  });
+});
+
+describe('normalizeSettings のアーカイブの印', () => {
+  it('セッションの ID の形と、決まった値だけを残す', () =>
+    assert.deepEqual(normalizeSettings({ archive: { 'local_a-1': 'archived', local_b: 'shown', x: 'archived', local_c: 'yes' } }).archive, {
+      'local_a-1': 'archived',
+      local_b: 'shown',
+    }));
+  it('表でなければ空', () => {
+    assert.deepEqual(normalizeSettings({ archive: ['local_a'] }).archive, {});
+    assert.deepEqual(normalizeSettings({ archivedCards: 'x' }).archivedCards, {});
+  });
+  it('カードの目印は、制御文字のない文字列だけ', () =>
+    assert.deepEqual(normalizeSettings({ archivedCards: { 'c:\\repo|wt': 'archived', 'a\nb': 'archived', '': 'shown' } }).archivedCards, {
+      'c:\\repo|wt': 'archived',
+    }));
+  it('前の版の「常に表示」は、手で戻したものとして引き継ぐ（印があればそちらを残す）', () =>
+    assert.deepEqual(normalizeSettings({ alwaysShow: ['local_a', 'local_b', 'x'], archive: { local_b: 'archived' } }).archive, {
+      local_b: 'archived',
+      local_a: 'shown',
+    }));
 });
 
 describe('normalizeSettings の見出しの濃さ', () => {
@@ -86,11 +105,11 @@ describe('設定画面のカテゴリ', () => {
       ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']],
       ['起動', ['openAtLogin']],
     ]));
-  it('カードの表示は 一覧 → 並び順 → 行に出すもの', () =>
+  it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [
-      ['一覧', ['groupLimit', 'foldScope']],
+      ['アーカイブ', ['mainArchiveMinutes']],
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
-      ['行に出すもの', ['showSeq', 'showUpdated']],
+      ['行に出すもの', ['showUpdated']],
     ]));
   it('通知は 知らせるとき → 音 → Windows の通知', () =>
     assert.deepEqual(layout('notify'), [

@@ -1,6 +1,7 @@
-// 画面に出す形への組み立て（カード、小見出し、ツールチップ）。DOM を使わないので、テストから直接呼べる。
+// 画面に出す形への組み立て（リポジトリ、ワークツリーのカード、アーカイブ、ツールチップ）。DOM を使わないので、テストから直接呼べる。
 
-import type { SortOrder } from '../shared/settings';
+import { cardKeyOf } from '../shared/card-key.js';
+import type { ArchiveMark, SortOrder } from '../shared/settings';
 import type { GitChanges, SessionState, SessionView } from '../shared/types';
 import type { IconName } from './icons.js';
 
@@ -13,25 +14,6 @@ export const WAITING_LABELS: Record<string, string> = {
   'worker request': 'ワーカーの要求待ち',
   'goal proposal': 'ゴールの確認待ち',
 };
-
-export interface Group {
-  key: string;
-  label: string;
-  tooltip: string;
-  isMain: boolean;
-  sessions: SessionView[];
-  /** その作業フォルダのコミットされていない変更（同じ小見出しのセッションは同じフォルダ） */
-  changes?: GitChanges;
-}
-
-export interface Card {
-  key: string;
-  name: string;
-  active: SessionView[];
-  stopped: SessionView[];
-  rank: number;
-  latest: number;
-}
 
 function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
   return a.rank - b.rank || b.latest - a.latest;
@@ -99,7 +81,7 @@ export function statusIconName(state: SessionState, waitingFor?: string): Status
 }
 
 export function tooltip(s: SessionView): string {
-  const lines = [s.seq ? `${s.seq}. ${s.title}` : s.title];
+  const lines = [s.title];
   if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
   if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
   if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
@@ -111,23 +93,20 @@ export function tooltip(s: SessionView): string {
 
 // ---- コミットされていない変更（docs/design/git-changes.md） ----
 
-/** コミットされていない件数（変更と未追跡）。折りたたみの「変更が残る作業フォルダ」はこれで数える */
-export function changeCount(c: GitChanges | undefined): number {
-  return c ? c.changed + c.untracked : 0;
-}
-
 export interface ChangeItem {
   icon: IconName;
   count: number;
 }
 
-/** 印に並べる内訳。0 のものは出さない。空なら印を出さない */
+/** 印に並べる内訳。0 のものは出さない。空なら印を出さない。マージ済みなら、内訳の代わりにマージのアイコンだけ（件数 0 は数を出さない） */
 export function changeItems(c: GitChanges | undefined): ChangeItem[] {
   if (!c) return [];
+  if (c.merged) return [{ icon: 'git-merge', count: 0 }];
   const items: ChangeItem[] = [
     { icon: 'file-pen-line', count: c.changed },
     { icon: 'file-plus', count: c.untracked },
     { icon: 'arrow-up', count: c.ahead },
+    { icon: 'arrow-down', count: c.behind },
   ];
   return items.filter((i) => i.count > 0);
 }
@@ -135,24 +114,15 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
 /** 印とセッションのツールチップに添える内訳。何もなければ空 */
 export function changesTooltip(c: GitChanges | undefined): string {
   if (!c) return '';
+  if (c.merged) return 'マージ済み（元のブランチに入った）';
   const parts: string[] = [];
   if (c.changed) parts.push(`変更 ${c.changed}`);
   if (c.untracked) parts.push(`未追跡 ${c.untracked}`);
   const lines = parts.length ? [`コミットされていない変更：${parts.join('・')}`] : [];
-  if (c.ahead) lines.push(`push していないコミット：${c.ahead}`);
+  if (c.ahead) lines.push(c.aheadOfBase ? `元のブランチにまだ入っていないコミット：${c.ahead}` : `push していないコミット：${c.ahead}`);
+  if (c.behind) lines.push(`元のブランチからの遅れ：${c.behind}`);
   return lines.join('\n');
 }
-
-/** セッションの中から、作業フォルダの結果を 1 つ選ぶ（同じフォルダなら同じ結果） */
-function firstChanges(sessions: SessionView[]): GitChanges | undefined {
-  return sessions.find((s) => s.changes)?.changes;
-}
-
-/** 作業フォルダの目印。workDir がなければ（git 管理でない、見本データ）ワークツリーの目印で代える */
-function folderOf(s: SessionView): string {
-  return s.workDir?.toLowerCase() ?? `${s.repoKey}|${s.worktree?.key ?? ''}`;
-}
-
 
 /**
  * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
@@ -327,64 +297,25 @@ export function resolveFocus(
   return { id: fromData, pending: undefined };
 }
 
-export function buildCards(sessions: SessionView[], order: SortOrder = 'priority'): Card[] {
-  const map = new Map<string, Card>();
-  for (const s of sessions) {
-    let card = map.get(s.repoKey);
-    if (!card) {
-      card = { key: s.repoKey, name: s.repoName, active: [], stopped: [], rank: 3, latest: 0 };
-      map.set(s.repoKey, card);
-    }
-    (s.state === 'stopped' ? card.stopped : card.active).push(s);
-    card.rank = Math.min(card.rank, RANK[s.state]);
-    card.latest = Math.max(card.latest, s.lastActivityAt);
-  }
-  return [...map.values()].sort(compareItems<Card>(order, (c) => c.name));
-}
+// ---- カード（ワークツリーごと）と Bantus のアーカイブ（docs/design/worktree-cards.md） ----
 
-export function buildGroups(active: SessionView[], order: SortOrder = 'priority'): Group[] {
-  const map = new Map<string, Group & { rank: number; latest: number }>();
-  for (const s of active) {
-    const key = s.worktree?.key ?? '';
-    let g = map.get(key);
-    if (!g) {
-      g = s.worktree
-        ? { key, label: s.worktree.label, tooltip: s.worktree.branch, isMain: false, sessions: [], rank: 3, latest: 0 }
-        : {
-            key,
-            // 家のアイコンで元のフォルダだとわかるので、名前はブランチ名だけにする
-            label: s.mainBranch ?? '元のフォルダ',
-            tooltip: 'プロジェクトの元のフォルダで作業しているセッション',
-            isMain: true,
-            sessions: [],
-            rank: 3,
-            latest: 0,
-          };
-      map.set(key, g);
-    }
-    g.sessions.push(s);
-    g.changes ??= s.changes;
-    g.rank = Math.min(g.rank, RANK[s.state]);
-    g.latest = Math.max(g.latest, s.lastActivityAt);
-  }
-  return [...map.values()].sort(compareItems<Group & { rank: number; latest: number }>(order, (g) => g.label, (g) => g.isMain));
-}
-
-/** 一覧を折りたたむ決まり。設定の値と、画面が覚えている状態から作る */
-export interface FoldOptions {
-  /** グループごとに見せる数。0 ならすべて見せる */
-  limit: number;
-  /** 折りたたみの単位。repo はカードに 1 つ、worktree は小見出しごと */
-  scope: 'repo' | 'worktree';
-  /** 常に表示のセッション。停止中でも一覧に出し、枠を先に使う */
-  alwaysShow: ReadonlySet<string>;
-  /** 上限を超えても出すセッション（未確認、今開いているもの）。ほかの行を押し出さないよう、空いた枠がなければ枠の外に足す */
-  extra: ReadonlySet<string>;
-  /** 並び順。どれを折りたたむかは並び順に関係なく急ぐ順で選び、選んだあとで並べる */
+/** アーカイブを決めるもの。手で決めた印、未確認の行、確認した時刻、設定、今の時刻 */
+export interface ArchiveOptions {
+  /** セッションの ID → 手で決めた印 */
+  marks: Readonly<Record<string, ArchiveMark>>;
+  /** カードの目印 → 手で決めた印 */
+  cardMarks: Readonly<Record<string, ArchiveMark>>;
+  /** 未確認（左端の帯）のセッション。動いているものとして隠さない */
+  attention: ReadonlySet<string>;
+  /** ウィジェットで確認した（帯が消えた）時刻。main の自動アーカイブの起点に使う */
+  confirmedAt: ReadonlyMap<string, number>;
+  /** main で自動でアーカイブするまでの分。0 ならしない */
+  mainMinutes: number;
+  now: number;
   sort: SortOptions;
 }
 
-/** カード、小見出し、行の並び順（設定の projectOrder、worktreeOrder、sessionOrder） */
+/** カード、カードの中の行の並び順（設定の projectOrder、worktreeOrder、sessionOrder） */
 export interface SortOptions {
   project: SortOrder;
   worktree: SortOrder;
@@ -394,122 +325,263 @@ export interface SortOptions {
 /** どれも急ぐ順 */
 export const PRIORITY_SORT: SortOptions = { project: 'priority', worktree: 'priority', session: 'priority' };
 
-/** 何も折りたたまない（停止中だけをたたむ） */
-export const NO_FOLD: FoldOptions = { limit: 0, scope: 'repo', alwaysShow: new Set(), extra: new Set(), sort: PRIORITY_SORT };
+/** 手の印も未確認もなく、main は自動でアーカイブしない */
+export const NO_ARCHIVE: ArchiveOptions = {
+  marks: {},
+  cardMarks: {},
+  attention: new Set(),
+  confirmedAt: new Map(),
+  mainMinutes: 0,
+  now: 0,
+  sort: PRIORITY_SORT,
+};
 
-/** 折りたたみの中身 */
-export interface Fold {
-  key: string;
-  /** 上限で隠した、停止中でないセッション */
-  hidden: SessionView[];
-  stopped: SessionView[];
-  /** 中のセッションの作業フォルダのうち、コミットされていない変更が残っていて、小見出しや見出しの印に出ていないものの数 */
-  changedFolders: number;
+/** タイムラインの 1 行 */
+export interface TimelineItem {
+  session: SessionView;
+  archived: boolean;
+  /** main で始めたセッション（起点） */
+  origin: boolean;
+  /** 1 つ下（より古いもの）とのつなぎ方。一番下はなし */
+  link?: 'solid' | 'dashed';
 }
 
-export interface Section {
+export interface WorktreeCard {
+  /** cardKeyOf と同じ値 */
   key: string;
-  /** 小見出しを出すときだけ */
-  group?: Group;
+  /** 元のフォルダ（main）のカード */
+  isMain: boolean;
+  /** 見出しの名前（短くしたブランチ名、main はそのブランチ名） */
+  label: string;
+  /** 見出しのツールチップ（ブランチ名の全体と作業フォルダ） */
+  tooltip: string;
+  changes?: GitChanges;
+  /** カードに出す行（並び順の設定に従う） */
   sessions: SessionView[];
-  /** ワークツリーごとにまとめるときの、このグループの折りたたみ */
-  fold?: Fold;
+  /** アーカイブしたセッション（新しく作ったものが上）。重なりの件数 */
+  archived: SessionView[];
+  /** 一覧に出す行。ワークツリーは全部（新しく作ったものが上、起点が下）、main はアーカイブしたものと、ワークツリーのカードへ移した起点 */
+  timeline: TimelineItem[];
+  /**
+   * 一覧にあって、このカードの行に出ていないものの数（重なりとめくれの件数）。アーカイブしたものと、main に残した起点。
+   * 0 なら重なりを出さない。起点をアーカイブから戻しても、つながりは一覧で見られるよう重なりを残す
+   */
+  stackCount: number;
+  /** カードごとアーカイブしている（マージ済み、ワークツリーがない、手でアーカイブした） */
+  hidden: boolean;
+  /** マージ済み（ワークツリーがないものも含む） */
+  merged: boolean;
+  rank: number;
+  latest: number;
 }
 
-export interface CardLayout {
-  sections: Section[];
-  /** 小見出しがないときに、カードの見出しに出す作業フォルダの変更 */
-  headerChanges?: GitChanges;
-  /** リポジトリごとにまとめるときの、カードの一番下の折りたたみ */
-  fold?: Fold;
+export interface RepoView {
+  key: string;
+  name: string;
+  /** 出すカード */
+  cards: WorktreeCard[];
+  /** カードごとアーカイブしたもの（見出しの件数） */
+  hiddenCards: WorktreeCard[];
+  badge: { state: '' | 'waiting' | 'busy'; text: string };
+  rank: number;
+  latest: number;
 }
 
-/**
- * グループの中で見せるものと隠すものを分ける。list は急ぐ順
- * - 対応待ちと常に表示のものは、上限を超えても出し、枠を先に使う
- * - 残りの枠を急ぐ順に埋める
- * - extra のものは、枠に入らなくても出す
- */
-function pick(list: SessionView[], opts: FoldOptions): { visible: SessionView[]; hidden: SessionView[] } {
-  if (!opts.limit) return { visible: list, hidden: [] };
-  const first = (s: SessionView) => s.state === 'waiting' || opts.alwaysShow.has(s.id);
-  let room = opts.limit - list.filter(first).length;
-  const shown = new Set<SessionView>();
-  for (const s of list) {
-    if (first(s)) shown.add(s);
-    else if (room > 0) {
-      shown.add(s);
-      room--;
-    } else if (opts.extra.has(s.id)) shown.add(s);
+/** 動いているもの（処理中、対応待ち、未確認）。どの決まりでもアーカイブしない */
+export function isLive(s: SessionView, attention: ReadonlySet<string>): boolean {
+  return s.state === 'busy' || s.state === 'waiting' || attention.has(s.id);
+}
+
+/** 手でアーカイブしたのに動き出したセッションの ID。印を外して自動の決まりに戻す（画面側が保存する） */
+export function revivedSessions(sessions: SessionView[], opts: Pick<ArchiveOptions, 'marks' | 'attention'>): string[] {
+  return sessions.filter((s) => opts.marks[s.id] === 'archived' && isLive(s, opts.attention)).map((s) => s.id);
+}
+
+/** 手でアーカイブしたカードのうち、中のセッションが動き出したもの */
+export function revivedCards(sessions: SessionView[], opts: Pick<ArchiveOptions, 'cardMarks' | 'attention'>): string[] {
+  const keys = new Set<string>();
+  for (const s of sessions) {
+    const key = cardKeyOf(s);
+    if (opts.cardMarks[key] === 'archived' && isLive(s, opts.attention)) keys.add(key);
   }
-  return { visible: list.filter((s) => shown.has(s)), hidden: list.filter((s) => !shown.has(s)) };
+  return [...keys];
 }
 
-/** shown：小見出しや見出しの印にもう出ている作業フォルダ（folderOf） */
-function makeFold(key: string, hidden: SessionView[], stopped: SessionView[], shown: ReadonlySet<string>): Fold | undefined {
-  if (!hidden.length && !stopped.length) return undefined;
-  const changed = new Set<string>();
-  for (const s of [...hidden, ...stopped]) {
-    if (changeCount(s.changes) > 0 && !shown.has(folderOf(s))) changed.add(folderOf(s));
-  }
-  return { key, hidden, stopped, changedFolders: changed.size };
+/** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする */
+function worktreeArchived(s: SessionView, newest: boolean, opts: ArchiveOptions): boolean {
+  if (isLive(s, opts.attention)) return false;
+  const mark = opts.marks[s.id];
+  if (mark) return mark === 'archived';
+  return !newest;
 }
 
-/**
- * カードの中の並び。ワークツリーのセッションがあるときだけ、小見出しで分ける。
- * 上限を超えたものと停止中は、折りたたみに入れる（常に表示の停止中は一覧に残す）。
- * ワークツリーごとにまとめるときは、停止中しかないワークツリーにも小見出しを出す。
- */
-export function cardLayout(card: Card, opts: FoldOptions = NO_FOLD): CardLayout {
-  const kept = (s: SessionView) => opts.alwaysShow.has(s.id);
-  const byWorktree = opts.scope === 'worktree';
-  const order = compareSessions(opts.sort.session);
-  const groups = buildGroups([...card.active, ...card.stopped.filter((s) => byWorktree || kept(s))], opts.sort.worktree);
-  const useSubheads = groups.some((g) => !g.isMain);
-  // 小見出しがなければ、メインの作業フォルダの変更を見出しに出す（停止中のワークツリーは折りたたみの中にあり、見出しには出さない）
-  const main = [...card.active, ...card.stopped].filter((s) => !s.worktree);
-  const headerChanges = useSubheads ? undefined : firstChanges(main);
-  const shown = new Set((useSubheads ? groups.flatMap((g) => g.sessions) : main).map(folderOf));
-  const allHidden: SessionView[] = [];
-  const sections = groups.map((g): Section => {
-    const live = g.sessions.filter((s) => s.state !== 'stopped' || kept(s)).sort(compareSessions('priority'));
-    const { visible, hidden } = pick(live, opts);
-    const section: Section = { key: g.key, group: useSubheads ? g : undefined, sessions: visible.sort(order) };
-    if (byWorktree) {
-      const stopped = g.sessions.filter((s) => s.state === 'stopped' && !kept(s)).sort(order);
-      section.fold = makeFold(`${card.key}|${g.key}|fold`, hidden.sort(order), stopped, shown);
-    } else allHidden.push(...hidden);
-    return section;
+/** main のセッション：手の印がなければ、落ち着いて（確認して）から決めた分がたったらアーカイブする */
+function mainArchived(s: SessionView, opts: ArchiveOptions): boolean {
+  if (isLive(s, opts.attention)) return false;
+  const mark = opts.marks[s.id];
+  if (mark) return mark === 'archived';
+  if (!opts.mainMinutes) return false;
+  const settled = Math.max(s.lastActivityAt, opts.confirmedAt.get(s.id) ?? 0);
+  return opts.now - settled >= opts.mainMinutes * 60_000;
+}
+
+/** 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。動いている・手で戻したものは main に残す */
+function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
+  return !isLive(s, opts.attention) && opts.marks[s.id] !== 'shown';
+}
+
+function byCreatedDesc(a: SessionView, b: SessionView): number {
+  return b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
+
+/** 新しいものが上のタイムライン。上の行が下の行から spawnedFrom で作られていれば実線 */
+function timelineOf(items: { session: SessionView; archived: boolean; origin: boolean }[]): TimelineItem[] {
+  const sorted = [...items].sort((a, b) => byCreatedDesc(a.session, b.session));
+  return sorted.map((item, i): TimelineItem => {
+    const below = sorted[i + 1];
+    return below ? { ...item, link: item.session.spawnedFrom === below.session.id ? 'solid' : 'dashed' } : { ...item };
   });
-  const stopped = card.stopped.filter((s) => !kept(s)).sort(order);
-  const fold = byWorktree ? undefined : makeFold(`${card.key}|fold`, allHidden.sort(order), stopped, shown);
-  return { sections, fold, headerChanges };
 }
 
-/** 折りたたみの説明（ツールチップと読み上げ用）。「ほか 2 件・停止中 3」 */
-export function foldLabel(fold: Fold): string {
-  const parts: string[] = [];
-  if (fold.hidden.length) parts.push(`ほか ${fold.hidden.length} 件`);
-  if (fold.stopped.length) parts.push(`停止中 ${fold.stopped.length}`);
-  if (fold.changedFolders) parts.push(`変更が残る作業フォルダ ${fold.changedFolders}`);
-  return parts.join('・');
+function rankOf(list: SessionView[]): { rank: number; latest: number } {
+  return {
+    rank: Math.min(3, ...list.map((s) => RANK[s.state])),
+    latest: Math.max(0, ...list.map((s) => s.lastActivityAt)),
+  };
 }
 
-/** 折りたたみのボタンに出す、状態ごとの件数。急ぐ順で、0 件の状態は出さない。対応待ちは隠さないので入らない */
-export function foldCounts(fold: Fold): { state: SessionState; count: number }[] {
-  const states: SessionState[] = ['busy', 'idle', 'stopped'];
-  return states
-    .map((state) => ({ state, count: [...fold.hidden, ...fold.stopped].filter((s) => s.state === state).length }))
-    .filter((c) => c.count > 0);
-}
-
-/** 画面に並んでいる順（上から）の、折りたたみの外のセッション */
-export function displayOrder(sessions: SessionView[], opts: FoldOptions = NO_FOLD): SessionView[] {
-  return buildCards(sessions, opts.sort.project).flatMap((card) => cardLayout(card, opts).sections.flatMap((g) => g.sessions));
+/** リポジトリの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
+export function cardBadge(sessions: SessionView[]): { state: '' | 'waiting' | 'busy'; text: string } {
+  const waiting = sessions.filter((s) => s.state === 'waiting').length;
+  const busy = sessions.filter((s) => s.state === 'busy').length;
+  if (waiting) return { state: 'waiting', text: `要対応 ${waiting}` };
+  if (busy) return { state: 'busy', text: `処理中 ${busy}` };
+  return { state: '', text: '' };
 }
 
 /**
- * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。折りたたみの中のものは選ばない
+ * リポジトリごとに、ワークツリー（元のフォルダを含む）のカードを作り、アーカイブの決まりで行を分ける。
+ * - ワークツリー：lastActivityAt が一番新しいものを残し、ほかの落ち着いたものをアーカイブする
+ * - main：落ち着いてから決めた分がたったものをアーカイブする
+ * - 起点：ワークツリーのカードへ移す（動いている間と、手で戻したものは main に残す）
+ * - マージ済み・ワークツリーがないカードは、カードごとアーカイブする
+ * - 動いているもの（処理中、対応待ち、未確認）は、どの決まりでも隠さない
+ */
+export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_ARCHIVE): RepoView[] {
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  // 起点 → 移す先のカード（そのセッションから作られた、いちばん古いワークツリーのセッションのカード）
+  const originTo = new Map<string, string>();
+  for (const s of [...sessions].sort((a, b) => a.createdAt - b.createdAt)) {
+    const parent = s.spawnedFrom ? byId.get(s.spawnedFrom) : undefined;
+    if (!s.worktree || !parent || parent.worktree || parent.repoKey !== s.repoKey || originTo.has(parent.id)) continue;
+    originTo.set(parent.id, cardKeyOf(s));
+  }
+
+  const repos = new Map<string, { name: string; groups: Map<string, SessionView[]>; all: SessionView[] }>();
+  for (const s of sessions) {
+    let repo = repos.get(s.repoKey);
+    if (!repo) {
+      repo = { name: s.repoName, groups: new Map(), all: [] };
+      repos.set(s.repoKey, repo);
+    }
+    repo.all.push(s);
+    const key = cardKeyOf(s);
+    const list = repo.groups.get(key);
+    if (list) list.push(s);
+    else repo.groups.set(key, [s]);
+  }
+
+  const order = compareSessions(opts.sort.session);
+  const result: RepoView[] = [];
+  for (const [repoKey, repo] of repos) {
+    const cards: WorktreeCard[] = [];
+    // ワークツリーのカードへ移す起点（移す先のカードの目印 → 起点）
+    const moved = new Map<string, SessionView[]>();
+    for (const s of repo.all) {
+      const to = originTo.get(s.id);
+      if (!to || !originMoves(s, opts)) continue;
+      const list = moved.get(to);
+      if (list) list.push(s);
+      else moved.set(to, [s]);
+    }
+    const movedIds = new Set([...moved.values()].flat().map((s) => s.id));
+    for (const [key, own] of repo.groups) {
+      const first = own[0]!;
+      const isMain = !first.worktree;
+      const changes = own.find((s) => s.changes)?.changes;
+      const { rank, latest } = rankOf(own);
+      let shown: SessionView[];
+      let archived: SessionView[];
+      let timeline: TimelineItem[];
+      if (isMain) {
+        const stay = own.filter((s) => !movedIds.has(s.id));
+        // ワークツリーのカードへ移した起点も、main の一覧に出す（main で始めたセッションなので、main からもたどれるように）
+        const origins = own.filter((s) => movedIds.has(s.id));
+        shown = stay.filter((s) => !mainArchived(s, opts));
+        archived = stay.filter((s) => mainArchived(s, opts)).sort(byCreatedDesc);
+        timeline = [
+          ...archived.map((session) => ({ session, archived: true, origin: false })),
+          ...origins.map((session) => ({ session, archived: true, origin: true })),
+        ].sort((a, b) => byCreatedDesc(a.session, b.session));
+      } else {
+        const newest = own.reduce((a, b) => (b.lastActivityAt > a.lastActivityAt ? b : a));
+        const flags = own.map((s) => ({ session: s, archived: worktreeArchived(s, s === newest, opts), origin: false }));
+        const origins = (moved.get(key) ?? []).map((s) => ({ session: s, archived: true, origin: true }));
+        // まだ main に残している起点も、一覧の一番下に出す
+        const kept = repo.all
+          .filter((s) => originTo.get(s.id) === key && !movedIds.has(s.id))
+          .map((s) => ({ session: s, archived: false, origin: true }));
+        shown = flags.filter((f) => !f.archived).map((f) => f.session);
+        archived = [...flags.filter((f) => f.archived), ...origins].map((f) => f.session).sort(byCreatedDesc);
+        timeline = timelineOf([...flags, ...origins, ...kept]);
+      }
+      const merged = !isMain && !!(changes?.merged || changes?.gone);
+      const anyLive = own.some((s) => isLive(s, opts.attention));
+      const mark = opts.cardMarks[key];
+      const hidden = !isMain && !anyLive && (mark ? mark === 'archived' : merged);
+      cards.push({
+        key,
+        isMain,
+        label: isMain ? first.mainBranch ?? '元のフォルダ' : first.worktree!.label,
+        tooltip: cardTooltip(first),
+        changes,
+        sessions: shown.sort(order),
+        archived,
+        timeline,
+        stackCount: timeline.filter((t) => !shown.includes(t.session)).length,
+        hidden,
+        merged,
+        rank,
+        latest,
+      });
+    }
+    cards.sort(compareItems<WorktreeCard>(opts.sort.worktree, (c) => c.label, (c) => c.isMain));
+    result.push({
+      key: repoKey,
+      name: repo.name,
+      cards: cards.filter((c) => !c.hidden),
+      hiddenCards: cards.filter((c) => c.hidden),
+      badge: cardBadge(repo.all),
+      ...rankOf(repo.all),
+    });
+  }
+  return result.sort(compareItems<RepoView>(opts.sort.project, (r) => r.name));
+}
+
+/** カードの見出しのツールチップ。ブランチ名の全体と作業フォルダ */
+function cardTooltip(s: SessionView): string {
+  const lines = [s.worktree ? `ワークツリー：${s.worktree.branch}` : `元のフォルダ：${s.mainBranch ?? '(ブランチ不明)'}`];
+  if (s.workDir) lines.push(s.workDir);
+  return lines.join('\n');
+}
+
+/** 画面に並んでいる順（上から）の、アーカイブしていないセッション */
+export function displayOrder(sessions: SessionView[], opts: ArchiveOptions = NO_ARCHIVE): SessionView[] {
+  return buildRepos(sessions, opts).flatMap((r) => r.cards.flatMap((c) => c.sessions));
+}
+
+/**
+ * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。アーカイブしたものは選ばない
  * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの
  * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）
  */
@@ -517,12 +589,12 @@ export function nextCycleTarget(
   sessions: SessionView[],
   attention: ReadonlySet<string>,
   currentId: string | undefined,
-  opts: FoldOptions = NO_FOLD,
+  opts: ArchiveOptions = NO_ARCHIVE,
 ): string | undefined {
-  const ids = displayOrder(sessions, opts).map((s) => s.id);
+  const ids = displayOrder(sessions, { ...opts, attention }).map((s) => s.id);
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
   if (flagged) return flagged;
-  // 今開いているものの次から探す。一覧にない（停止中など）ときは indexOf が -1 なので先頭から
+  // 今開いているものの次から探す。一覧にない（アーカイブしたなど）ときは indexOf が -1 なので先頭から
   const at = currentId ? ids.indexOf(currentId) : -1;
   const next = ids[(at + 1) % ids.length];
   return next === currentId ? undefined : next;
@@ -532,28 +604,19 @@ export function nextCycleTarget(
  * ショートカットで開くセッションの ID
  * - 今開いているもののほかに未確認（左端の帯）の行があれば、前面かどうかに関係なく、表示順でいちばん上のもの
  * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（開き直して前面に出す）
- * - 前面にあるか、今開いているセッションが一覧にない（停止中など）ときは nextCycleTarget
+ * - 前面にあるか、今開いているセッションが一覧にない（アーカイブしたなど）ときは nextCycleTarget
  */
 export function shortcutTarget(
   sessions: SessionView[],
   attention: ReadonlySet<string>,
   currentId: string | undefined,
   claudeInFront: boolean,
-  opts: FoldOptions = NO_FOLD,
+  opts: ArchiveOptions = NO_ARCHIVE,
 ): string | undefined {
-  const ids = displayOrder(sessions, opts).map((s) => s.id);
+  const ids = displayOrder(sessions, { ...opts, attention }).map((s) => s.id);
   // 未確認は処理中より急ぐので、前面になくても今のセッションより先に開く
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
   if (flagged) return flagged;
   if (!claudeInFront && currentId && ids.includes(currentId)) return currentId;
   return nextCycleTarget(sessions, attention, currentId, opts);
-}
-
-/** カードの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
-export function cardBadge(card: Card): { state: '' | 'waiting' | 'busy'; text: string } {
-  const waiting = card.active.filter((s) => s.state === 'waiting').length;
-  const busy = card.active.filter((s) => s.state === 'busy').length;
-  if (waiting) return { state: 'waiting', text: `要対応 ${waiting}` };
-  if (busy) return { state: 'busy', text: `処理中 ${busy}` };
-  return { state: '', text: '' };
 }
