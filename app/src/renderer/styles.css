@@ -202,7 +202,8 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 
 /* 以前のセッションの重なり（1 枚）。画面の内側の余白（8px）に、ウィジェットの内側の端から 2px あけて見せる。
    カードの塗りは半透明なので、カードの下には入れない */
-.stack, .stack-hit { display: none; position: absolute; top: 6px; bottom: 6px; }
+/* 高さは飛び出したときのめくれ（shared/flap.ts の FLAP_HEIGHT）と同じ短いつまみ。カードが低いときは中に収める */
+.stack, .stack-hit { display: none; position: absolute; top: 6px; height: max(16px, min(32px, calc(100% - 12px))); }
 .card-wrap[data-stack] .stack, .card-wrap[data-stack] .stack-hit { display: block; }
 .stack { width: 7px; background: var(--stack); border: 1px solid var(--stack-edge); }
 html:not([data-edge="left"]) .stack { left: -6px; border-right: 0; border-radius: 7px 0 0 7px; }
