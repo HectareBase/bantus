@@ -497,17 +497,19 @@ describe('displayOrder と nextCycleTarget', () => {
   });
 
   it('Claude が前面になくても、未確認の行があればそちらを開く', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false, withMain), 't1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['t1']), 'm1', false, withMain), { id: 't1', raise: false }));
   it('未確認が今開いている行だけなら、前面になければ今開いている行を前面に出す', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['m1']), 'm1', false, withMain), 'm1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['m1']), 'm1', false, withMain), { id: 'm1', raise: true }));
   it('未確認がなく Claude が前面になければ、今開いている行を前面に出す', () =>
-    assert.equal(shortcutTarget(sessions, new Set(), 'm1', false, withMain), 'm1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(), 'm1', false, withMain), { id: 'm1', raise: true }));
   it('Claude が前面にあれば、いつもどおり次へ進む', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', true, withMain), 't1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['t1']), 'm1', true, withMain), { id: 't1', raise: false }));
   it('前面になくても、今開いている行が一覧にない（アーカイブした）か、わからなければ次へ進む', () => {
-    assert.equal(shortcutTarget(sessions, new Set(), 't0', false, withMain), 'w1');
-    assert.equal(shortcutTarget(sessions, new Set(), undefined, false, withMain), 'w1');
+    assert.deepEqual(shortcutTarget(sessions, new Set(), 't0', false, withMain), { id: 'w1', raise: false });
+    assert.deepEqual(shortcutTarget(sessions, new Set(), undefined, false, withMain), { id: 'w1', raise: false });
   });
+  it('ほかに行がなければ何もしない', () =>
+    assert.equal(shortcutTarget([view({ id: 'a' })], new Set(), 'a', true), undefined));
 });
 
 describe('コミットされていない変更と、元のブランチとの差', () => {
