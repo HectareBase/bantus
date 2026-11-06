@@ -44,8 +44,6 @@
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
   --ctx-track: rgba(0, 0, 0, 0.12);
-  /* 乗せたときにアーカイブのトグル（.act）が取る幅：幅 22px + 行の間 8px − 右の詰め 4px */
-  --act-room: 26px;
   color-scheme: light dark;
 }
 
@@ -367,11 +365,12 @@ html.hide-updated .when { display: none; }
 html.hide-state .state-pill { display: none; }
 /* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。
    数字の幅を固定し（左寄せでバーに寄せる）、どの行でもバーの位置がそろうようにする。
-   右にはアーカイブのトグルの分（--act-room）をいつも空けておき、乗せてトグルが出たら空きを 0 にする。トグルが出ても位置が動かない。
+   右端に寄せ、乗せてアーカイブのトグルが出る行では使用率を隠す（トグルと同じ場所を取り合わない）。
    色は状態を表すので、黄・青・緑の色相は使わない。50% からは濃い文字と太字、75% からは赤の太字にする */
-.ctx { flex: none; margin-left: auto; margin-right: var(--act-room); display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
-.row:hover:not([data-state="busy"]):not([data-state="waiting"]):not([data-held]) .ctx { margin-right: 0; }
-.card-wrap[data-held] .row:hover .ctx { margin-right: var(--act-room); }
+.ctx { flex: none; margin-left: auto; display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.row:hover:not([data-state="busy"]):not([data-state="waiting"]):not([data-held]) .ctx { display: none; }
+/* 保留のカードの行はトグルを出さないので、乗せても隠さない */
+html:not(.hide-context) .card-wrap[data-held] .row:hover:not([data-held]) .ctx:not([hidden]) { display: flex; }
 .ctx[hidden] { display: none; }
 .ctx-bar { flex: none; width: 32px; height: 4px; border-radius: 2px; background: var(--ctx-track); overflow: hidden; }
 .ctx-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-tertiary); }
