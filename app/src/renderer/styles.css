@@ -263,7 +263,8 @@ html[data-edge="left"] .stack-hit { right: -8px; }
   align-items: center;
   gap: 8px;
   margin: 0 4px;
-  padding: 4px 8px;
+  /* 上下の余白は設定（rowPadding）で変える。renderer.ts が --row-pad を当てる */
+  padding: var(--row-pad, 4px) 8px;
   border-radius: 6px;
   cursor: default;
   outline: none;
@@ -283,8 +284,9 @@ html[data-edge="left"] .stack-hit { right: -8px; }
   content: "";
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
+  /* 行の上下の余白に合わせ、文字の高さの分だけの帯にする */
+  top: calc(var(--row-pad, 4px) + 4px);
+  bottom: calc(var(--row-pad, 4px) + 4px);
   width: 3px;
   border-radius: 2px;
   background: transparent;

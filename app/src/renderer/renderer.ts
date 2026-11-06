@@ -733,6 +733,7 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
+  root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
   applyStatusColors(layout.statusColors);
   root.classList.toggle('hide-updated', !layout.showUpdated);
   root.classList.toggle('hide-state', !layout.showState);
