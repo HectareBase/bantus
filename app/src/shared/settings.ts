@@ -63,25 +63,29 @@ export interface Settings {
   archive: Record<string, ArchiveMark>;
   /** カード（ワークツリー）を手でアーカイブした／戻したもの（カードの目印 → 印）。設定画面には出さない */
   archivedCards: Record<string, ArchiveMark>;
+  /** 保留の印（セッションの ID → 印）。設定画面には出さず、行の状態のアイコンで切り替える（docs/design/hold.md） */
+  holds: Record<string, HoldMark>;
+  /** 保留にしたカード（カードの目印 → 印）。設定画面には出さず、カードの見出しのアイコンで切り替える */
+  heldCards: Record<string, HoldMark>;
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
 
-/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
+/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 保留 → 停止中、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
 
 /** テーマ。system は Windows の設定に従う */
 export type Theme = 'system' | 'light' | 'dark';
 
-/** 色を設定できる状態 */
-export type ColorState = 'busy' | 'waiting' | 'idle' | 'stopped';
+/** 色を設定できる状態。held は保留（Bantus の中だけの印で、セッションの状態ではない） */
+export type ColorState = 'busy' | 'waiting' | 'idle' | 'stopped' | 'held';
 export type StatusColors = Record<ColorState, string>;
 
 /** 設定画面に並べる順 */
-export const COLOR_STATES: ColorState[] = ['busy', 'waiting', 'idle', 'stopped'];
+export const COLOR_STATES: ColorState[] = ['busy', 'waiting', 'idle', 'held', 'stopped'];
 
 /** 既定の色。両方のテーマで見える、中くらいの明るさ */
-export const DEFAULT_STATUS_COLORS: StatusColors = { busy: '#3b8eea', waiting: '#e6a100', idle: '#4caf50', stopped: '#8b8b8b' };
+export const DEFAULT_STATUS_COLORS: StatusColors = { busy: '#3b8eea', waiting: '#e6a100', idle: '#4caf50', stopped: '#8b8b8b', held: '#e05aa8' };
 
 /** 色の候補 */
 export const COLOR_SWATCHES = ['#3b8eea', '#4caf50', '#e6a100', '#e5534b', '#a371f7', '#e05aa8', '#26a69a', '#f0883e', '#8b8b8b'];
@@ -93,6 +97,21 @@ export function normalizeColor(v: unknown): string | undefined {
 
 /** 手で決めたアーカイブ。archived は手でアーカイブした、shown は手で戻した（自動ではアーカイブしない） */
 export type ArchiveMark = 'archived' | 'shown';
+
+/** 保留の印。note は理由のメモ（空でもよい）、since は保留にした時刻（Unix ミリ秒） */
+export interface HoldMark {
+  note: string;
+  since: number;
+}
+
+/** メモの長さの上限 */
+export const HOLD_NOTE_MAX = 200;
+
+/** メモを保存する形にそろえる。改行や制御文字は空白にし、空白を詰め、前後の空白を除いて上限で切る */
+export function normalizeNote(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
+}
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -133,6 +152,8 @@ export const DEFAULT_SETTINGS: Settings = {
   muteWhenOpen: true,
   archive: {},
   archivedCards: {},
+  holds: {},
+  heldCards: {},
 };
 
 /** ドラッグで変えられる幅の範囲（px） */
@@ -352,6 +373,8 @@ export function normalizeSettings(input: unknown): Settings {
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
   out.archive = normalizeMarks(src.archive, (id) => SESSION_KEY_ID.test(id));
   out.archivedCards = normalizeMarks(src.archivedCards, isCardKey);
+  out.holds = normalizeHolds(src.holds, (id) => SESSION_KEY_ID.test(id));
+  out.heldCards = normalizeHolds(src.heldCards, isCardKey);
   // 前の版の「常に表示」の星は、手で戻したものとして引き継ぐ
   if (Array.isArray(src.alwaysShow)) {
     for (const id of src.alwaysShow) {
@@ -377,6 +400,25 @@ function normalizeMarks(input: unknown, validKey: (key: string) => boolean): Rec
   if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
   for (const [key, mark] of Object.entries(input)) {
     if ((mark === 'archived' || mark === 'shown') && validKey(key)) out[key] = mark;
+  }
+  return out;
+}
+
+/** 保留の印を 1 つそろえる。合わなければ undefined */
+export function normalizeHold(input: unknown): HoldMark | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const { note, since } = input as Record<string, unknown>;
+  if (typeof note !== 'string' || typeof since !== 'number' || !Number.isFinite(since)) return undefined;
+  return { note: normalizeNote(note), since };
+}
+
+/** 保留の表から、目印と値が正しいものだけを残す */
+function normalizeHolds(input: unknown, validKey: (key: string) => boolean): Record<string, HoldMark> {
+  const out: Record<string, HoldMark> = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  for (const [key, value] of Object.entries(input)) {
+    const mark = normalizeHold(value);
+    if (mark && validKey(key)) out[key] = mark;
   }
   return out;
 }

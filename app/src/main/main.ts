@@ -8,12 +8,12 @@ import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from
 import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
-import { readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
-import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, type ArchiveMark, type Settings, type WindowBounds } from '../shared/settings';
+import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
 import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
@@ -151,10 +151,10 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards,
+    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors,
   };
 }
@@ -528,19 +528,26 @@ function sendSessions(force = false) {
   if (!force && json === lastSent) return;
   lastSent = json;
   win.webContents.send('sessions', sessions);
-  // 一覧から消えた（デスクトップでアーカイブや削除された）セッションとカードは、アーカイブの印からも外す。読めずに空のときは外さない
+  // 一覧から消えた（デスクトップでアーカイブや削除された）セッションとカードは、アーカイブと保留の印からも外す。読めずに空のときは外さない
   if (sessions.length) {
-    const { archive, archivedCards } = getSettings();
+    const { archive, archivedCards, holds, heldCards } = getSettings();
     const ids = new Set(sessions.map((s) => s.id));
     const cardKeys = new Set(sessions.map(cardKeyOf));
+    const patch: Partial<Settings> = {};
     const keptSessions = pruneMarks(archive, ids);
+    if (keptSessions) patch.archive = keptSessions;
     const keptCards = pruneMarks(archivedCards, cardKeys);
-    if (keptSessions || keptCards) updateSettings({ ...(keptSessions && { archive: keptSessions }), ...(keptCards && { archivedCards: keptCards }) });
+    if (keptCards) patch.archivedCards = keptCards;
+    const keptHolds = pruneMarks(holds, ids);
+    if (keptHolds) patch.holds = keptHolds;
+    const keptHeldCards = pruneMarks(heldCards, cardKeys);
+    if (keptHeldCards) patch.heldCards = keptHeldCards;
+    if (Object.keys(patch).length) updateSettings(patch);
   }
 }
 
 /** 今ない目印の印を外す。外すものがなければ undefined */
-function pruneMarks(marks: Record<string, ArchiveMark>, keys: ReadonlySet<string>): Record<string, ArchiveMark> | undefined {
+function pruneMarks<T>(marks: Record<string, T>, keys: ReadonlySet<string>): Record<string, T> | undefined {
   const entries = Object.entries(marks);
   const kept = entries.filter(([k]) => keys.has(k));
   return kept.length === entries.length ? undefined : Object.fromEntries(kept);
@@ -555,9 +562,25 @@ function setMark(marks: Record<string, ArchiveMark>, key: string, mark: unknown)
   return next;
 }
 
+/** 保留の印を付けるか外す（null で外す）。印の形が合わなければ undefined */
+function setHoldMark(marks: Record<string, HoldMark>, key: string, mark: unknown): Record<string, HoldMark> | undefined {
+  const hold = mark === null ? null : normalizeHold(mark);
+  if (hold === undefined) return undefined;
+  const next = { ...marks };
+  if (hold === null) delete next[key];
+  else next[key] = hold;
+  return next;
+}
+
 // ---- 起動 ----
 
 app.whenReady().then(() => {
+  // 見本データに書いた保留を、見本データ用の設定に入れる（設定にもうある印はそのまま）
+  if (process.env.WIDGET_FIXTURE) {
+    const seed = readFixtureHolds(process.env.WIDGET_FIXTURE);
+    const { holds, heldCards } = getSettings();
+    updateSettings({ holds: { ...seed.holds, ...holds }, heldCards: { ...seed.heldCards, ...heldCards } });
+  }
   applyTheme(getSettings());
   win = createWidget();
   tipWin = createTipWindow();
@@ -629,6 +652,16 @@ app.whenReady().then(() => {
     if (!isCardKey(key)) return;
     const archivedCards = setMark(getSettings().archivedCards, key, mark);
     if (archivedCards) updateSettings({ archivedCards });
+  });
+  ipcMain.on('set-hold', (_e, id: unknown, mark: unknown) => {
+    if (typeof id !== 'string' || !SESSION_KEY_ID.test(id)) return;
+    const holds = setHoldMark(getSettings().holds, id, mark);
+    if (holds) updateSettings({ holds });
+  });
+  ipcMain.on('set-card-hold', (_e, key: unknown, mark: unknown) => {
+    if (!isCardKey(key)) return;
+    const heldCards = setHoldMark(getSettings().heldCards, key, mark);
+    if (heldCards) updateSettings({ heldCards });
   });
   ipcMain.on('fly-show', (e, request: unknown) => {
     if (e.sender === win?.webContents && isFlyRequest(request)) flyout?.show(request);

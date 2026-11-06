@@ -169,13 +169,14 @@ input[type="range"] { width: 200px; accent-color: var(--accent); }
 
 /* ---- 状態の色 ---- */
 /* 状態の色はライトとダークで同じ。ここは既定の色で、選んだ色は settings.ts が .status-colors に入れる */
-.status-colors { --busy: #3b8eea; --waiting: #e6a100; --idle: #4caf50; --stopped: #8b8b8b; }
+.status-colors { --busy: #3b8eea; --waiting: #e6a100; --idle: #4caf50; --stopped: #8b8b8b; --held: #e05aa8; }
 .status { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
 .status svg { width: 14px; height: 14px; }
 .status[data-state="busy"] { color: var(--busy); }
 .status[data-state="waiting"] { color: var(--waiting); }
 .status[data-state="idle"] { color: var(--idle); }
 .status[data-state="stopped"] { color: var(--stopped); }
+.status[data-state="held"] { color: var(--held); }
 .progress-ring { animation: spin 1.6s linear infinite; }
 .progress-ring circle { fill: none; stroke: currentColor; }
 .progress-ring .track { stroke-width: 2; stroke-opacity: 0.18; }

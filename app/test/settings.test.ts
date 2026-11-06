@@ -2,7 +2,9 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CATEGORIES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, SETTING_DEFS, normalizeColor, normalizeSettings } from '../src/shared/settings';
+import {
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, normalizeColor, normalizeNote, normalizeSettings,
+} from '../src/shared/settings';
 
 describe('normalizeSettings の settingsWindow', () => {
   it('なければ入れない', () => assert.equal(normalizeSettings({}).settingsWindow, undefined));
@@ -187,7 +189,7 @@ describe('normalizeSettings の statusColors', () => {
   it('なければ既定の色', () => assert.deepEqual(normalizeSettings({}).statusColors, DEFAULT_STATUS_COLORS));
   it('#rrggbb を小文字にそろえて残す', () =>
     assert.deepEqual(normalizeSettings({ statusColors: { busy: '#A371F7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000' } }).statusColors, {
-      busy: '#a371f7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000',
+      busy: '#a371f7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000', held: DEFAULT_STATUS_COLORS.held,
     }));
   it('壊れた色・欠けた状態は、その状態だけ既定の色に戻す', () =>
     assert.deepEqual(normalizeSettings({ statusColors: { busy: 'red', waiting: '#e5534', idle: 123 } }).statusColors, DEFAULT_STATUS_COLORS));
@@ -203,3 +205,53 @@ describe('normalizeSettings の statusColors', () => {
   });
 });
 
+
+describe('保留の色', () => {
+  it('5 つめの状態の色として、既定はピンク', () => {
+    assert.equal(DEFAULT_STATUS_COLORS.held, '#e05aa8');
+    assert.ok(COLOR_SWATCHES.includes(DEFAULT_STATUS_COLORS.held));
+  });
+  it('設定画面では待機と停止中の間に並べる', () => assert.deepEqual(COLOR_STATES, ['busy', 'waiting', 'idle', 'held', 'stopped']));
+  it('保存されている色に held がなければ既定の色。あれば残す', () => {
+    assert.equal(normalizeSettings({ statusColors: { busy: '#000000' } }).statusColors.held, '#e05aa8');
+    assert.equal(normalizeSettings({ statusColors: { held: '#A371F7' } }).statusColors.held, '#a371f7');
+  });
+});
+
+describe('normalizeSettings の holds と heldCards', () => {
+  it('なければ空', () => {
+    assert.deepEqual(normalizeSettings({}).holds, {});
+    assert.deepEqual(normalizeSettings({}).heldCards, {});
+  });
+  it('正しい印を残す', () => {
+    const s = normalizeSettings({
+      holds: { 'local_a-1': { note: 'マージ待ち', since: 1000 } },
+      heldCards: { 'c:/repo|fix': { note: '', since: 2000 } },
+    });
+    assert.deepEqual(s.holds, { 'local_a-1': { note: 'マージ待ち', since: 1000 } });
+    assert.deepEqual(s.heldCards, { 'c:/repo|fix': { note: '', since: 2000 } });
+  });
+  it('目印が合わない・note が文字列でない・since が有限の数でないものは捨てる', () => {
+    const s = normalizeSettings({
+      holds: {
+        'not-a-session': { note: '', since: 1 },
+        local_b: { note: 1, since: 1 },
+        local_c: { note: '', since: Infinity },
+        local_d: { note: '', since: '1' },
+        local_e: 'held',
+        local_f: { note: 'ok', since: 5 },
+      },
+      heldCards: { '': { note: '', since: 1 }, 'a\nb': { note: '', since: 1 }, 'r|x': { note: 'ok', since: 6 } },
+    });
+    assert.deepEqual(s.holds, { local_f: { note: 'ok', since: 5 } });
+    assert.deepEqual(s.heldCards, { 'r|x': { note: 'ok', since: 6 } });
+  });
+  it('入れ物が表でなければ空', () => {
+    for (const holds of [null, 'x', [{ note: '', since: 1 }]]) assert.deepEqual(normalizeSettings({ holds, heldCards: holds }).holds, {});
+  });
+  it('メモは制御文字と改行を空白にし、前後の空白を除いて 200 文字まで', () => {
+    assert.equal(normalizeSettings({ holds: { local_a: { note: '  あと\nで\t再開\x00 ', since: 1 } } }).holds.local_a!.note, 'あと で 再開');
+    assert.equal(normalizeNote('あ'.repeat(HOLD_NOTE_MAX + 50)).length, HOLD_NOTE_MAX);
+    assert.equal(normalizeNote(42), '');
+  });
+});

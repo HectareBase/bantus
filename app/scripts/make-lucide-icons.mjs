@@ -18,6 +18,8 @@ const NAMES = [
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
   'file-pen-line', 'file-plus', 'arrow-up', 'arrow-down',
+  // 保留（docs/design/hold.md）：状態の印、乗せたときの切り替えの印、メモの枠
+  'circle-pause', 'circle-play', 'pencil',
 ];
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
