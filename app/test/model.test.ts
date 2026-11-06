@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, formatAgo, isLive, revivedCards, revivedSessions,
-  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
+  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
 } from '../src/renderer/model';
@@ -391,6 +391,22 @@ describe('Claude 本体で開いたか（openedInClaude）', () => {
   it('開いたことがなかったセッションを初めて開いたら、開いた', () => assert.equal(openedInClaude(0, 50), true));
   it('初めて見たセッションは、開いたとはみなさない', () => assert.equal(openedInClaude(undefined, 500), false));
   it('時刻がないままなら開いていない', () => assert.equal(openedInClaude(0, undefined), false));
+});
+
+describe('stateLabel', () => {
+  it('処理中、待機中、停止', () => {
+    assert.equal(stateLabel('busy'), '処理中');
+    assert.equal(stateLabel('idle'), '待機中');
+    assert.equal(stateLabel('stopped'), '停止');
+  });
+  it('対応待ちは理由を言葉にする', () => {
+    assert.equal(stateLabel('waiting', 'permission prompt'), '許可待ち');
+    assert.equal(stateLabel('waiting', 'input needed'), '回答待ち');
+  });
+  it('知らない理由やないときは「その他」（対応待ち（その他））', () => {
+    assert.equal(stateLabel('waiting', 'some new reason'), 'その他');
+    assert.equal(stateLabel('waiting', undefined), 'その他');
+  });
 });
 
 describe('tooltip と waitingLabel', () => {

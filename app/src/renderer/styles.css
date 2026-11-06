@@ -30,6 +30,8 @@
   --stopped: #8b8b8b;
   --waiting-bg: color-mix(in srgb, var(--waiting) 16%, transparent);
   --busy-bg: color-mix(in srgb, var(--busy) 14%, transparent);
+  --idle-bg: color-mix(in srgb, var(--idle) 14%, transparent);
+  --stopped-bg: color-mix(in srgb, var(--stopped) 16%, transparent);
   /* 以前のセッションの重なり。色は状態だけを表すので、カードより一段濃い灰色にする */
   --stack: #c8c8c8;
   --stack-strong: #b4b4b4;
@@ -314,7 +316,21 @@ html.hide-updated .when { display: none; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .when { flex: none; }
-html.hide-updated .meta { display: none; }
+/* 状態の文字の札（.badge と同じ作り）。幅が足りないときは日時を残し、札のほうを「…」で切る */
+.state-pill {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 5px;
+  border-radius: 4px;
+  line-height: 15px;
+}
+.row[data-state="busy"] .state-pill { background: var(--busy-bg); color: var(--busy); }
+.row[data-state="waiting"] .state-pill { background: var(--waiting-bg); color: var(--waiting); }
+.row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
+.row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
+html.hide-state .state-pill { display: none; }
+html.hide-updated.hide-state .meta { display: none; }
 
 .row[data-state="stopped"] .title { color: var(--text-secondary); }
 
