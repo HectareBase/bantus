@@ -657,6 +657,13 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => app.quit());
 
+/**
+ * メインプロセスで拾われなかった例外は、ダイアログにせず記録だけにする。
+ * Electron の既定ではダイアログが出て、タイマーの中の例外だと閉じてもすぐ同じものが出続ける
+ */
+process.on('uncaughtException', (e) => console.error('拾われなかった例外：', e));
+process.on('unhandledRejection', (e) => console.error('拾われなかった Promise の失敗：', e));
+
 // 二重起動を防ぐ
 if (!app.requestSingleInstanceLock()) {
   if (process.env.WIDGET_FIXTURE) console.error('同じデータフォルダのウィジェットがもう動いています');

@@ -188,6 +188,12 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   }
 
   function tick() {
+    // 終了の途中などでウィンドウが壊れたあとに呼ばれたら、カーソルを見るのをやめる。
+    // 壊れたウィンドウを触ると 30ms ごとに例外になり、エラーのダイアログが閉じても出続ける
+    if (win.isDestroyed()) {
+      syncPoll();
+      return;
+    }
     const c = screen.getCursorScreenPoint();
     if (!key || !ready) {
       if (!key) watchOutside(c, false);
@@ -269,6 +275,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     }, SWITCH_DWELL_MS);
     pendingSwitch = { key: request.key, timer };
   }
+
+  win.on('closed', () => syncPoll());
 
   win.on('blur', () => {
     dbg('blur', open);
