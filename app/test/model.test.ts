@@ -9,6 +9,7 @@ import {
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
+import { cardKeyOf } from '../src/shared/card-key';
 import { view } from './helpers';
 
 const MIN = 60_000;
@@ -274,6 +275,47 @@ describe('戻ったセッションの猶予', () => {
     const sessions = [view({ id: 'r', worktree: wt('x'), state: 'idle', lastActivityAt: now, changes: { ...clean, merged: true } })];
     assert.equal(buildRepos(sessions, opts({ now, revived }))[0]!.hiddenCards.length, 0);
     assert.equal(buildRepos(sessions, opts({ now }))[0]!.hiddenCards.length, 1);
+  });
+});
+
+describe('確認した直後の猶予', () => {
+  const now = 100 * MIN;
+  const sessions = [
+    view({ id: 'o', worktree: wt('x'), state: 'idle', lastActivityAt: now - 30 * MIN }),
+    view({ id: 'n', worktree: wt('x'), state: 'idle', lastActivityAt: now - 20 * MIN }),
+  ];
+  const confirmedAt = new Map([['o', now]]);
+  const card = (o: Partial<ArchiveOptions>) => buildRepos(sessions, opts({ now, mainMinutes: 10, confirmedAt, ...o }))[0]!.cards[0]!;
+  it('ワークツリーで一番新しくなくても、確認した直後は出しておく', () => {
+    assert.deepEqual(card({}).sessions.map((s) => s.id).sort(), ['n', 'o']);
+    assert.deepEqual(card({ confirmedAt: new Map() }).archived.map((s) => s.id), ['o'], '確認していなければ今までどおり');
+  });
+  it('猶予がすぎたらアーカイブする', () => {
+    assert.deepEqual(card({ now: now + 10 * MIN }).archived.map((s) => s.id), ['o']);
+    assert.deepEqual(card({ mainMinutes: 0, now: now + 9 * MIN }).sessions.length, 2, 'main の自動アーカイブがオフなら 10 分');
+  });
+  it('手でアーカイブしたものは、確認した直後でもアーカイブのまま', () => {
+    assert.deepEqual(card({ marks: { o: 'archived' } }).archived.map((s) => s.id), ['o']);
+    assert.deepEqual(card({ marks: { n: 'archived' }, confirmedAt: new Map([['n', now]]) }).sessions.length, 0, '一番新しいものでも');
+  });
+  it('起点は、確認した直後は main に残す。手でアーカイブしたら移す', () => {
+    const list = [
+      view({ id: 'r', state: 'idle', lastActivityAt: now - 30 * MIN }),
+      view({ id: 'w', worktree: wt('x'), spawnedFrom: 'r', lastActivityAt: now }),
+    ];
+    const mainCard = (o: Partial<ArchiveOptions>) =>
+      buildRepos(list, opts({ now, mainMinutes: 10, confirmedAt: new Map([['r', now]]), ...o }))[0]!.cards.find((c) => c.isMain);
+    assert.deepEqual(mainCard({})!.sessions.map((s) => s.id), ['r']);
+    assert.deepEqual(mainCard({ now: now + 10 * MIN })!.sessions, [], '猶予がすぎたら移す');
+    assert.deepEqual(mainCard({ marks: { r: 'archived' } })!.sessions, []);
+  });
+  it('マージ済みのカードは、確認した直後は隠さない。手でアーカイブしたら隠す', () => {
+    const list = [view({ id: 'm', worktree: wt('x'), state: 'idle', lastActivityAt: now - 30 * MIN, changes: { ...clean, merged: true } })];
+    const hidden = (o: Partial<ArchiveOptions>) =>
+      buildRepos(list, opts({ now, mainMinutes: 10, confirmedAt: new Map([['m', now]]), ...o }))[0]!.hiddenCards.length;
+    assert.equal(hidden({}), 0);
+    assert.equal(hidden({ now: now + 10 * MIN }), 1);
+    assert.equal(hidden({ cardMarks: { [cardKeyOf(list[0]!)]: 'archived' } }), 1);
   });
 });
 
