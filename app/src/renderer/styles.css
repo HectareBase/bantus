@@ -337,7 +337,8 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 .row[data-state="waiting"] .sweep-light { --sweep-color: var(--waiting); }
 .row[data-state="idle"] .sweep-light { --sweep-color: var(--idle); }
 
-.text { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+/* セッション名（1 行目）と状態（2 行目）の間を少しあける */
+.text { min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.3; }
 /* 設定で更新日時を出さないとき */
 html.hide-updated .when { display: none; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
