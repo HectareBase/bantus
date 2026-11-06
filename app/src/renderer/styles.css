@@ -1,7 +1,7 @@
 /* Windows 11（Fluent）に合わせた見た目。ウィンドウは透明で、テーマの背景色を --bg-alpha の不透明度で塗る。
    カードとタイトルバーの塗りは --card-alpha、カードの見出しの帯の濃さは --header-alpha。どれも設定画面から変えられる（renderer.ts が値を入れる）。
    --bg-alpha が 0 のときは、カードとタイトルバーだけが浮かんで見える。
-   色は状態だけを表す。アニメーションは transform と opacity だけを使う（GPU の合成だけで描かれ、CPU をほとんど使わない）。 */
+   色は状態だけを表し、状態の色は設定で変えられる（ライトとダークで同じ色）。アニメーションは transform と opacity だけを使う（GPU の合成だけで描かれ、CPU をほとんど使わない）。 */
 
 :root {
   --text: #1a1a1a;
@@ -23,12 +23,13 @@
   --selected: rgba(0, 0, 0, 0.08);
   --selected-hover: rgba(0, 0, 0, 0.11);
   --focus: #1a1a1a;
-  --waiting: #c27c00;
-  --waiting-bg: rgba(194, 124, 0, 0.14);
-  --busy: #005fb8;
-  --busy-bg: rgba(0, 95, 184, 0.12);
-  --idle: #0f7b0f;
-  --stopped: #8a8a8a;
+  /* 状態の色。ライトとダークで同じ色を使い、設定の色で上書きする（status-colors.ts）。薄い背景はその色から作る */
+  --waiting: #e6a100;
+  --busy: #3b8eea;
+  --idle: #4caf50;
+  --stopped: #8b8b8b;
+  --waiting-bg: color-mix(in srgb, var(--waiting) 16%, transparent);
+  --busy-bg: color-mix(in srgb, var(--busy) 14%, transparent);
   /* 以前のセッションの重なり。色は状態だけを表すので、カードより一段濃い灰色にする */
   --stack: #c8c8c8;
   --stack-strong: #b4b4b4;
@@ -53,12 +54,6 @@
     --selected: rgba(255, 255, 255, 0.09);
     --selected-hover: rgba(255, 255, 255, 0.12);
     --focus: #ffffff;
-    --waiting: #fce100;
-    --waiting-bg: rgba(252, 225, 0, 0.14);
-    --busy: #60cdff;
-    --busy-bg: rgba(96, 205, 255, 0.14);
-    --idle: #6ccb5f;
-    --stopped: #9a9a9a;
     --stack: #4c4c4c;
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);

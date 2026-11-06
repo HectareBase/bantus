@@ -1,7 +1,7 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
@@ -152,11 +152,25 @@ function sidebarBounds() {
 
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards } = s;
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = s;
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards,
-    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors,
   };
+}
+
+/**
+ * テーマをすべてのウィンドウに当てる。画面の CSS は prefers-color-scheme のままで、themeSource を変えると
+ * 開いているウィンドウ（ウィジェット・設定・一覧・ツールチップ）の見た目がすぐ切り替わる
+ */
+function applyTheme(s: Settings) {
+  if (nativeTheme.themeSource !== s.theme) nativeTheme.themeSource = s.theme;
+}
+
+/** 一覧（めくれ）の状態の色。ウィジェットの色は layout で届く */
+function sendFlyoutColors() {
+  const w = flyout?.window();
+  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', getSettings().statusColors);
 }
 
 /** 表示の拡大率（1 で等倍） */
@@ -187,6 +201,8 @@ function keepZoom(w: BrowserWindow) {
 }
 
 function applySettings(s: Settings) {
+  applyTheme(s);
+  sendFlyoutColors();
   if (!win || win.isDestroyed()) return;
   applyZoom();
   win.setBounds(sidebarBounds());
@@ -542,6 +558,7 @@ function setMark(marks: Record<string, ArchiveMark>, key: string, mark: unknown)
 // ---- 起動 ----
 
 app.whenReady().then(() => {
+  applyTheme(getSettings());
   win = createWidget();
   tipWin = createTipWindow();
   flyout = createFlyout({
@@ -560,6 +577,7 @@ app.whenReady().then(() => {
     },
   });
   keepZoom(flyout.window());
+  flyout.window().webContents.on('did-finish-load', sendFlyoutColors);
   applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());

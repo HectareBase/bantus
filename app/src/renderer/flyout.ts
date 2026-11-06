@@ -9,6 +9,7 @@ import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { createIcon } from './icon.js';
 import { statusIconName, waitingLabel } from './model.js';
 import { setStatus } from './status-icon.js';
+import { applyStatusColors } from './status-colors.js';
 
 const flap = document.getElementById('flap')!;
 const flapCount = flap.querySelector<HTMLElement>('.flap-count')!;
@@ -203,6 +204,7 @@ function setOpen(animate: boolean) {
   reportSolid();
 }
 
+window.flyoutApi.onColors((colors) => applyStatusColors(colors));
 window.flyoutApi.onShow((show) => {
   current = show;
   open = false;

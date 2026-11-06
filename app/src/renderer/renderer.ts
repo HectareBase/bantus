@@ -41,6 +41,7 @@ import { flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
+import { applyStatusColors } from './status-colors.js';
 import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
 
@@ -698,6 +699,7 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
+  applyStatusColors(layout.statusColors);
   root.classList.toggle('hide-updated', !layout.showUpdated);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
