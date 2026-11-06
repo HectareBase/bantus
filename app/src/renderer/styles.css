@@ -44,6 +44,8 @@
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
   --ctx-track: rgba(0, 0, 0, 0.12);
+  /* 行の右端に重ねるアーカイブのトグル（幅 22px、行の端から 4px）の分。行の右の余白 8px を引き、4px あける */
+  --act-room: 22px;
   color-scheme: light dark;
 }
 
@@ -288,7 +290,8 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 16px 1fr auto;
+  /* アーカイブのトグル（.act）は並びに入れず、右端に重ねる（下の .row > .act） */
+  grid-template-columns: 16px 1fr;
   align-items: center;
   gap: 8px;
   margin: 0 4px;
@@ -365,12 +368,9 @@ html.hide-updated .when { display: none; }
 html.hide-state .state-pill { display: none; }
 /* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。
    数字の幅を固定し（左寄せでバーに寄せる）、どの行でもバーの位置がそろうようにする。
-   右端に寄せ、乗せてアーカイブのトグルが出る行では使用率を隠す（トグルと同じ場所を取り合わない）。
+   右にはアーカイブのトグルの分（--act-room）を空けておく。トグルは行の右端に重ねて出す（並びに入れない）ので、乗せても使用率は動かない。
    色は状態を表すので、黄・青・緑の色相は使わない。50% からは濃い文字と太字、75% からは赤の太字にする */
-.ctx { flex: none; margin-left: auto; display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
-.row:hover:not([data-state="busy"]):not([data-state="waiting"]):not([data-held]) .ctx { display: none; }
-/* 保留のカードの行はトグルを出さないので、乗せても隠さない */
-html:not(.hide-context) .card-wrap[data-held] .row:hover:not([data-held]) .ctx:not([hidden]) { display: flex; }
+.ctx { flex: none; margin-left: auto; margin-right: var(--act-room); display: flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
 .ctx[hidden] { display: none; }
 .ctx-bar { flex: none; width: 32px; height: 4px; border-radius: 2px; background: var(--ctx-track); overflow: hidden; }
 .ctx-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-tertiary); }
@@ -428,17 +428,14 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 .act svg { width: 12px; height: 12px; }
 .act:hover { background: var(--hover); color: var(--text); }
 .row:hover .act, .card-header:hover .act { opacity: 1; }
-.row:not(:hover) .act { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
+/* 行のトグルは右端に重ねる。並びに入れると、出たときに 2 行目の使用率がトグルの分だけ動くため。
+   乗せている間はセッション名の右をトグルの分だけ空ける（名前の末尾にトグルが重ならないように） */
+.row > .act { position: absolute; right: 4px; top: 50%; margin: -11px 0 0; }
+.row:not(:hover) > .act { visibility: hidden; }
+.row:hover:not([data-state="busy"]):not([data-state="waiting"]):not([data-held]) .title { margin-right: var(--act-room); }
+.card-wrap[data-held] .row:hover .title { margin-right: 0; }
 /* 処理中・対応待ちの行はアーカイブできない（動いているものは隠さない）ので、トグルを出さない。保留の行も出さない（保留とアーカイブは同時に付けない） */
-/* display: none にするとグリッドの列の間（8px）が残り、ほかの行と右端がずれる（使用率のバーの位置がそろわない）。
-   乗せていない行と同じく幅 0 で畳み、見えなくする */
-.row[data-state="busy"] .act, .row[data-state="waiting"] .act, .row[data-held] .act, .card-wrap[data-held] .row .act {
-  visibility: hidden;
-  width: 0;
-  margin-left: -8px;
-  margin-right: 0;
-  overflow: hidden;
-}
+.row[data-state="busy"] .act, .row[data-state="waiting"] .act, .row[data-held] .act, .card-wrap[data-held] .row .act { display: none; }
 /* 見出しは右の余白が行より 2px 狭い（6px と 8px）ので、行のトグルと同じ位置（カードの端から 4px）にそろえる */
 .card-header .act { margin-right: -2px; }
 .card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
