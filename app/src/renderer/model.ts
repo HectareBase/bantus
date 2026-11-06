@@ -324,16 +324,25 @@ export function toastContent(alerts: Alert[], sessions: SessionView[]): ToastCon
 /** クリックで開いたセッション。デスクトップがファイルに書くまでの間、これを今開いているものとして扱う */
 export interface PendingFocus {
   id: string;
-  /** この時刻（Unix ミリ秒）を過ぎたら、ファイルの値に戻す */
+  /** クリックした時刻（Unix ミリ秒）。これより新しい `lastFocusedAt` を持つ別のセッションが出たら、本体でそちらを開いたとみなす */
+  at: number;
+  /** 安全のための期限（Unix ミリ秒）。本体で開けなかったときに残り続けないよう、これを過ぎたらファイルの値に戻す */
   until: number;
 }
 
-/** クリックしてからファイルに反映されるまで待つ長さ */
-export const PENDING_FOCUS_MS = 5_000;
+/**
+ * クリックしてからファイルに反映されるのを待つ最長の長さ。
+ * 本体の書き込みは 3 秒以上かかることがあり、短いと先に切れて前の行に戻り、そのあと書き込みで戻ってくる（行が揺れる）。
+ * そのため、ふだんは期限ではなくファイルの変化で仮の値を外し、これは本体で開けなかったときの備えにする
+ */
+export const PENDING_FOCUS_MS = 30_000;
 
 /**
  * 今開いているセッションの ID を決める。
- * クリックしたセッションがあれば、ファイルが追いつく（またはその時間が過ぎる）まではそちらを優先する。
+ * クリックしたセッションがあれば、次のどれかが起きるまではそちらを優先する。
+ * ファイルが追いついた（クリックしたセッションが今開いているものになった）。
+ * クリックより新しい `lastFocusedAt` を持つ別のセッションが出た（本体で別のセッションを開いた）。
+ * クリックしたセッションが一覧から消えた。安全のための期限が過ぎた。
  * 返す pending は、まだ待つなら同じもの、もう要らなければ undefined。
  */
 export function resolveFocus(
@@ -342,7 +351,13 @@ export function resolveFocus(
   now = Date.now(),
 ): { id: string | undefined; pending: PendingFocus | undefined } {
   const fromData = sessions.find((s) => s.focused)?.id;
-  if (pending && now < pending.until && fromData !== pending.id && sessions.some((s) => s.id === pending.id)) {
+  if (
+    pending &&
+    now < pending.until &&
+    fromData !== pending.id &&
+    sessions.some((s) => s.id === pending.id) &&
+    !sessions.some((s) => s.id !== pending.id && (s.focusedAt ?? 0) > pending.at)
+  ) {
     return { id: pending.id, pending };
   }
   return { id: fromData, pending: undefined };

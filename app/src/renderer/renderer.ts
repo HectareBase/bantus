@@ -360,8 +360,10 @@ function openRow(id: string, raise = false) {
   const refs = rows.get(id);
   if (refs) setAttention(refs, id, false);
   else clearAttention(id);
-  // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。反映されないまま時間が過ぎたら、ファイルの値に戻す
-  pendingFocus = { id, until: Date.now() + PENDING_FOCUS_MS };
+  // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。ファイルが追いつくか、本体で別のセッションを開くまで保つ。
+  // 本体で開けないまま安全のための期限が過ぎたら、ファイルの値に戻す（そのための描き直しを予約しておく）
+  const now = Date.now();
+  pendingFocus = { id, at: now, until: now + PENDING_FOCUS_MS };
   clearTimeout(pendingTimer);
   pendingTimer = window.setTimeout(() => render(latest), PENDING_FOCUS_MS);
   render(latest);

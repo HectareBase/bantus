@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, formatAgo, isLive, revivedCards, revivedSessions,
-  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
+  nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
   HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds,
@@ -508,19 +508,31 @@ describe('formatAgo', () => {
 });
 
 describe('resolveFocus', () => {
-  const sessions = [view({ id: 'a', focused: true }), view({ id: 'b' })];
-  const pending = { id: 'b', until: 2000 };
+  // a を開いていた（focusedAt 500）。1000 に b をクリックした
+  const sessions = [view({ id: 'a', focused: true, focusedAt: 500 }), view({ id: 'b' })];
+  const pending = { id: 'b', at: 1000, until: 1000 + PENDING_FOCUS_MS };
 
   it('クリックがなければファイルの値', () => assert.deepEqual(resolveFocus(sessions, undefined, 1000), { id: 'a', pending: undefined }));
   it('ファイルが追いつくまでは、クリックしたセッション', () =>
-    assert.deepEqual(resolveFocus(sessions, pending, 1000), { id: 'b', pending }));
+    assert.deepEqual(resolveFocus(sessions, pending, 1500), { id: 'b', pending }));
+  it('5 秒を過ぎてもファイルが古いままなら、クリックしたセッションを保つ（前の行に戻さない）', () =>
+    assert.deepEqual(resolveFocus(sessions, pending, 1000 + 6_000), { id: 'b', pending }));
   it('ファイルが追いついたら、待つのをやめる', () => {
-    const caught = [view({ id: 'a' }), view({ id: 'b', focused: true })];
-    assert.deepEqual(resolveFocus(caught, pending, 1000), { id: 'b', pending: undefined });
+    const caught = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b', focused: true, focusedAt: 4500 })];
+    assert.deepEqual(resolveFocus(caught, pending, 4500), { id: 'b', pending: undefined });
   });
-  it('時間が過ぎたら、ファイルの値に戻す', () => assert.deepEqual(resolveFocus(sessions, pending, 2000), { id: 'a', pending: undefined }));
+  it('クリックのあとで別のセッションの focusedAt が進んだら、そちらに従う', () => {
+    const other = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b' }), view({ id: 'c', focused: true, focusedAt: 2000 })];
+    assert.deepEqual(resolveFocus(other, pending, 2500), { id: 'c', pending: undefined });
+  });
+  it('クリックより前の focusedAt は、本体で開いたものとみなさない', () => {
+    const older = [view({ id: 'a', focused: true, focusedAt: 1000 }), view({ id: 'b' })];
+    assert.deepEqual(resolveFocus(older, pending, 1500), { id: 'b', pending });
+  });
+  it('安全のための期限が過ぎたら、ファイルの値に戻す', () =>
+    assert.deepEqual(resolveFocus(sessions, pending, pending.until), { id: 'a', pending: undefined }));
   it('クリックしたセッションがなくなったら、ファイルの値', () =>
-    assert.deepEqual(resolveFocus([view({ id: 'a', focused: true })], pending, 1000), { id: 'a', pending: undefined }));
+    assert.deepEqual(resolveFocus([view({ id: 'a', focused: true, focusedAt: 500 })], pending, 1500), { id: 'a', pending: undefined }));
 });
 
 describe('statusIconName', () => {
