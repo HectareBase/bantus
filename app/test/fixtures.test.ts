@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { NO_ARCHIVE, buildRepos, changeItems, WAITING_LABELS, type WorktreeCard } from '../src/renderer/model';
-import { readFixture } from '../src/main/sessions';
+import { readFixture, readFixtureHolds } from '../src/main/sessions';
 import type { SessionState } from '../src/shared/types';
 import { FIXTURES } from './helpers';
 
@@ -30,6 +30,11 @@ describe('見本データの形', () => {
         if (s.waitingFor !== undefined) assert.equal(s.state, 'waiting', `${s.id}: waitingFor は対応待ちのときだけ`);
         if (s.worktree) for (const k of ['key', 'label', 'branch']) assert.equal(typeof s.worktree[k], 'string');
         if (s.changes) for (const k of ['changed', 'untracked', 'ahead']) assert.equal(typeof s.changes[k], 'number', `${s.id}: changes.${k}`);
+        for (const k of ['hold', 'holdCard']) {
+          if (s[k] === undefined) continue;
+          assert.equal(typeof s[k].note, 'string', `${s.id}: ${k}.note`);
+          assert.equal(typeof s[k].minutesAgo, 'number', `${s.id}: ${k}.minutesAgo`);
+        }
       }
     });
   }
@@ -38,7 +43,8 @@ describe('見本データの形', () => {
 describe('all-states はすべての表示を含む', () => {
   const now = Date.now();
   const sessions = readFixture(join(FIXTURES, 'all-states.json'), now, 0);
-  const repos = buildRepos(sessions, { ...NO_ARCHIVE, now, mainMinutes: 10 });
+  const { holds, heldCards } = readFixtureHolds(join(FIXTURES, 'all-states.json'), now);
+  const repos = buildRepos(sessions, { ...NO_ARCHIVE, now, mainMinutes: 10, holds, heldCards });
   const cards = repos.flatMap((r) => [...r.cards, ...r.hiddenCards]);
   const has = (test: (c: WorktreeCard) => boolean, what: string) => assert.ok(cards.some(test), what);
 
@@ -69,6 +75,15 @@ describe('all-states はすべての表示を含む', () => {
     has((c) => c.hidden && !!c.changes?.gone, 'ワークツリーがないカード');
     assert.ok(sessions.some((s) => s.summary), '最後のターンのまとめ');
     assert.ok(sessions.some((s) => !s.mainBranch && !s.worktree), 'main のブランチ不明');
+  });
+
+  it('保留の行と保留のカード（メモあり・なし）', () => {
+    const heldRows = cards.flatMap((c) => c.sessions).filter((s) => holds[s.id]);
+    assert.ok(heldRows.some((s) => holds[s.id]!.note) && heldRows.some((s) => !holds[s.id]!.note), '保留の行');
+    const heldShown = cards.filter((c) => c.held && !c.hidden);
+    assert.ok(heldShown.some((c) => c.held!.note) && heldShown.some((c) => !c.held!.note), '保留のカード');
+    assert.ok(repos.some((r) => r.badge.state === 'held'), '保留のバッジ');
+    assert.ok(sessions.every((s) => !('hold' in s) && !('holdCard' in s)), '見本の保留の項目はセッションに入れない');
   });
 
   it('git の印の種類', () => {

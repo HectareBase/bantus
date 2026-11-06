@@ -7,6 +7,7 @@ import {
   nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
+  HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
 import { cardKeyOf } from '../src/shared/card-key';
@@ -608,5 +609,170 @@ describe('newlyFlagged', () => {
   });
   it('最初の描画では返さない', () => {
     assert.deepEqual(newlyFlagged(new Set(), new Set(['a', 'b']), false), []);
+  });
+});
+
+// ---- 保留（docs/design/hold.md） ----
+
+describe('保留：アーカイブにかからない', () => {
+  const held = (note = '') => ({ note, since: 0 });
+
+  it('ワークツリーで一番新しくなくても、保留の行は出す', () => {
+    const sessions = [
+      view({ id: 'old', worktree: wt('x'), state: 'stopped', lastActivityAt: 10 }),
+      view({ id: 'new', worktree: wt('x'), state: 'idle', lastActivityAt: 30 }),
+    ];
+    const c = buildRepos(sessions, opts({ holds: { old: held() } }))[0]!.cards[0]!;
+    assert.deepEqual(c.sessions.map((s) => s.id).sort(), ['new', 'old']);
+    assert.deepEqual(c.archived, []);
+  });
+
+  it('main の時間がたっても、保留の行は出す', () => {
+    const sessions = [view({ id: 'm', state: 'idle', lastActivityAt: 0 })];
+    const o = opts({ mainMinutes: 10, now: 60 * MIN, holds: { m: held() } });
+    assert.deepEqual(buildRepos(sessions, o)[0]!.cards[0]!.sessions.map((s) => s.id), ['m']);
+  });
+
+  it('手でアーカイブした印が残っていても、保留が先', () => {
+    const sessions = [view({ id: 'm', state: 'idle' })];
+    const c = buildRepos(sessions, opts({ marks: { m: 'archived' }, holds: { m: held() } }))[0]!.cards[0]!;
+    assert.deepEqual(c.sessions.map((s) => s.id), ['m']);
+  });
+
+  it('保留の起点は、ワークツリーのカードへ移さず main に出す', () => {
+    const origin = view({ id: 'o', repoKey: 'r', state: 'stopped', lastActivityAt: 1 });
+    const child = view({ id: 'c', repoKey: 'r', worktree: wt('x'), spawnedFrom: 'o', state: 'idle', lastActivityAt: 2 });
+    const repo = buildRepos([origin, child], opts({ holds: { o: held() } }))[0]!;
+    assert.deepEqual(repo.cards.find((c) => c.isMain)!.sessions.map((s) => s.id), ['o']);
+  });
+
+  it('保留のカードは、マージ済みでも隠さない（マージ済みの印は残す）', () => {
+    const merged = { ...clean, merged: true };
+    const sessions = [view({ repoKey: 'r', worktree: wt('x'), changes: merged })];
+    assert.equal(buildRepos(sessions, opts())[0]!.cards.length, 0);
+    const repo = buildRepos(sessions, opts({ heldCards: { 'r|x': held('レビュー待ち') } }))[0]!;
+    assert.equal(repo.cards.length, 1);
+    assert.equal(repo.cards[0]!.merged, true);
+    assert.deepEqual(repo.cards[0]!.held, held('レビュー待ち'));
+  });
+
+  it('手でアーカイブしたカードの印が残っていても、保留が先', () => {
+    const sessions = [view({ repoKey: 'r', worktree: wt('x') })];
+    const repo = buildRepos(sessions, opts({ cardMarks: { 'r|x': 'archived' }, heldCards: { 'r|x': held() } }))[0]!;
+    assert.equal(repo.cards.length, 1);
+  });
+
+  it('元のフォルダのカードには、保留を付けない', () => {
+    const sessions = [view({ repoKey: 'r' })];
+    assert.equal(buildRepos(sessions, opts({ heldCards: { 'r|': held() } }))[0]!.cards[0]!.held, undefined);
+  });
+});
+
+describe('保留：動き出したら外す', () => {
+  const sessions = [
+    view({ id: 'a', repoKey: 'r', state: 'busy' }),
+    view({ id: 'b', repoKey: 'r', state: 'waiting' }),
+    view({ id: 'c', repoKey: 'r', state: 'idle' }),
+    view({ id: 'd', repoKey: 'r', worktree: wt('x'), state: 'stopped' }),
+    view({ id: 'e', repoKey: 'r', worktree: wt('y'), state: 'idle' }),
+    view({ id: 'f', repoKey: 'r', worktree: wt('y'), state: 'busy' }),
+  ];
+  const mark = { note: 'メモ', since: 0 };
+  const holds = { a: mark, b: mark, c: mark };
+  const heldCards = { 'r|x': mark, 'r|y': mark };
+
+  it('処理中・対応待ちになった保留の行を返す。待機・停止中のものは残す', () =>
+    assert.deepEqual(releasedHolds(sessions, { holds, heldCards: {} }).sessions, ['a', 'b']));
+  it('カードは、中のどれかが動き出したら返す', () =>
+    assert.deepEqual(releasedHolds(sessions, { holds: {}, heldCards }).cards, ['r|y']));
+  it('印のないものは返さない', () => assert.deepEqual(releasedHolds(sessions, { holds: {}, heldCards: {} }), { sessions: [], cards: [] }));
+  it('処理中・対応待ちのものは、外す前でも保留として扱わない', () => {
+    assert.equal(isHeld(sessions[0]!, { holds, heldCards }), false);
+    assert.equal(isHeld(sessions[2]!, { holds, heldCards }), true);
+    assert.equal(isHeld(sessions[3]!, { holds: {}, heldCards }), true, 'カードの保留の中の行');
+  });
+});
+
+describe('保留：並び順と巡回', () => {
+  it('優先度では、待機と停止中の間', () => {
+    const h = { holds: { held: { note: '', since: 0 } }, heldCards: {} };
+    const sessions = [
+      view({ id: 'stopped', state: 'stopped', lastActivityAt: 50 }),
+      view({ id: 'held', state: 'idle', lastActivityAt: 40 }),
+      view({ id: 'idle', state: 'idle', lastActivityAt: 10 }),
+      view({ id: 'busy', state: 'busy', lastActivityAt: 20 }),
+    ];
+    assert.deepEqual([...sessions].sort(compareSessions('priority', h)).map((s) => s.id), ['busy', 'idle', 'held', 'stopped']);
+    assert.equal(rankOf(sessions[1]!, h), HELD_RANK);
+    assert.ok(HELD_RANK > rankOf(sessions[2]!, h) && HELD_RANK < rankOf(sessions[0]!, h));
+  });
+
+  it('固定・更新日時では今のまま', () => {
+    const h = { holds: { a: { note: '', since: 0 } }, heldCards: {} };
+    const sessions = [view({ id: 'b', lastActivityAt: 5 }), view({ id: 'a', lastActivityAt: 10 })];
+    assert.deepEqual([...sessions].sort(compareSessions('recent', h)).map((s) => s.id), ['a', 'b']);
+  });
+
+  it('カードの並びの優先度にも使う', () => {
+    const sessions = [
+      view({ id: 'p', repoKey: 'r', worktree: wt('p'), state: 'idle', lastActivityAt: 99 }),
+      view({ id: 'q', repoKey: 'r', worktree: wt('q'), state: 'stopped', lastActivityAt: 1 }),
+      view({ id: 'i', repoKey: 'r', worktree: wt('i'), state: 'idle', lastActivityAt: 1 }),
+    ];
+    const repo = buildRepos(sessions, opts({ heldCards: { 'r|p': { note: '', since: 0 } } }))[0]!;
+    assert.deepEqual(repo.cards.map((c) => c.label), ['i', 'p', 'q']);
+  });
+
+  describe('巡回（Ctrl+Alt+N）からは外す', () => {
+    const sessions = [
+      view({ id: 'a', repoKey: 'r', state: 'idle', lastActivityAt: 30 }),
+      view({ id: 'h', repoKey: 'r', state: 'idle', lastActivityAt: 20 }),
+      view({ id: 'b', repoKey: 'r', state: 'idle', lastActivityAt: 10 }),
+      view({ id: 'c', repoKey: 's', worktree: wt('x'), state: 'idle', lastActivityAt: 5 }),
+    ];
+    const o = opts({
+      sort: { project: 'fixed', worktree: 'fixed', session: 'recent' },
+      holds: { h: { note: '', since: 0 } },
+      heldCards: { 's|x': { note: '', since: 0 } },
+    });
+    it('保留の行と、保留のカードの行は飛ばす', () => {
+      assert.equal(nextCycleTarget(sessions, new Set(), 'a', o), 'b');
+      assert.equal(nextCycleTarget(sessions, new Set(), 'b', o), 'a');
+    });
+    it('今開いている行が保留なら、その次から', () => assert.equal(nextCycleTarget(sessions, new Set(), 'h', o), 'b'));
+    it('未確認の帯があれば、保留の行でも入れる', () => assert.equal(nextCycleTarget(sessions, new Set(['h']), 'a', o), 'h'));
+  });
+});
+
+describe('保留：バッジとツールチップ', () => {
+  it('要対応・処理中がないときだけ、保留の件数を出す', () => {
+    assert.deepEqual(cardBadge([view({ state: 'idle' })], 2), { state: 'held', text: '保留 2' });
+    assert.deepEqual(cardBadge([view({ state: 'busy' })], 2), { state: 'busy', text: '処理中 1' });
+    assert.deepEqual(cardBadge([view({ state: 'idle' })], 0), { state: '', text: '' });
+  });
+
+  it('リポジトリの件数は、保留のカードと、保留のカードの外の保留の行', () => {
+    const sessions = [
+      view({ id: 'm', repoKey: 'r', state: 'idle' }),
+      view({ id: 'x1', repoKey: 'r', worktree: wt('x'), state: 'idle' }),
+      view({ id: 'y1', repoKey: 'r', worktree: wt('y'), state: 'stopped' }),
+    ];
+    const mark = { note: '', since: 0 };
+    const repo = buildRepos(sessions, opts({ holds: { m: mark, x1: mark }, heldCards: { 'r|x': mark } }))[0]!;
+    assert.deepEqual(repo.badge, { state: 'held', text: '保留 2' });
+  });
+
+  it('保留してからの長さ', () => {
+    assert.equal(heldFor(0, 30_000), '保留したばかり');
+    assert.equal(heldFor(0, 5 * MIN), '保留 5 分');
+    assert.equal(heldFor(0, 3 * 60 * MIN), '保留 3 時間');
+    assert.equal(heldFor(0, 2 * 24 * 60 * MIN), '保留 2 日');
+  });
+
+  it('ツールチップは経過とメモの全文。行では名前のすぐ下', () => {
+    const mark = { note: 'fix-login のマージ後に再開', since: 0 };
+    assert.equal(holdTooltip(mark, 2 * 24 * 60 * MIN), '保留 2 日\nfix-login のマージ後に再開');
+    assert.equal(holdTooltip({ note: '', since: 0 }, 10 * MIN), '保留 10 分');
+    assert.equal(tooltip(view({ title: 't' }), mark, 0), 't\n保留したばかり\nfix-login のマージ後に再開');
   });
 });

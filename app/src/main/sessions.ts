@@ -4,6 +4,8 @@
 import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { cardKeyOf } from '../shared/card-key';
+import type { HoldMark } from '../shared/settings';
 import type { SessionState, SessionView } from '../shared/types';
 
 /** 読み取るフォルダ。テストでは偽のフォルダを渡す */
@@ -228,7 +230,7 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
   const items = readJson(path);
   if (!Array.isArray(items)) return [];
   const step = cycle ? Math.floor(now / cycle) : 0;
-  const views: SessionView[] = items.map(({ minutesAgo, ...s }, i) => ({
+  const views: SessionView[] = items.map(({ minutesAgo, hold: _hold, holdCard: _holdCard, ...s }, i) => ({
     ...s,
     // 前の形の見本データ（遅れとマージ済みがない）も読めるようにする
     ...(s.changes && { changes: { behind: 0, merged: false, ...s.changes } }),
@@ -243,6 +245,30 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
     const waitingFor = state === 'waiting' ? view.waitingFor ?? 'input needed' : undefined;
     return { ...view, state, waitingFor };
   }));
+}
+
+/**
+ * 見本データの保留の印。項目の hold（そのセッション）と holdCard（そのセッションのカード）に
+ * `{ "note": "メモ", "minutesAgo": 保留にしてからの分 }` を書く。ウィジェットの設定に入れて見せる（docs/design/hold.md）
+ */
+export function readFixtureHolds(path: string, now = Date.now()): { holds: Record<string, HoldMark>; heldCards: Record<string, HoldMark> } {
+  const holds: Record<string, HoldMark> = {};
+  const heldCards: Record<string, HoldMark> = {};
+  const items = readJson(path);
+  if (!Array.isArray(items)) return { holds, heldCards };
+  const mark = (v: unknown): HoldMark | undefined => {
+    if (!v || typeof v !== 'object') return undefined;
+    const { note, minutesAgo } = v as Record<string, unknown>;
+    return { note: typeof note === 'string' ? note : '', since: now - (Number(minutesAgo) || 0) * 60_000 };
+  };
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string') continue;
+    const own = mark(item.hold);
+    if (own) holds[item.id] = own;
+    const card = mark(item.holdCard);
+    if (card) heldCards[cardKeyOf(item as SessionView)] = card;
+  }
+  return { holds, heldCards };
 }
 
 export function readSessions(paths = defaultPaths()): SessionView[] {

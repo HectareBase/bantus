@@ -7,7 +7,7 @@
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { createIcon } from './icon.js';
-import { statusIconName, waitingLabel } from './model.js';
+import { statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
 import { applyStatusColors } from './status-colors.js';
 
@@ -43,11 +43,17 @@ function reportSolid() {
 
 // ---- 一覧の行 ----
 
+/** 行の状態の印。保留の行はウィジェットと同じ circle-pause */
+function itemIcon(item: FlyItem): StatusIcon {
+  return item.held ? 'circle-pause' : statusIconName(item.state, item.waitingFor);
+}
+
 function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyItem | undefined): HTMLElement {
   const el = document.createElement('div');
   el.className = 'node';
   el.dataset.id = item.id;
   el.dataset.state = item.state;
+  el.toggleAttribute('data-held', !!item.held);
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);
@@ -63,7 +69,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   } else {
     const ico = document.createElement('span');
     ico.className = 'status';
-    setStatus(ico, statusIconName(item.state, item.waitingFor));
+    setStatus(ico, itemIcon(item));
     el.append(ico);
   }
   const txt = document.createElement('div');
@@ -76,16 +82,16 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   if (!item.archived && kind === 'timeline') {
     const ico = document.createElement('span');
     ico.className = 'status';
-    setStatus(ico, statusIconName(item.state, item.waitingFor));
+    setStatus(ico, itemIcon(item));
     sub.append(ico);
     if (item.state === 'waiting') sub.append(`対応待ち（${waitingLabel(item.waitingFor)}）`);
   }
   if (item.sub) sub.append(item.sub);
   txt.append(title, sub);
   el.append(txt);
-  // 処理中・対応待ちのものはアーカイブできない（動いているものは隠さない）ので、トグルを出さない
+  // 処理中・対応待ちのものはアーカイブできない（動いているものは隠さない）ので、トグルを出さない。保留のものも出さない（保留とアーカイブは同時に付けない）
   const live = !item.archived && (item.state === 'busy' || item.state === 'waiting');
-  if (kind !== 'cards' && !live) {
+  if (kind !== 'cards' && !live && !item.held) {
     const act = document.createElement('button');
     act.className = 'act';
     act.setAttribute('aria-pressed', String(item.archived));

@@ -99,6 +99,7 @@ const COLOR_LABELS: Record<ColorState, { label: string; description: string }> =
   busy: { label: '処理中', description: 'Claude が作業している' },
   waiting: { label: '対応待ち', description: '許可待ち・回答待ち・画面を表示中・その他。理由にかかわらず同じ色' },
   idle: { label: '待機', description: '次の指示を待っている。完了したときの帯もこの色' },
+  held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
   stopped: { label: '停止中', description: '動いていないセッション' },
 };
 
@@ -106,18 +107,19 @@ const COLOR_LABELS: Record<ColorState, { label: string; description: string }> =
 const WAITING_REASONS = ['permission prompt', 'input needed', 'dialog open', undefined];
 
 /** ウィジェットの行の見本 */
-const PREVIEW_ROWS: { state: SessionState; waitingFor?: string; title: string }[] = [
+const PREVIEW_ROWS: { state: SessionState | 'held'; waitingFor?: string; title: string }[] = [
   { state: 'busy', title: '検索の結果を並べ替える' },
   { state: 'waiting', waitingFor: 'permission prompt', title: 'コマンドの実行の許可を待つ' },
   { state: 'waiting', waitingFor: 'input needed', title: '質問への回答を待つ' },
   { state: 'idle', title: '設定画面の文言を直す' },
+  { state: 'held', title: 'ほかのブランチのマージを待つ' },
   { state: 'stopped', title: '古いブランチを片付ける' },
 ];
 
-function statusIcon(state: SessionState, waitingFor?: string): HTMLElement {
+function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElement {
   const node = el('span', { className: 'status' });
   node.dataset.state = state;
-  setStatus(node, statusIconName(state, waitingFor));
+  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor));
   return node;
 }
 

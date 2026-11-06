@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { ArchiveMark, Settings, StatusColors } from './settings';
+import type { ArchiveMark, HoldMark, Settings, StatusColors } from './settings';
 
 /** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
@@ -95,6 +95,10 @@ export interface WidgetApi {
   setArchive(id: string, mark: ArchiveMark | null): void;
   /** カードのアーカイブの印を変える */
   setCardArchive(key: string, mark: ArchiveMark | null): void;
+  /** セッションの保留の印を変える（null で外す）。保存され、onLayout で画面に戻ってくる（docs/design/hold.md） */
+  setHold(id: string, mark: HoldMark | null): void;
+  /** カードの保留の印を変える（null で外す） */
+  setCardHold(key: string, mark: HoldMark | null): void;
   /** 重なりに乗った・一覧を開くとき。めくれと一覧のウィンドウ（flyout.html）に出す */
   showFlyout(request: FlyRequest): void;
   /** 開いている（めくれを出している）一覧の中身だけを差し替える */
@@ -155,6 +159,8 @@ export interface FlyItem {
   waitingFor?: string;
   /** Bantus の中でアーカイブしているか */
   archived: boolean;
+  /** 保留にしている（行と同じ印で描く） */
+  held?: boolean;
   /** main で始めたセッション（起点） */
   origin: boolean;
   /** デスクトップで今開いている */
@@ -243,7 +249,7 @@ export interface FlyShow {
 export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'archive' | 'archivedCards'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
 >;
 
