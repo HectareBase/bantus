@@ -42,11 +42,12 @@ describe('parseLastUsage（分子）', () => {
 });
 
 describe('contextWindowOf（分母）', () => {
-  it('get_usage で確かめたモデルは 100 万', () => assert.equal(contextWindowOf('claude-opus-5-5'), 1_000_000));
+  it('opus（get_usage で確かめた）、sonnet と haiku（推定）は 100 万', () => {
+    for (const m of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) assert.equal(contextWindowOf(m), 1_000_000, m);
+  });
   it('[1m] の付いたモデルは 100 万', () => assert.equal(contextWindowOf('claude-sonnet-5-5[1m]'), 1_000_000));
   it('対応表にないモデルとモデルなしは undefined（割合を出さない）', () => {
-    assert.equal(contextWindowOf('claude-sonnet-5-5'), undefined);
-    assert.equal(contextWindowOf('claude-haiku-5-5'), undefined);
+    assert.equal(contextWindowOf('claude-unknown-9'), undefined);
     assert.equal(contextWindowOf(undefined), undefined);
   });
 });
@@ -87,7 +88,7 @@ describe('ファイルの末尾から読む', () => {
   it('知らないモデルは窓の大きさを付けない', () => {
     const projects = join(tmp.path, 'projects3');
     writeJson(join(projects, 'p', 'abc-3.jsonl'), lines(assistant(usage(5, 0, 0))));
-    assert.deepEqual(createContextReader(projects).read('abc-3', [], 'claude-haiku-5-5'), { tokens: 5, model: 'claude-haiku-5-5' });
+    assert.deepEqual(createContextReader(projects).read('abc-3', [], 'claude-unknown-9'), { tokens: 5, model: 'claude-unknown-9' });
   });
 
   it('同じ大きさ・同じ時刻なら読み直さない（使い回し）', () => {
@@ -127,10 +128,11 @@ describe('使用率の表示', () => {
     assert.equal(contextPercent(c(112_847, 1_000_000)), 11);
     assert.equal(contextPercent(c(112_847)), undefined);
   });
-  it('70% から high、90% から full', () => {
-    assert.equal(contextLevel(c(694_000, 1_000_000)), 'normal');
-    assert.equal(contextLevel(c(700_000, 1_000_000)), 'high');
-    assert.equal(contextLevel(c(900_000, 1_000_000)), 'full');
+  it('50% から high、75% から full', () => {
+    assert.equal(contextLevel(c(494_000, 1_000_000)), 'normal');
+    assert.equal(contextLevel(c(500_000, 1_000_000)), 'high');
+    assert.equal(contextLevel(c(744_000, 1_000_000)), 'high');
+    assert.equal(contextLevel(c(750_000, 1_000_000)), 'full');
     assert.equal(contextLevel(c(990_000)), 'normal');
   });
   it('割合がわかれば %、わからなければトークン数に単位を付ける', () => {
@@ -143,6 +145,6 @@ describe('使用率の表示', () => {
   });
   it('ツールチップ', () => {
     assert.equal(contextTooltip(c(120_000, 1_000_000)), 'コンテキスト：12%（120k / 1.0M）');
-    assert.equal(contextTooltip({ tokens: 5000, model: 'claude-haiku-5-5' }), 'コンテキスト：5.0k（窓の大きさがわからないモデル：claude-haiku-5-5）');
+    assert.equal(contextTooltip({ tokens: 5000, model: 'claude-unknown-9' }), 'コンテキスト：5.0k（窓の大きさがわからないモデル：claude-unknown-9）');
   });
 });

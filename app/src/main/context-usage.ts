@@ -6,11 +6,13 @@ import { join } from 'node:path';
 import type { ContextUsage } from '../shared/types';
 
 /**
- * モデル → コンテキストの窓の大きさ（トークン）。アプリの get_usage が返した contextWindow で確かめた値だけを入れる。
- * 同じモデルでも窓の大きさが違うことがあるので、ここにないモデルは割合を出さない
+ * モデル → コンテキストの窓の大きさ（トークン）。推定で、同じモデルでも違うことがある。ここにないモデルは割合を出さない。
+ * opus は get_usage の contextWindow で確かめた値。sonnet と haiku は確かめていない（opus にそろえた推定）
  */
 const CONTEXT_WINDOWS: Record<string, number> = {
   'claude-opus-5-5': 1_000_000,
+  'claude-sonnet-5-5': 1_000_000,
+  'claude-haiku-5-5': 1_000_000,
 };
 
 /** 窓の大きさ。わからないモデルは undefined。`[1m]` の付いたモデル名は 100 万 */

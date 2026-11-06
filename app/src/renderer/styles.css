@@ -41,8 +41,9 @@
   --stack-edge: rgba(0, 0, 0, 0.18);
   /* デスクトップで今開いている行の透かし */
   --stripe: rgba(0, 0, 0, 0.025);
-  /* コンテキストの使用率が残りわずか（90% から）の文字の色。状態に使わない赤にする */
+  /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
+  --ctx-track: rgba(0, 0, 0, 0.12);
   color-scheme: light dark;
 }
 
@@ -66,6 +67,7 @@
     --stack-edge: rgba(255, 255, 255, 0.18);
     --stripe: rgba(255, 255, 255, 0.03);
     --ctx-full: #ff6b62;
+    --ctx-track: rgba(255, 255, 255, 0.14);
   }
 }
 
@@ -362,12 +364,19 @@ html.hide-updated .when { display: none; }
 .row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
 .row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
 html.hide-state .state-pill { display: none; }
-/* コンテキストの使用率（docs/design/worktree-cards.md）。色は状態を表すので、黄・青・緑・灰は使わない。
-   70% からは濃い文字と太字、90% からは赤の太字にする */
-.ctx { flex: none; font-variant-numeric: tabular-nums; }
+/* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。
+   数字の幅を固定し（右寄せ）、どの行でもバーの位置がそろうようにする。
+   色は状態を表すので、黄・青・緑の色相は使わない。50% からは濃い文字と太字、75% からは赤の太字にする */
+.ctx { flex: none; margin-left: auto; display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .ctx[hidden] { display: none; }
+.ctx-bar { flex: none; width: 32px; height: 4px; border-radius: 2px; background: var(--ctx-track); overflow: hidden; }
+.ctx-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-tertiary); }
+.ctx-num { min-width: 3.2em; text-align: right; }
+.ctx[data-raw] .ctx-bar { display: none; }
 .ctx[data-level="high"] { color: var(--text); font-weight: 600; }
+.ctx[data-level="high"] .ctx-fill { background: var(--text); }
 .ctx[data-level="full"] { color: var(--ctx-full); font-weight: 600; }
+.ctx[data-level="full"] .ctx-fill { background: var(--ctx-full); }
 html.hide-context .ctx { display: none; }
 .row[data-held] .ctx { display: none; }
 html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }

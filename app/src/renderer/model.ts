@@ -90,9 +90,9 @@ export function holdTooltip(mark: HoldMark, now = Date.now()): string {
 
 // ---- コンテキストの使用量（docs/design/worktree-cards.md） ----
 
-/** 色を変える使用率（%）。ここから「多い」、CONTEXT_FULL から「残りわずか」 */
-export const CONTEXT_HIGH = 70;
-export const CONTEXT_FULL = 90;
+/** 色を変える使用率（%）。ここから「多い」（濃い文字）、CONTEXT_FULL から「残りわずか」（赤） */
+export const CONTEXT_HIGH = 50;
+export const CONTEXT_FULL = 75;
 
 /** 使用率（%、整数）。窓の大きさがわからなければ undefined */
 export function contextPercent(c: ContextUsage | undefined): number | undefined {
