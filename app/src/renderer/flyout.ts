@@ -57,7 +57,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);
-  if (item.origin) el.title = 'main で始めたセッション';
+  if (item.origin) el.title = item.place?.tip ?? 'main で始めたセッション';
   if (kind === 'timeline') {
     el.classList.add('linked');
     // 線は点の上下から伸ばす。上の線は上の行（より新しいもの）のつなぎ方、下の線はこの行のつなぎ方
@@ -85,6 +85,21 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     setStatus(ico, itemIcon(item));
     sub.append(ico);
     if (item.state === 'waiting') sub.append(`対応待ち（${waitingLabel(item.waitingFor)}）`);
+  }
+  if (item.place) {
+    const place = document.createElement('span');
+    place.className = 'place';
+    place.append(createIcon(item.place.icon));
+    const name = document.createElement('span');
+    name.className = 'place-name';
+    name.textContent = item.place.label;
+    place.append(name);
+    sub.append(place);
+    if (item.sub) {
+      const sep = document.createElement('span');
+      sep.textContent = '·';
+      sub.append(sep);
+    }
   }
   if (item.sub) sub.append(item.sub);
   txt.append(title, sub);

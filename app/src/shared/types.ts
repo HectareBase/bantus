@@ -167,10 +167,21 @@ export interface FlyItem {
   focused: boolean;
   /** 1 つ下の行（より古いもの）とのつなぎ方。solid は spawnedFrom、dashed は時刻の順で並べただけ。一番下はなし */
   link?: 'solid' | 'dashed';
+  /** 起点の行で、下の段の時刻の前に出す場所（行き先のワークツリー、または元のフォルダ） */
+  place?: FlyPlace;
   /** 下の段（「1 時間前」など） */
   sub: string;
   /** 乗せたときに一覧の下の段に出す、最後のターンのまとめ */
   summary?: string;
+}
+
+/** 起点の行の場所の印。main のカードでは行き先（corner-down-right）、ワークツリーのカードでは出どころ（house） */
+export interface FlyPlace {
+  icon: 'corner-down-right' | 'house';
+  /** 短い名前（カードの見出しと同じ） */
+  label: string;
+  /** 行のツールチップ。ブランチの正式な名前を入れる */
+  tip: string;
 }
 
 /** マージ済み・手でアーカイブしたカード（リポジトリの見出しから開く一覧） */

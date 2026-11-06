@@ -10,6 +10,8 @@ const NAMES = [
   'settings', 'chevron-right', 'pin', 'folder', 'house', 'git-branch', 'list', 'info',
   // 行とカードのアーカイブのトグル、一覧の起点の印、マージ済みのカード
   'archive', 'diamond', 'git-merge',
+  // 一覧の起点の行き先（main のカードの一覧）
+  'corner-down-right',
   // 設定の「通知」と、音の試聴
   'bell', 'volume-2',
   // 設定の「見た目」

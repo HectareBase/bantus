@@ -138,6 +138,30 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.origin, t.link]), [['w1', false, 'solid'], ['origin', true, undefined]]);
   });
 
+  it('main のカードの起点の行には行き先のワークツリー、ワークツリーのカードの起点の行には元のフォルダを出す', () => {
+    const sessions = list().map((s) => ({ ...s, mainBranch: 'main' }));
+    // 同じ起点から 2 つ目のワークツリーを作っても、行き先は一番古い 1 つだけ
+    sessions.push({ ...view({ id: 'w2', worktree: wt('y'), spawnedFrom: 'origin', createdAt: 4, lastActivityAt: 40 }), mainBranch: 'main' });
+    const [repo] = buildRepos(sessions);
+    const main = repo!.cards.find((c) => c.isMain)!;
+    assert.deepEqual(main.timeline.map((t) => [t.session.id, t.place]), [
+      ['origin', { icon: 'corner-down-right', label: 'x', tip: 'ワークツリー：claude/x-123abc で続けている' }],
+    ]);
+    const x = repo!.cards.find((c) => c.key === cardKeyOf(sessions[2]!))!;
+    assert.deepEqual(x.timeline.map((t) => [t.session.id, t.place]), [
+      ['w1', undefined],
+      ['origin', { icon: 'house', label: 'main', tip: '元のフォルダ：main で始めたセッション' }],
+    ]);
+    const y = repo!.cards.find((c) => c.key === cardKeyOf(sessions[3]!))!;
+    assert.ok(y.timeline.every((t) => !t.origin), '行き先ではないカードには起点を出さない');
+  });
+
+  it('元のフォルダのブランチがわからなければ「元のフォルダ」と出す', () => {
+    const [repo] = buildRepos(list('busy'));
+    const x = repo!.cards.find((c) => !c.isMain)!;
+    assert.deepEqual(x.timeline.find((t) => t.origin)!.place?.label, '元のフォルダ');
+  });
+
   it('処理中・対応待ちのうちは main に出す（タイムラインの一番下にも出す）', () => {
     const [repo] = buildRepos(list('busy'));
     assert.deepEqual(repo!.cards.find((c) => c.isMain)!.sessions.map((s) => s.id).sort(), ['origin', 'q']);
