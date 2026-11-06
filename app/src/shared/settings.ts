@@ -34,6 +34,8 @@ export interface Settings {
   sessionOrder: SortOrder;
   /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
   showUpdated: boolean;
+  /** 行の 2 行目に、状態を文字で出す（「処理中」「許可待ち」など） */
+  showState: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
   /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
@@ -116,6 +118,7 @@ export const DEFAULT_SETTINGS: Settings = {
   worktreeOrder: 'fixed',
   sessionOrder: 'fixed',
   showUpdated: true,
+  showState: true,
   openAtLogin: false,
   notifyWaiting: true,
   notifyDone: false,
@@ -172,7 +175,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'openAtLogin'
+      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'openAtLogin'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -266,6 +269,11 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
     label: '更新日時', description: '2 行目の「◯分前」',
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'showState', category: 'cards', group: '行に出すもの', type: 'segmented',
+    label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など。左の印を言葉で補う',
     options: SHOW_OPTIONS,
   },
   {

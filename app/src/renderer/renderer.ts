@@ -26,6 +26,7 @@ import {
   isLive,
   shortcutTarget,
   resolveFocus,
+  stateLabel,
   statusIconName,
   tooltip,
   type Alert,
@@ -54,6 +55,7 @@ interface RowRefs {
   /** 処理中の間だけ .title に重ねる光の帯と、その中の明るい文字 */
   shine?: { el: HTMLElement; text: HTMLElement };
   when: HTMLElement;
+  pill: HTMLElement;
   act: HTMLElement;
   data?: SessionView;
 }
@@ -339,6 +341,7 @@ function getRow(s: SessionView): RowRefs {
       title,
       titleText,
       when: el.querySelector('.when')!,
+      pill: el.querySelector('.state-pill')!,
       act: el.querySelector('.act')!,
     };
     const id = s.id;
@@ -359,6 +362,7 @@ function getRow(s: SessionView): RowRefs {
   refs.act.dataset.tip = 'アーカイブ（Bantus の中だけ）';
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
+  if (prev?.state !== s.state || prev?.waitingFor !== s.waitingFor) refs.pill.textContent = stateLabel(s.state, s.waitingFor);
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   refs.el.dataset.tip = tooltip(s);
   refs.data = s;
@@ -731,6 +735,7 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
   applyStatusColors(layout.statusColors);
   root.classList.toggle('hide-updated', !layout.showUpdated);
+  root.classList.toggle('hide-state', !layout.showState);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
   if (!floating) clickThrough = false;

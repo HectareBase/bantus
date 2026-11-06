@@ -62,6 +62,14 @@ export function waitingLabel(waitingFor: string | undefined): string {
   return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
 }
 
+const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: '処理中', idle: '待機中', stopped: '停止' };
+
+/** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
+export function stateLabel(state: SessionState, waitingFor?: string): string {
+  if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? 'その他';
+  return STATE_LABELS[state];
+}
+
 /** 対応待ちの理由ごとの印。ここにない理由は丸に感嘆符（「対応待ち（その他）」） */
 const WAITING_ICONS: Record<string, IconName> = {
   'permission prompt': 'shield',

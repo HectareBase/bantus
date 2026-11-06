@@ -243,7 +243,7 @@ export interface FlyShow {
 export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'archive' | 'archivedCards'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'archive' | 'archivedCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
 >;
 
