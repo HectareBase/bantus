@@ -5,7 +5,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
@@ -407,6 +407,16 @@ function openSession(id: unknown) {
   }
 }
 
+/**
+ * もう開いているセッションの Claude のウィンドウを前に出す。
+ * リンクだと 2 つ目の claude.exe が起動して URL を渡すまでに約 260 ms かかるので、直接前に出す。
+ * 前に出せなかったとき（Windows に断られた、PowerShell が使えない）は、今までどおりリンクで開く
+ */
+async function raiseSession(id: unknown) {
+  if (typeof id !== 'string' || !SESSION_ID.test(id)) return;
+  if (!(await raiseClaudeWindow())) openSession(id);
+}
+
 function isToastRequest(v: unknown): v is ToastRequest {
   if (!v || typeof v !== 'object') return false;
   const t = v as Record<string, unknown>;
@@ -531,6 +541,7 @@ app.whenReady().then(() => {
   }
 
   ipcMain.on('open-session', (_e, id: unknown) => openSession(id));
+  ipcMain.on('raise-session', (_e, id: unknown) => void raiseSession(id));
   ipcMain.on('resize-start', () => {
     dragWidth = getSettings().width;
   });

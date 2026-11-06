@@ -620,10 +620,16 @@ export function nextCycleTarget(
   return next === currentId ? undefined : next;
 }
 
+/** ショートカットで何をするか。raise が true なら、開き直さずに Claude のウィンドウを前に出すだけでよい（id はもう開いている） */
+export interface ShortcutAction {
+  id: string;
+  raise: boolean;
+}
+
 /**
- * ショートカットで開くセッションの ID
+ * ショートカットで開くセッション
  * - 今開いているもののほかに未確認（左端の帯）の行があれば、前面かどうかに関係なく、表示順でいちばん上のもの
- * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（開き直して前面に出す）
+ * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（前に出すだけ。raise: true）
  * - 前面にあるか、今開いているセッションが一覧にない（アーカイブしたなど）ときは nextCycleTarget
  */
 export function shortcutTarget(
@@ -632,11 +638,12 @@ export function shortcutTarget(
   currentId: string | undefined,
   claudeInFront: boolean,
   opts: ArchiveOptions = NO_ARCHIVE,
-): string | undefined {
+): ShortcutAction | undefined {
   const ids = displayOrder(sessions, { ...opts, attention }).map((s) => s.id);
   // 未確認は処理中より急ぐので、前面になくても今のセッションより先に開く
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
-  if (flagged) return flagged;
-  if (!claudeInFront && currentId && ids.includes(currentId)) return currentId;
-  return nextCycleTarget(sessions, attention, currentId, opts);
+  if (flagged) return { id: flagged, raise: false };
+  if (!claudeInFront && currentId && ids.includes(currentId)) return { id: currentId, raise: true };
+  const next = nextCycleTarget(sessions, attention, currentId, opts);
+  return next ? { id: next, raise: false } : undefined;
 }

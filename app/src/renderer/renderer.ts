@@ -227,11 +227,15 @@ function applyFocus(): string | undefined {
  * なければ、前面にないときは今のセッションを前面に出し、前面なら表示順で次の行
  */
 function openNext(claudeInFront: boolean) {
-  const id = shortcutTarget(latest, attention, applyFocus(), claudeInFront, archiveOptions());
-  if (id) openRow(id);
+  const target = shortcutTarget(latest, attention, applyFocus(), claudeInFront, archiveOptions());
+  if (target) openRow(target.id, target.raise);
 }
 
-function openRow(id: string) {
+/** 行を開く。raise が true なら、リンクを使わずに Claude のウィンドウを前に出すだけにする（前に出せなければ main がリンクで開く） */
+function openRow(id: string, raise = false) {
+  // 開く（前に出す）のを先に頼む。帯の更新と描き直しはそのあと
+  if (raise) window.widget.raiseSession(id);
+  else window.widget.openSession(id);
   const refs = rows.get(id);
   if (refs) setAttention(refs, id, false);
   else clearAttention(id);
@@ -240,7 +244,6 @@ function openRow(id: string) {
   clearTimeout(pendingTimer);
   pendingTimer = window.setTimeout(() => render(latest), PENDING_FOCUS_MS);
   render(latest);
-  window.widget.openSession(id);
 }
 
 /**
@@ -708,7 +711,7 @@ window.widget.onSessions((sessions) => {
 });
 window.widget.onCycle(openNext);
 // トーストのクリックも、行のクリックと同じく帯を消してから開く
-window.widget.onToastClick(openRow);
+window.widget.onToastClick((id) => openRow(id));
 window.widget.onFlyAction(onFlyAction);
 window.widget.onFlyState((key, open) => {
   flyKey = key;
