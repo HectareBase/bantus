@@ -263,7 +263,6 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 .card-hold .state-pill { flex: none; }
 .card-wrap[data-held] .row { opacity: 0.7; }
 .card-wrap[data-held] .row:hover, .card-wrap[data-held] .row:focus-visible { opacity: 1; }
-.card-wrap[data-held] .row .act { display: none; }
 
 /* ---- コミットされていない変更の内訳（見出しと小見出しの右）。色は状態だけを表すので、印は灰色の枠にする ---- */
 .changes {
@@ -432,7 +431,15 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 .row:hover .act, .card-header:hover .act { opacity: 1; }
 .row:not(:hover) .act { width: 0; margin-left: -8px; margin-right: 0; overflow: hidden; }
 /* 処理中・対応待ちの行はアーカイブできない（動いているものは隠さない）ので、トグルを出さない。保留の行も出さない（保留とアーカイブは同時に付けない） */
-.row[data-state="busy"] .act, .row[data-state="waiting"] .act, .row[data-held] .act { display: none; }
+/* display: none にするとグリッドの列の間（8px）が残り、ほかの行と右端がずれる（使用率のバーの位置がそろわない）。
+   乗せていない行と同じく幅 0 で畳み、見えなくする */
+.row[data-state="busy"] .act, .row[data-state="waiting"] .act, .row[data-held] .act, .card-wrap[data-held] .row .act {
+  visibility: hidden;
+  width: 0;
+  margin-left: -8px;
+  margin-right: 0;
+  overflow: hidden;
+}
 /* 見出しは右の余白が行より 2px 狭い（6px と 8px）ので、行のトグルと同じ位置（カードの端から 4px）にそろえる */
 .card-header .act { margin-right: -2px; }
 .card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
