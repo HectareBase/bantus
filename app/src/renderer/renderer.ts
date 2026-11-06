@@ -404,7 +404,8 @@ function flyItem(t: TimelineItem): FlyItem {
     origin: t.origin,
     focused: s.id === resolveFocus(latest, pendingFocus).id,
     link: t.link,
-    sub: t.origin ? ['main', ago].filter(Boolean).join(' · ') : ago,
+    place: t.place,
+    sub: ago,
     summary: s.summary,
   };
 }

@@ -2,7 +2,7 @@
 
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, SortOrder } from '../shared/settings';
-import type { GitChanges, SessionState, SessionView } from '../shared/types';
+import type { FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
 import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
@@ -356,6 +356,8 @@ export interface TimelineItem {
   archived: boolean;
   /** main で始めたセッション（起点） */
   origin: boolean;
+  /** 起点の行の場所：main のカードでは行き先のワークツリー、ワークツリーのカードでは元のフォルダ */
+  place?: FlyPlace;
   /** 1 つ下（より古いもの）とのつなぎ方。一番下はなし */
   link?: 'solid' | 'dashed';
 }
@@ -478,12 +480,27 @@ function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
   return !recentlyConfirmed(s, opts);
 }
 
+/** 起点の行き先（main のカードの一覧に出す）。dest は移す先のカードのセッション */
+function destPlace(dest: SessionView): FlyPlace {
+  const wt = dest.worktree!;
+  return { icon: 'corner-down-right', label: wt.label, tip: `ワークツリー：${wt.branch} で続けている` };
+}
+
+/** 起点の出どころ（ワークツリーのカードの一覧に出す） */
+function sourcePlace(origin: SessionView): FlyPlace {
+  return {
+    icon: 'house',
+    label: origin.mainBranch ?? '元のフォルダ',
+    tip: `元のフォルダ：${origin.mainBranch ?? '(ブランチ不明)'} で始めたセッション`,
+  };
+}
+
 function byCreatedDesc(a: SessionView, b: SessionView): number {
   return b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }
 
 /** 新しいものが上のタイムライン。上の行が下の行から spawnedFrom で作られていれば実線 */
-function timelineOf(items: { session: SessionView; archived: boolean; origin: boolean }[]): TimelineItem[] {
+function timelineOf(items: Omit<TimelineItem, 'link'>[]): TimelineItem[] {
   const sorted = [...items].sort((a, b) => byCreatedDesc(a.session, b.session));
   return sorted.map((item, i): TimelineItem => {
     const below = sorted[i + 1];
@@ -519,10 +536,13 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
   const byId = new Map(sessions.map((s) => [s.id, s]));
   // 起点 → 移す先のカード（そのセッションから作られた、いちばん古いワークツリーのセッションのカード）
   const originTo = new Map<string, string>();
+  // 起点 → 移す先のカードのセッション（行き先の名前に使う）
+  const originDest = new Map<string, SessionView>();
   for (const s of [...sessions].sort((a, b) => a.createdAt - b.createdAt)) {
     const parent = s.spawnedFrom ? byId.get(s.spawnedFrom) : undefined;
     if (!s.worktree || !parent || parent.worktree || parent.repoKey !== s.repoKey || originTo.has(parent.id)) continue;
     originTo.set(parent.id, cardKeyOf(s));
+    originDest.set(parent.id, s);
   }
 
   const repos = new Map<string, { name: string; groups: Map<string, SessionView[]>; all: SessionView[] }>();
@@ -569,16 +589,16 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         archived = stay.filter((s) => mainArchived(s, opts)).sort(byCreatedDesc);
         timeline = [
           ...archived.map((session) => ({ session, archived: true, origin: false })),
-          ...origins.map((session) => ({ session, archived: true, origin: true })),
+          ...origins.map((session) => ({ session, archived: true, origin: true, place: destPlace(originDest.get(session.id)!) })),
         ].sort((a, b) => byCreatedDesc(a.session, b.session));
       } else {
         const newest = own.reduce((a, b) => (b.lastActivityAt > a.lastActivityAt ? b : a));
         const flags = own.map((s) => ({ session: s, archived: worktreeArchived(s, s === newest, opts), origin: false }));
-        const origins = (moved.get(key) ?? []).map((s) => ({ session: s, archived: true, origin: true }));
+        const origins = (moved.get(key) ?? []).map((s) => ({ session: s, archived: true, origin: true, place: sourcePlace(s) }));
         // まだ main に残している起点も、一覧の一番下に出す
         const kept = repo.all
           .filter((s) => originTo.get(s.id) === key && !movedIds.has(s.id))
-          .map((s) => ({ session: s, archived: false, origin: true }));
+          .map((s) => ({ session: s, archived: false, origin: true, place: sourcePlace(s) }));
         shown = flags.filter((f) => !f.archived).map((f) => f.session);
         archived = [...flags.filter((f) => f.archived), ...origins].map((f) => f.session).sort(byCreatedDesc);
         timeline = timelineOf([...flags, ...origins, ...kept]);

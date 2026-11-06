@@ -151,6 +151,10 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .node:not([data-archived]) .title { color: var(--text); font-weight: 600; }
 .sub { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .sub:empty { display: none; }
+/* 起点の行の場所（行き先のワークツリー、または元のフォルダ）。長い名前は省き、時刻は残す */
+.sub .place { display: inline-flex; gap: 3px; align-items: center; min-width: 0; }
+.sub .place svg { width: 12px; height: 12px; flex: none; }
+.sub .place-name { overflow: hidden; text-overflow: ellipsis; }
 
 .status { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
 .sub .status { width: 12px; height: 12px; }
