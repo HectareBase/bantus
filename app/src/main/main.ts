@@ -10,7 +10,7 @@ import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
 import { readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
-import { tipBounds } from './tip-place';
+import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
 import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, type ArchiveMark, type Settings, type WindowBounds } from '../shared/settings';
@@ -43,7 +43,7 @@ let settingsWin: BrowserWindow | undefined;
 let tipWin: BrowserWindow | undefined;
 /** めくれと一覧のウィンドウ（flyout.ts） */
 let flyout: Flyout | undefined;
-/** 今出そうとしているツールチップの基準の要素。消したら undefined にし、遅れて届いた大きさは捨てる */
+/** 今出そうとしているツールチップの基準の要素（ウィジェットの中の座標、CSS px）。消したら undefined にし、遅れて届いた大きさは捨てる */
 let tipAnchor: TipRect | undefined;
 let tipHideTimer: NodeJS.Timeout | undefined;
 /** 変数に持っておかないと、ガベージコレクションでトレイから消える */
@@ -51,6 +51,8 @@ let tray: Tray | undefined;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
+/** 最後にかけた表示の拡大率。変わったときだけ、出ているツールチップとめくれを消す（置き場所がずれるため） */
+let appliedZoom = 1;
 /** タスクバーの点滅を止めるタイマー */
 let flashTimer: NodeJS.Timeout | undefined;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
@@ -157,8 +159,36 @@ function widgetLayout(s: Settings): WidgetLayout {
   };
 }
 
+/** 表示の拡大率（1 で等倍） */
+function zoomFactor(): number {
+  return getSettings().zoom / 100;
+}
+
+/**
+ * ウィジェット・ツールチップ・めくれに表示の拡大率をかける。設定ウィンドウにはかけない。
+ * Electron では拡大率はウィンドウ（webContents）ごとで、同じ file:// でもほかのウィンドウには移らない
+ */
+function applyZoom() {
+  const zoom = zoomFactor();
+  const changed = zoom !== appliedZoom;
+  appliedZoom = zoom;
+  for (const w of [win, tipWin, flyout?.window()]) {
+    if (w && !w.isDestroyed()) w.webContents.setZoomFactor(zoom);
+  }
+  if (changed) {
+    hideTip();
+    flyout?.hide();
+  }
+}
+
+/** 読み込むたびに（読み込み直しでも）拡大率をかけ直す */
+function keepZoom(w: BrowserWindow) {
+  w.webContents.on('did-finish-load', () => w.webContents.setZoomFactor(zoomFactor()));
+}
+
 function applySettings(s: Settings) {
   if (!win || win.isDestroyed()) return;
+  applyZoom();
   win.setBounds(sidebarBounds());
   // 固定を外すと、ほかのウィンドウをクリックしたときにその後ろへ回る
   win.setAlwaysOnTop(s.pinned);
@@ -195,6 +225,7 @@ function createWidget(): BrowserWindow {
     // 知らせる音は、クリックなどの操作なしに鳴らす
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
   });
+  keepZoom(w);
   w.loadFile(join(WEB, 'index.html'));
   w.once('ready-to-show', () => {
     applySettings(getSettings());
@@ -230,15 +261,19 @@ function createTipWindow(): BrowserWindow {
   w.setIgnoreMouseEvents(true);
   // 固定したウィジェットより前に出す
   w.setAlwaysOnTop(true, 'pop-up-menu');
+  keepZoom(w);
   w.loadFile(join(WEB, 'tip.html'));
   return w;
 }
 
-/** ツールチップの中身の大きさが届いたら、置いて見せる */
+/** ツールチップの中身の大きさ（CSS px）が届いたら、置いて見せる */
 function placeTip(width: number, height: number) {
   if (!tipAnchor || !win || win.isDestroyed() || !tipWin || tipWin.isDestroyed()) return;
   const s = getSettings();
-  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, tipAnchor, { width, height }));
+  // 画面から届く大きさと位置は CSS px なので、拡大率を掛けて画面の座標にする
+  const zoom = zoomFactor();
+  const size = { width: width * zoom, height: height * zoom };
+  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, scaleRect(tipAnchor, zoom), size, zoom));
   if (!tipWin.isVisible()) tipWin.showInactive();
   tipWin.webContents.send('tip:visible', true);
 }
@@ -515,6 +550,7 @@ app.whenReady().then(() => {
     widget: () => win,
     edge: () => getSettings().edge,
     area: () => targetDisplay(getSettings()).workArea,
+    zoom: zoomFactor,
     onAction: (action) => win?.webContents.send('fly-action', action),
     onHover: (key) => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
@@ -523,6 +559,8 @@ app.whenReady().then(() => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
     },
   });
+  keepZoom(flyout.window());
+  applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
   const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
@@ -656,6 +694,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
+
+/**
+ * メインプロセスで拾われなかった例外は、ダイアログにせず記録だけにする。
+ * Electron の既定ではダイアログが出て、タイマーの中の例外だと閉じてもすぐ同じものが出続ける
+ */
+process.on('uncaughtException', (e) => console.error('拾われなかった例外：', e));
+process.on('unhandledRejection', (e) => console.error('拾われなかった Promise の失敗：', e));
 
 // 二重起動を防ぐ
 if (!app.requestSingleInstanceLock()) {

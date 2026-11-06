@@ -13,6 +13,11 @@ export interface Settings {
   cardOpacity: number;
   /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
   headerShade: number;
+  /**
+   * ウィジェット・ツールチップ・めくれの表示の拡大率（%）。Windows のディスプレイの拡大とは別に、その上からかける。
+   * 設定ウィンドウにはかけない。幅（width）は画面の座標のままなので、拡大すると中身が窮屈になる
+   */
+  zoom: number;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
   /** main（元のフォルダ）のセッションを、落ち着いてから自動でアーカイブするまでの分。0 ならしない */
@@ -77,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
+  zoom: 100,
   pinned: true,
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
@@ -147,7 +153,7 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
 
 const SHOW_OPTIONS = [
   { value: true, label: '表示' },
@@ -186,6 +192,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
     label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
     min: 0, max: 20, step: 1, unit: '%',
+  },
+  {
+    key: 'zoom', category: 'general', group: '見た目', type: 'slider',
+    label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ。Windows のディスプレイの拡大とは別に、その上からかける',
+    min: 80, max: 150, step: 5, unit: '%',
   },
   {
     key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,

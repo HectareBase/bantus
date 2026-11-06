@@ -89,6 +89,16 @@ describe('normalizeSettings の見出しの濃さ', () => {
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
 });
 
+describe('normalizeSettings の表示の拡大率', () => {
+  it('なければ 100%', () => assert.equal(normalizeSettings({}).zoom, 100));
+  it('80〜150 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ zoom: 50 }).zoom, 80);
+    assert.equal(normalizeSettings({ zoom: 300 }).zoom, 150);
+    assert.equal(normalizeSettings({ zoom: 124.6 }).zoom, 125);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ zoom: '125' }).zoom, 100));
+});
+
 describe('設定画面のカテゴリ', () => {
   const layout = (id: string) => {
     const out: [string, string[]][] = [];
@@ -102,7 +112,7 @@ describe('設定画面のカテゴリ', () => {
   it('全体は 位置 → 見た目 → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
-      ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']],
+      ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
       ['起動', ['openAtLogin']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>

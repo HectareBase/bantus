@@ -11,7 +11,7 @@
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
 import { join } from 'node:path';
 import type { FlyAction, FlyContent, FlyRequest, FlyShow, FlyTarget, TipRect } from '../shared/types';
-import { contains, flyoutBounds, inHoverZone, type Rect } from './tip-place';
+import { contains, flyoutBounds, inHoverZone, scaleRect, type Rect } from './tip-place';
 
 /** カーソルの位置を見る間隔 */
 const POLL_MS = 30;
@@ -30,6 +30,8 @@ export interface FlyoutDeps {
   widget: () => BrowserWindow | undefined;
   edge: () => 'left' | 'right';
   area: () => Rect;
+  /** 表示の拡大率（1 で等倍）。画面から届く四角は CSS px なので、これを掛けて画面の座標にする */
+  zoom: () => number;
   /** 一覧の中の操作を、ウィジェットの画面へ渡す */
   onAction: (action: FlyAction) => void;
   /** ウィジェットの外で、重なりに反応する範囲にカーソルが入った */
@@ -85,8 +87,10 @@ function isAction(v: unknown): v is FlyAction {
 }
 
 /** 重なりの的とめくれが飛び出す所を、画面の座標にする。画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる */
-function hitRects(widget: Rect, request: FlyRequest): Rect[] {
-  return [request.hit, ...(request.tab ? [request.tab] : [])].map((r) => ({ x: widget.x + r.x - 1, y: widget.y + r.y - 1, width: r.width + 2, height: r.height + 2 }));
+function hitRects(widget: Rect, request: FlyRequest, zoom: number): Rect[] {
+  return [request.hit, ...(request.tab ? [request.tab] : [])]
+    .map((r) => scaleRect(r, zoom))
+    .map((r) => ({ x: widget.x + r.x - 1, y: widget.y + r.y - 1, width: r.width + 2, height: r.height + 2 }));
 }
 
 function sameRect(a: Rect, b: Rect): boolean {
@@ -123,13 +127,13 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   let open = false;
   /** 中身を描き終えたか。描き終えるまでは、カーソルの位置で消さない */
   let ready = false;
-  /** クリックを受け取る場所（ウィンドウの中の座標）。めくれと一覧 */
+  /** クリックを受け取る場所（ウィンドウの中の座標、CSS px）。めくれと一覧 */
   let solid: TipRect[] = [];
   /** 重なりの的とめくれが飛び出す所（画面の座標）。ここかめくれの上にいる間は、めくれを消さない */
   let hit: Rect[] = [];
   let ignoring = true;
   let poll: NodeJS.Timeout | undefined;
-  /** 重なりに反応する範囲 */
+  /** 重なりに反応する範囲（ウィジェットの中の座標、CSS px） */
   let targets: FlyTarget[] = [];
   /** ウィジェットの外で、カーソルが入っている範囲（入ったときに 1 度だけ知らせる） */
   let hovered: string | undefined;
@@ -152,12 +156,13 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   }
 
   /** ウィジェットに合わせた場所。カードによらず同じなので、変わったとき（幅や端を変えた）だけ置き直す */
-  function place(anchor: TipRect): { top: number; inset: number } | undefined {
+  function place(anchor: TipRect): { top: number; inset: number; zoom: number } | undefined {
     const widget = deps.widget();
     if (!widget || widget.isDestroyed()) return undefined;
-    const { bounds, top, inset } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), anchor);
+    const zoom = deps.zoom();
+    const { bounds, top, inset } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), scaleRect(anchor, zoom), zoom);
     if (!sameRect(win.getBounds(), bounds)) win.setBounds(bounds);
-    return { top, inset };
+    return { top, inset, zoom };
   }
 
   /** ウィジェットが出ていて、めくれを出しているか反応する範囲があるときだけカーソルを見る */
@@ -177,7 +182,11 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     if (widget && !widget.isDestroyed() && !onSolid) {
       const wb = widget.getBounds();
       if (!contains(wb, c.x, c.y)) {
-        found = targets.find((t) => contains({ x: wb.x + t.zone.x, y: wb.y + t.zone.y, width: t.zone.width, height: t.zone.height }, c.x, c.y))?.key;
+        const zoom = deps.zoom();
+        found = targets.find((t) => {
+          const z = scaleRect(t.zone, zoom);
+          return contains({ x: wb.x + z.x, y: wb.y + z.y, width: z.width, height: z.height }, c.x, c.y);
+        })?.key;
       }
     }
     if (found && found !== hovered && found !== key) {
@@ -188,12 +197,19 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   }
 
   function tick() {
+    // 終了の途中などでウィンドウが壊れたあとに呼ばれたら、カーソルを見るのをやめる。
+    // 壊れたウィンドウを触ると 30ms ごとに例外になり、エラーのダイアログが閉じても出続ける
+    if (win.isDestroyed()) {
+      syncPoll();
+      return;
+    }
     const c = screen.getCursorScreenPoint();
     if (!key || !ready) {
       if (!key) watchOutside(c, false);
       return;
     }
-    const zone = inHoverZone(c, win.getBounds(), solid, hit);
+    const zoom = deps.zoom();
+    const zone = inHoverZone(c, win.getBounds(), solid.map((r) => scaleRect(r, zoom)), hit);
     // カーソルがめくれや一覧に入ったら一番上へ上げ直す。ウィジェットを押したあとは、Windows がウィジェットを上にするため
     if (zone.solid && ignoring) win.moveTop();
     setIgnore(!zone.solid);
@@ -261,7 +277,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       const widget = deps.widget();
       if (!open || !widget || widget.isDestroyed()) return;
       const wb = widget.getBounds();
-      const target = hitRects(wb, request);
+      const target = hitRects(wb, request, deps.zoom());
       // まだその重なりの的の上にいるときだけ切り替える
       if (!inHoverZone(screen.getCursorScreenPoint(), win.getBounds(), [], target).hit) return;
       hide();
@@ -269,6 +285,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     }, SWITCH_DWELL_MS);
     pendingSwitch = { key: request.key, timer };
   }
+
+  win.on('closed', () => syncPoll());
 
   win.on('blur', () => {
     dbg('blur', open);
@@ -332,12 +350,13 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       ready = false;
       solid = [];
       // 画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる
-      hit = hitRects(wb, request);
+      hit = hitRects(wb, request, placed.zoom);
+      // めくれの画面は CSS px で描くので、画面の座標から戻す。高さは画面から届いた値（CSS px）のまま
       const show: FlyShow = {
         key: request.key,
         side: deps.edge() === 'right' ? 'left' : 'right',
-        top: placed.top,
-        inset: placed.inset,
+        top: placed.top / placed.zoom,
+        inset: placed.inset / placed.zoom,
         height: Math.round(request.anchor.height),
         count: request.count,
         content: request.content,
