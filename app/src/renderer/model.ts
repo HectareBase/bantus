@@ -418,7 +418,21 @@ function settledAt(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt'>): n
 export function isKept(s: SessionView, opts: Pick<ArchiveOptions, 'attention' | 'revived' | 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
   if (isLive(s, opts.attention)) return true;
   if (!opts.revived.has(s.id)) return false;
+  return withinGrace(s, opts);
+}
+
+/** 落ち着いてから、猶予（main の自動アーカイブと同じ分。オフなら REVIVE_GRACE_MINUTES）がまだたっていない */
+function withinGrace(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
   return opts.now - settledAt(s, opts) < (opts.mainMinutes || REVIVE_GRACE_MINUTES) * 60_000;
+}
+
+/**
+ * ウィジェットか Claude 本体で確認して（帯が消えて）から、まだ猶予の内にあるもの。
+ * 行を押して開いたとたんに隠れたり、ワークツリーのカードへ移ったりしないようにする。
+ * isKept と違って手の印より弱い（手でアーカイブするときも帯を消すので、印を先に見る）
+ */
+function recentlyConfirmed(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
+  return opts.confirmedAt.has(s.id) && withinGrace(s, opts);
 }
 
 /** 手でアーカイブしたのに動き出したセッションの ID。印を外して自動の決まりに戻す（画面側が保存する） */
@@ -436,12 +450,12 @@ export function revivedCards(sessions: SessionView[], opts: Pick<ArchiveOptions,
   return [...keys];
 }
 
-/** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする */
+/** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする（確認してから間もないものは除く） */
 function worktreeArchived(s: SessionView, newest: boolean, opts: ArchiveOptions): boolean {
   if (isKept(s, opts)) return false;
   const mark = opts.marks[s.id];
   if (mark) return mark === 'archived';
-  return !newest;
+  return !newest && !recentlyConfirmed(s, opts);
 }
 
 /** main のセッション：手の印がなければ、落ち着いて（確認して）から決めた分がたったらアーカイブする */
@@ -453,9 +467,15 @@ function mainArchived(s: SessionView, opts: ArchiveOptions): boolean {
   return opts.now - settledAt(s, opts) >= opts.mainMinutes * 60_000;
 }
 
-/** 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。動いている・手で戻したものは main に残す */
+/**
+ * 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。
+ * 動いている・手で戻したものは main に残す。手の印がなく確認してから間もないものも、しばらく main に残す
+ */
 function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
-  return !isKept(s, opts) && opts.marks[s.id] !== 'shown';
+  if (isKept(s, opts)) return false;
+  const mark = opts.marks[s.id];
+  if (mark) return mark !== 'shown';
+  return !recentlyConfirmed(s, opts);
 }
 
 function byCreatedDesc(a: SessionView, b: SessionView): number {
@@ -566,7 +586,8 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       const merged = !isMain && !!(changes?.merged || changes?.gone);
       const anyLive = own.some((s) => isKept(s, opts));
       const mark = opts.cardMarks[key];
-      const hidden = !isMain && !anyLive && (mark ? mark === 'archived' : merged);
+      // マージ済みで自動で隠すのは、確認してから間もないものがなくなってから
+      const hidden = !isMain && !anyLive && (mark ? mark === 'archived' : merged && !own.some((s) => recentlyConfirmed(s, opts)));
       cards.push({
         key,
         isMain,
