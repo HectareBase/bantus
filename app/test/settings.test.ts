@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CATEGORIES, DEFAULT_SETTINGS, SETTING_DEFS, normalizeSettings } from '../src/shared/settings';
+import { CATEGORIES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, SETTING_DEFS, normalizeColor, normalizeSettings } from '../src/shared/settings';
 
 describe('normalizeSettings の settingsWindow', () => {
   it('なければ入れない', () => assert.equal(normalizeSettings({}).settingsWindow, undefined));
@@ -108,12 +108,18 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → カードの表示 → 通知 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'notify', 'about']));
-  it('全体は 位置 → 見た目 → 起動', () =>
+  it('左の一覧は 全体 → 見た目 → カードの表示 → 通知 → 情報', () =>
+    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'notify', 'about']));
+  it('全体は 位置 → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
-      ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
       ['起動', ['openAtLogin']],
+    ]));
+  it('見た目は 明るさ → ウィジェット → 状態の色', () =>
+    assert.deepEqual(layout('look'), [
+      ['明るさ', ['theme']],
+      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
+      ['状態の色', ['statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [
@@ -151,3 +157,35 @@ describe('normalizeSettings の通知', () => {
   it('音の種類だけに試聴のボタンを付ける', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.type === 'segmented' && d.preview).map((d) => d.key), ['soundType']));
 });
+
+describe('normalizeSettings の theme', () => {
+  it('なければ Windows に従う', () => assert.equal(normalizeSettings({}).theme, 'system'));
+  it('選べる値を残す', () => {
+    assert.equal(normalizeSettings({ theme: 'light' }).theme, 'light');
+    assert.equal(normalizeSettings({ theme: 'dark' }).theme, 'dark');
+  });
+  it('知らない値は既定値に戻す', () => {
+    for (const theme of ['Dark', 'auto', 1, null]) assert.equal(normalizeSettings({ theme }).theme, 'system');
+  });
+});
+
+describe('normalizeSettings の statusColors', () => {
+  it('なければ既定の色', () => assert.deepEqual(normalizeSettings({}).statusColors, DEFAULT_STATUS_COLORS));
+  it('#rrggbb を小文字にそろえて残す', () =>
+    assert.deepEqual(normalizeSettings({ statusColors: { busy: '#A371F7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000' } }).statusColors, {
+      busy: '#a371f7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000',
+    }));
+  it('壊れた色・欠けた状態は、その状態だけ既定の色に戻す', () =>
+    assert.deepEqual(normalizeSettings({ statusColors: { busy: 'red', waiting: '#e5534', idle: 123 } }).statusColors, DEFAULT_STATUS_COLORS));
+  it('知らない状態（対応待ちの理由ごとの色など）は捨てる', () => {
+    const colors = normalizeSettings({ statusColors: { waiting: '#e5534b', 'permission prompt': '#000000' } }).statusColors;
+    assert.deepEqual(colors, { ...DEFAULT_STATUS_COLORS, waiting: '#e5534b' });
+  });
+  it('入れ物が表でなければ既定の色', () => {
+    for (const statusColors of ['#000000', ['#000000'], null]) assert.deepEqual(normalizeSettings({ statusColors }).statusColors, DEFAULT_STATUS_COLORS);
+  });
+  it('既定の色と候補は #rrggbb', () => {
+    for (const c of [...Object.values(DEFAULT_STATUS_COLORS), ...COLOR_SWATCHES]) assert.equal(normalizeColor(c), c);
+  });
+});
+

@@ -14,10 +14,11 @@
   --stack-strong: #b4b4b4;
   --stack-edge: rgba(0, 0, 0, 0.18);
   --stripe: rgba(0, 0, 0, 0.025);
-  --waiting: #c27c00;
-  --busy: #005fb8;
-  --idle: #0f7b0f;
-  --stopped: #8a8a8a;
+  /* 状態の色。ライトとダークで同じで、設定の色で上書きする（status-colors.ts） */
+  --waiting: #e6a100;
+  --busy: #3b8eea;
+  --idle: #4caf50;
+  --stopped: #8b8b8b;
   color-scheme: light dark;
 }
 
@@ -35,10 +36,6 @@
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
     --stripe: rgba(255, 255, 255, 0.03);
-    --waiting: #fce100;
-    --busy: #60cdff;
-    --idle: #6ccb5f;
-    --stopped: #9a9a9a;
   }
 }
 

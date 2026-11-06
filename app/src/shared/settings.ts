@@ -18,6 +18,10 @@ export interface Settings {
    * 設定ウィンドウにはかけない。幅（width）は画面の座標のままなので、拡大すると中身が窮屈になる
    */
   zoom: number;
+  /** テーマ。system は Windows に従う。メインプロセスが nativeTheme.themeSource に当て、すべてのウィンドウにすぐ反映する */
+  theme: Theme;
+  /** 状態ごとのアイコンの色（#rrggbb）。ライトとダークで同じ色を使う。対応待ちは理由にかかわらず 1 色 */
+  statusColors: StatusColors;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
   /** main（元のフォルダ）のセッションを、落ち着いてから自動でアーカイブするまでの分。0 ならしない */
@@ -62,6 +66,27 @@ export interface Settings {
 /** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
 
+/** テーマ。system は Windows の設定に従う */
+export type Theme = 'system' | 'light' | 'dark';
+
+/** 色を設定できる状態 */
+export type ColorState = 'busy' | 'waiting' | 'idle' | 'stopped';
+export type StatusColors = Record<ColorState, string>;
+
+/** 設定画面に並べる順 */
+export const COLOR_STATES: ColorState[] = ['busy', 'waiting', 'idle', 'stopped'];
+
+/** 既定の色。両方のテーマで見える、中くらいの明るさ */
+export const DEFAULT_STATUS_COLORS: StatusColors = { busy: '#3b8eea', waiting: '#e6a100', idle: '#4caf50', stopped: '#8b8b8b' };
+
+/** 色の候補 */
+export const COLOR_SWATCHES = ['#3b8eea', '#4caf50', '#e6a100', '#e5534b', '#a371f7', '#e05aa8', '#26a69a', '#f0883e', '#8b8b8b'];
+
+/** #rrggbb（大文字も受け付け、小文字にそろえる）なら返す。そうでなければ undefined */
+export function normalizeColor(v: unknown): string | undefined {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : undefined;
+}
+
 /** 手で決めたアーカイブ。archived は手でアーカイブした、shown は手で戻した（自動ではアーカイブしない） */
 export type ArchiveMark = 'archived' | 'shown';
 
@@ -83,6 +108,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cardOpacity: 50,
   headerShade: 5,
   zoom: 100,
+  theme: 'system',
+  statusColors: DEFAULT_STATUS_COLORS,
   pinned: true,
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
@@ -106,7 +133,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const WIDTH_MIN = 200;
 export const WIDTH_MAX = 480;
 
-export type CategoryId = 'general' | 'cards' | 'notify' | 'about';
+export type CategoryId = 'general' | 'look' | 'cards' | 'notify' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -118,6 +145,7 @@ export interface Category {
 /** 左の一覧の並び。中身のないカテゴリは画面に出さない */
 export const CATEGORIES: Category[] = [
   { id: 'general', label: '全体', icon: 'app-window' },
+  { id: 'look', label: '見た目', icon: 'palette' },
   { id: 'cards', label: 'カードの表示', icon: 'list' },
   { id: 'notify', label: '通知', icon: 'bell' },
   { id: 'about', label: '情報', icon: 'info' },
@@ -144,7 +172,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'openAtLogin'
+      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'openAtLogin'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -153,7 +181,9 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string })
+  /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
+  | (Base<'statusColors'> & { type: 'status-colors' });
 
 const SHOW_OPTIONS = [
   { value: true, label: '表示' },
@@ -179,29 +209,38 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   { key: 'display', category: 'general', group: '位置', type: 'display', label: 'モニター' },
   {
-    key: 'backgroundOpacity', category: 'general', group: '見た目', type: 'slider',
+    key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,
+    label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える',
+    options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
+  },
+  {
+    key: 'theme', category: 'look', group: '明るさ', type: 'segmented',
+    label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う',
+    options: [{ value: 'system', label: 'システム' }, { value: 'light', label: 'ライト' }, { value: 'dark', label: 'ダーク' }],
+  },
+  {
+    key: 'backgroundOpacity', category: 'look', group: 'ウィジェット', type: 'slider',
     label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'general', group: '見た目', type: 'slider',
+    key: 'cardOpacity', category: 'look', group: 'ウィジェット', type: 'slider',
     label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
+    key: 'headerShade', category: 'look', group: 'ウィジェット', type: 'slider',
     label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
     min: 0, max: 20, step: 1, unit: '%',
   },
   {
-    key: 'zoom', category: 'general', group: '見た目', type: 'slider',
+    key: 'zoom', category: 'look', group: 'ウィジェット', type: 'slider',
     label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ。Windows のディスプレイの拡大とは別に、その上からかける',
     min: 80, max: 150, step: 5, unit: '%',
   },
   {
-    key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,
-    label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える',
-    options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
+    key: 'statusColors', category: 'look', group: '状態の色', type: 'status-colors',
+    label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う',
   },
   {
     key: 'mainArchiveMinutes', category: 'cards', group: 'アーカイブ', type: 'segmented',
@@ -286,6 +325,9 @@ export function normalizeSettings(input: unknown): Settings {
       case 'slider':
         if (typeof v === 'number' && Number.isFinite(v)) out[def.key] = Math.min(def.max, Math.max(def.min, Math.round(v)));
         break;
+      case 'status-colors':
+        out.statusColors = normalizeStatusColors(v);
+        break;
     }
   }
   // 設定画面に出さない項目
@@ -302,6 +344,14 @@ export function normalizeSettings(input: unknown): Settings {
   }
   const bounds = normalizeBounds(src.settingsWindow);
   if (bounds) out.settingsWindow = bounds;
+  return out;
+}
+
+/** 状態ごとの色。知らない状態は捨て、色でない値や欠けた状態は既定の色にする */
+function normalizeStatusColors(input: unknown): StatusColors {
+  const src = (input && typeof input === 'object' && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
+  const out = { ...DEFAULT_STATUS_COLORS };
+  for (const state of COLOR_STATES) out[state] = normalizeColor(src[state]) ?? DEFAULT_STATUS_COLORS[state];
   return out;
 }
 

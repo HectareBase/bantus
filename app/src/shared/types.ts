@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { ArchiveMark, Settings } from './settings';
+import type { ArchiveMark, Settings, StatusColors } from './settings';
 
 /** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
@@ -217,6 +217,8 @@ export interface FlyoutApi {
   onHide(listener: () => void): void;
   /** クリックを受け取る場所（ウィンドウの中の座標）。ほかはクリックを下へ通す */
   reportSolid(rects: TipRect[]): void;
+  /** 状態の色（設定）。読み込んだときと、設定が変わったときに届く */
+  onColors(listener: (colors: StatusColors) => void): void;
   /** めくれが押された */
   requestOpen(): void;
   action(action: FlyAction): void;
@@ -240,7 +242,7 @@ export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'archive' | 'archivedCards'
-  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen'
+  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
 >;
 
 export interface DisplayOption {

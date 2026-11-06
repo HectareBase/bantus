@@ -12,6 +12,8 @@ const NAMES = [
   'archive', 'diamond', 'git-merge',
   // 設定の「通知」と、音の試聴
   'bell', 'volume-2',
+  // 設定の「見た目」
+  'palette',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
