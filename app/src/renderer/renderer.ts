@@ -14,6 +14,9 @@ import {
   buildRepos,
   changeItems,
   changesTooltip,
+  contextLabel,
+  contextLevel,
+  contextPercent,
   formatAgo,
   hasAlertOutput,
   holdTooltip,
@@ -64,6 +67,10 @@ interface RowRefs {
   /** 処理中の間だけ .title に重ねる光の帯と、その中の明るい文字 */
   shine?: { el: HTMLElement; text: HTMLElement };
   when: HTMLElement;
+  /** コンテキストの使用率（docs/design/worktree-cards.md）。中に短いバー（ctxFill）と数字（ctxNum） */
+  ctx: HTMLElement;
+  ctxFill: HTMLElement;
+  ctxNum: HTMLElement;
   pill: HTMLElement;
   act: HTMLElement;
   data?: SessionView;
@@ -487,6 +494,9 @@ function getRow(s: SessionView): RowRefs {
       title,
       titleText,
       when: el.querySelector('.when')!,
+      ctx: el.querySelector('.ctx')!,
+      ctxFill: el.querySelector('.ctx-fill')!,
+      ctxNum: el.querySelector('.ctx-num')!,
       pill: el.querySelector('.state-pill')!,
       act: el.querySelector('.act')!,
     };
@@ -520,6 +530,14 @@ function getRow(s: SessionView): RowRefs {
   const label = hold ? '保留' : stateLabel(s.state, s.waitingFor);
   if (refs.pill.textContent !== label) refs.pill.textContent = label;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
+  const ctx = contextLabel(s.context);
+  if (refs.ctxNum.textContent !== ctx) refs.ctxNum.textContent = ctx;
+  refs.ctx.hidden = !ctx;
+  refs.ctx.dataset.level = contextLevel(s.context);
+  // 割合がわからない（窓の大きさがわからないモデル）ときは、バーを出さずトークン数だけ
+  const pct = contextPercent(s.context);
+  refs.ctx.toggleAttribute('data-raw', pct === undefined);
+  refs.ctxFill.style.width = `${Math.min(100, pct ?? 0)}%`;
   refs.memoEl.hidden = !hold && !refs.memo.editing;
   if (hold) refs.memo.set(hold.note);
   refs.el.dataset.tip = tooltip(s, hold);
@@ -943,6 +961,7 @@ function applyLayout(layout: WidgetLayout) {
   applyStatusColors(layout.statusColors);
   root.classList.toggle('hide-updated', !layout.showUpdated);
   root.classList.toggle('hide-state', !layout.showState);
+  root.classList.toggle('hide-context', !layout.showContext);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
   if (!floating) clickThrough = false;

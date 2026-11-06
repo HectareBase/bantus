@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
+import { createContextReader } from './context-usage';
 import type { HoldMark } from '../shared/settings';
 import type { SessionState, SessionView } from '../shared/types';
 
@@ -14,12 +15,15 @@ export interface DataPaths {
   runningDir: string;
   /** デスクトップのデータ（`%LOCALAPPDATA%\Claude-Data`） */
   dataBase: string;
+  /** 会話の記録（`~/.claude/projects`）。省くとコンテキストの使用量を読まない */
+  projectsDir?: string;
 }
 
 export function defaultPaths(): DataPaths {
   return {
     runningDir: join(homedir(), '.claude', 'sessions'),
     dataBase: join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Claude-Data'),
+    projectsDir: join(homedir(), '.claude', 'projects'),
   };
 }
 
@@ -271,9 +275,21 @@ export function readFixtureHolds(path: string, now = Date.now()): { holds: Recor
   return { holds, heldCards };
 }
 
+/** 会話の記録のフォルダごとの読み手（読んだ結果を呼び出しの間で使い回す） */
+const contextReaders = new Map<string, ReturnType<typeof createContextReader>>();
+
+function contextReaderFor(projectsDir: string) {
+  let reader = contextReaders.get(projectsDir);
+  if (!reader) contextReaders.set(projectsDir, (reader = createContextReader(projectsDir)));
+  return reader;
+}
+
 export function readSessions(paths = defaultPaths()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
+  const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
+  /** 使用量を読んだ CLI のセッション ID（使い回しの表から消えたものを外す） */
+  const cliIds = new Set<string>();
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
   // 通し番号を数えるためのもの。アーカイブ済みも入れる
@@ -371,7 +387,15 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       if (typeof d.spawnedFrom?.sessionId === 'string') view.spawnedFrom = d.spawnedFrom.sessionId;
       if (typeof d.turnWrapUp?.description === 'string' && d.turnWrapUp.description) view.summary = d.turnWrapUp.description;
       numbered.push(view);
-      if (!archived) views.push(view);
+      if (archived) continue;
+      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない
+      if (contextReader && typeof d.cliSessionId === 'string' && d.cliSessionId) {
+        cliIds.add(d.cliSessionId);
+        const folders = [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
+        const context = contextReader.read(d.cliSessionId, folders, typeof d.model === 'string' ? d.model : undefined);
+        if (context) view.context = context;
+      }
+      views.push(view);
     }
   }
   // フォルダから見つけたワークツリーが、アプリが作ったワークツリーと同じフォルダなら、同じ目印（名前）にそろえて 1 枚のカードにまとめる
@@ -383,6 +407,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
     else delete view.baseBranch;
   }
   assignSeq(numbered);
+  contextReader?.prune(cliIds);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
   for (const view of views) {
     const at = focusedAt.get(view.id);
