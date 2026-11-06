@@ -31,6 +31,8 @@ export interface SessionView {
   summary?: string;
   /** git status を調べる作業フォルダ（git 管理でなければ undefined） */
   workDir?: string;
+  /** コンテキストの使用量（会話の記録の末尾から。src/main/context-usage.ts）。読めなければ undefined */
+  context?: ContextUsage;
   /** 作業フォルダのコミットされていない変更。まだ調べていない、または調べられなかったときは undefined */
   changes?: GitChanges;
   state: SessionState;
@@ -50,6 +52,16 @@ export interface SessionView {
   focused?: boolean;
   /** デスクトップで最後に開いた時刻（`lastFocusedAt`、Unix ミリ秒）。サイドチャットで開いたときは親の値にする。開いたことがなければ省く */
   focusedAt?: number;
+}
+
+/** コンテキストの使用量（docs/design/worktree-cards.md の「コンテキストの使用量」） */
+export interface ContextUsage {
+  /** 最後のアシスタントの発言で入力に使ったトークン（input + cache_read + cache_creation） */
+  tokens: number;
+  /** 窓の大きさ（トークン）。対応表にないモデルは undefined で、割合を出さない */
+  window?: number;
+  /** モデル名（local_*.json の model。なければ記録の値） */
+  model?: string;
 }
 
 /** `git status` から数えた件数（src/main/git-status.ts） */
@@ -260,7 +272,7 @@ export interface FlyShow {
 export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
 >;
 

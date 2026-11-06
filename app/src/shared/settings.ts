@@ -38,6 +38,8 @@ export interface Settings {
   showUpdated: boolean;
   /** 行の 2 行目に、状態を文字で出す（「処理中」「許可待ち」など） */
   showState: boolean;
+  /** 行の 2 行目に、コンテキストの使用率（「12%」）を出す */
+  showContext: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
   /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
@@ -141,6 +143,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rowPadding: 4,
   showUpdated: true,
   showState: true,
+  showContext: true,
   openAtLogin: false,
   notifyWaiting: true,
   notifyDone: false,
@@ -199,7 +202,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'openAtLogin'
+      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -303,6 +306,11 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'showState', category: 'cards', group: '行に出すもの', type: 'segmented',
     label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など。左の印を言葉で補う',
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'showContext', category: 'cards', group: '行に出すもの', type: 'segmented',
+    label: 'コンテキスト', description: '2 行目の使用率（「12%」）。会話の記録から数える。窓の大きさがわからないモデルはトークン数だけ',
     options: SHOW_OPTIONS,
   },
   {

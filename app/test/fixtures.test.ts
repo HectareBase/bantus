@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { NO_ARCHIVE, buildRepos, changeItems, WAITING_LABELS, type WorktreeCard } from '../src/renderer/model';
+import { NO_ARCHIVE, buildRepos, changeItems, contextLevel, WAITING_LABELS, type WorktreeCard } from '../src/renderer/model';
 import { readFixture, readFixtureHolds } from '../src/main/sessions';
 import type { SessionState } from '../src/shared/types';
 import { FIXTURES } from './helpers';
@@ -89,6 +89,13 @@ describe('all-states はすべての表示を含む', () => {
   it('git の印の種類', () => {
     assert.ok(sessions.some((s) => changeItems(s.changes).length === 4), '4 種類すべて');
     assert.ok(sessions.some((s) => s.changes && !s.changes.changed && !s.changes.untracked && s.changes.ahead > 0), 'push していないコミットだけ');
+  });
+
+  it('コンテキストの使用率の種類（通常、多い、残りわずか、窓の大きさがわからない、なし）', () => {
+    const levels = new Set(sessions.filter((s) => s.context?.window).map((s) => contextLevel(s.context)));
+    assert.deepEqual([...levels].sort(), ['full', 'high', 'normal']);
+    assert.ok(sessions.some((s) => s.context && !s.context.window), '窓の大きさがわからない');
+    assert.ok(sessions.some((s) => !s.context), '使用量なし');
   });
 
   it('時刻の表示の種類（たった今、分、時間、日）', () => {

@@ -15,9 +15,11 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | | `lastFocusedAt` | デスクトップで今開いているセッション（その行の背景色、`Ctrl+Alt+N` の次の行、通知を出すかどうか）。サイドチャットのときは親に置き換える | |
 | | `postTurnSummary.needs_action`、`postTurnSummary.status_detail` | ツールチップの「対応が必要」と、最後のターンのまとめ | |
 | | `turnWrapUp.description` | 以前のセッションの一覧で、乗せた行のまとめを下の段に出す | |
+| | `model` | コンテキストの窓の大きさを対応表から決める（[worktree-cards.md](worktree-cards.md) の「コンテキストの使用量」） | `src/main/context-usage.ts` |
 | `%USERPROFILE%\.claude\sessions\<pid>.json` | `sessionId`、`pid` | 動いている CLI のプロセスを見つける（`pid` のプロセスが今もあるかを確かめ、ファイルだけ残ったものは除く） | `src/main/sessions.ts` |
 | | `status`、`waitingFor` | 状態（対応待ち、処理中、待機）と、対応待ちの理由。判定は [session-status.md](../research/session-status.md) | |
 | | `cwd` | セッションの途中でワークツリーに入ったときに、そのワークツリーを見つける | |
+| `%USERPROFILE%\.claude\projects\<フォルダ>\<cliSessionId>.jsonl` の**末尾だけ**（64 KB から、見つからなければ 4 MB まで広げる） | 最後のアシスタントの発言（`type` が `assistant`、`isSidechain` でないもの）の `message.usage` の `input_tokens`、`cache_read_input_tokens`、`cache_creation_input_tokens`。`local_*.json` に `model` がなければ `message.model` | コンテキストの使用量（分子）。窓の大きさ（分母）はモデルの対応表から決める推定で、表にないモデルは割合を出さない。大きさと更新時刻が変わったときだけ読み直す。アーカイブ済みのセッションの記録は読まない。発言の中身は使わず、どこにも送らない | `src/main/context-usage.ts` |
 | 作業フォルダの `.git`（ファイル）と `.git/HEAD`（ワークツリーなら `.git/worktrees/<名前>/HEAD`） | 今のブランチ名 | 元のフォルダのカード（家のアイコン）と、リポジトリの外のワークツリーのカードの見出しに出す。どちらも `local_*.json` の `branch` には入らない | `src/main/sessions.ts` |
 
 - 上の 2 つのフォルダは `fs.watch` で見張り、変わったら読み直します。取りこぼしに備えて、30 秒ごとにも読み直します。
@@ -47,6 +49,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 ## しないこと
 - Claude のデータ（`Claude-Data`、`~/.claude`）には書き込みません。動かすことも、消すこともしません
 - 認証情報を含むファイル（`config.json`、`ssh-remote-server-state.json`、`~/.claude.json`、`sessions/*.key`）は読みません
-- 会話の記録（`~/.claude/projects/*.jsonl`）、`git-worktrees.json`、`window-state.json` は読みません。調査はしましたが、今は使っていません
+- 会話の記録（`~/.claude/projects/*.jsonl`）は、コンテキストの使用量を出すために末尾だけを読み、使用量の数とモデル名のほかは使いません。発言の中身を画面に出したり、ほかへ送ったり、ログに出したりはしません。会話の記録のフォルダは見張りません
+- `git-worktrees.json`、`window-state.json` は読みません。調査はしましたが、今は使っていません
 - UIA（Windows UI Automation）で画面の部品を読んだり、押したりはしません。セッションは `claude://` のリンクで開きます
 - 読んだ内容をネットワークに送りません。ログにも出しません

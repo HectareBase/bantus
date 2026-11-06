@@ -46,6 +46,7 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.deepEqual([s.projectOrder, s.worktreeOrder, s.sessionOrder], ['fixed', 'fixed', 'fixed']);
     assert.equal(s.showUpdated, true);
     assert.equal(s.showState, true);
+    assert.equal(s.showContext, true);
   });
   it('選べる値だけを残す', () => {
     assert.equal(normalizeSettings({ mainArchiveMinutes: 0 }).mainArchiveMinutes, 0);
@@ -55,6 +56,7 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.equal(normalizeSettings({ projectOrder: 'name' }).projectOrder, 'fixed');
     assert.equal(normalizeSettings({ showUpdated: 'false' }).showUpdated, true);
     assert.equal(normalizeSettings({ showState: false }).showState, false);
+    assert.equal(normalizeSettings({ showContext: false }).showContext, false);
   });
   it('前の版の項目（表示数、折りたたみ、番号）は読み捨てる', () => {
     const s = normalizeSettings({ groupLimit: 3, foldScope: 'worktree', showSeq: false }) as unknown as Record<string, unknown>;
@@ -141,7 +143,7 @@ describe('設定画面のカテゴリ', () => {
       ['アーカイブ', ['mainArchiveMinutes']],
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
       ['行の大きさ', ['rowPadding']],
-      ['行に出すもの', ['showUpdated', 'showState']],
+      ['行に出すもの', ['showUpdated', 'showState', 'showContext']],
     ]));
   it('通知は 知らせるとき → 音 → Windows の通知', () =>
     assert.deepEqual(layout('notify'), [

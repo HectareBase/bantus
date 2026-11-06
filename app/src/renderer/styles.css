@@ -41,6 +41,8 @@
   --stack-edge: rgba(0, 0, 0, 0.18);
   /* デスクトップで今開いている行の透かし */
   --stripe: rgba(0, 0, 0, 0.025);
+  /* コンテキストの使用率が残りわずか（90% から）の文字の色。状態に使わない赤にする */
+  --ctx-full: #d03c34;
   color-scheme: light dark;
 }
 
@@ -63,6 +65,7 @@
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
     --stripe: rgba(255, 255, 255, 0.03);
+    --ctx-full: #ff6b62;
   }
 }
 
@@ -359,7 +362,16 @@ html.hide-updated .when { display: none; }
 .row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
 .row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
 html.hide-state .state-pill { display: none; }
+/* コンテキストの使用率（docs/design/worktree-cards.md）。色は状態を表すので、黄・青・緑・灰は使わない。
+   70% からは濃い文字と太字、90% からは赤の太字にする */
+.ctx { flex: none; font-variant-numeric: tabular-nums; }
+.ctx[hidden] { display: none; }
+.ctx[data-level="high"] { color: var(--text); font-weight: 600; }
+.ctx[data-level="full"] { color: var(--ctx-full); font-weight: 600; }
+html.hide-context .ctx { display: none; }
+.row[data-held] .ctx { display: none; }
 html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
+html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(.ctx:not([hidden])) { display: flex; }
 
 .row[data-state="stopped"] .title { color: var(--text-secondary); }
 

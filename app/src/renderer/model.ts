@@ -2,7 +2,7 @@
 
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
-import type { FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
+import type { ContextUsage, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
 import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
@@ -88,6 +88,48 @@ export function holdTooltip(mark: HoldMark, now = Date.now()): string {
   return mark.note ? `${heldFor(mark.since, now)}\n${mark.note}` : heldFor(mark.since, now);
 }
 
+// ---- コンテキストの使用量（docs/design/worktree-cards.md） ----
+
+/** 色を変える使用率（%）。ここから「多い」、CONTEXT_FULL から「残りわずか」 */
+export const CONTEXT_HIGH = 70;
+export const CONTEXT_FULL = 90;
+
+/** 使用率（%、整数）。窓の大きさがわからなければ undefined */
+export function contextPercent(c: ContextUsage | undefined): number | undefined {
+  if (!c?.window) return undefined;
+  return Math.round((c.tokens / c.window) * 100);
+}
+
+/** 色の段階。割合がわからなければ normal */
+export function contextLevel(c: ContextUsage | undefined): 'normal' | 'high' | 'full' {
+  const pct = contextPercent(c);
+  if (pct === undefined || pct < CONTEXT_HIGH) return 'normal';
+  return pct < CONTEXT_FULL ? 'high' : 'full';
+}
+
+/** 1234 → 1.2k、123456 → 123k、1234567 → 1.2M */
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** 行の 2 行目に出す文字。割合がわかれば「12%」、わからなければトークン数（「120k tok」）。割合と見分けられるよう単位を付ける */
+export function contextLabel(c: ContextUsage | undefined): string {
+  if (!c) return '';
+  const pct = contextPercent(c);
+  return pct === undefined ? `${formatTokens(c.tokens)} tok` : `${pct}%`;
+}
+
+/** ツールチップの行 */
+export function contextTooltip(c: ContextUsage | undefined): string {
+  if (!c) return '';
+  const pct = contextPercent(c);
+  if (pct === undefined) return `コンテキスト：${formatTokens(c.tokens)}（窓の大きさがわからないモデル${c.model ? `：${c.model}` : ''}）`;
+  return `コンテキスト：${pct}%（${formatTokens(c.tokens)} / ${formatTokens(c.window!)}）`;
+}
+
 export function formatAgo(ms: number, now = Date.now()): string {
   if (!ms) return '';
   const min = Math.floor((now - ms) / 60_000);
@@ -139,6 +181,8 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes);
   if (changes) lines.push(changes);
+  const context = contextTooltip(s.context);
+  if (context) lines.push(context);
   return lines.join('\n');
 }
 
