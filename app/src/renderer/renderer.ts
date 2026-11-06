@@ -37,7 +37,7 @@ import {
   type WorktreeCard,
 } from './model.js';
 import { flapRect } from '../shared/flap.js';
-import { flip } from './flip.js';
+import { enabled as motionEnabled, flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
@@ -191,6 +191,7 @@ function toggleArchive(id: string) {
   revived.delete(id);
   setMark(id, archive ? 'archived' : 'shown');
   render(latest);
+  if (archive) announceArchived(id);
 }
 
 function toggleCard(key: string) {
@@ -435,11 +436,40 @@ function tabOf(refs: CardRefs) {
   return flapRect(edgeOf(), rectOf(refs.card));
 }
 
-function showCardFlyout(key: string, open: boolean) {
+function showCardFlyout(key: string, open: boolean, hold?: number) {
   const refs = cards.get(key);
   const card = refs?.data;
   if (!refs || !card || !card.stackCount) return;
-  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), content: cardContent(card), open });
+  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), content: cardContent(card), open, hold });
+}
+
+/** アーカイブしたことを知らせるめくれを、カーソルが離れていても出しておく長さ */
+const ANNOUNCE_HOLD_MS = 900;
+/** 行が消えてカードが縮む動き（flip.ts、0.22 秒）が終わってから、めくれを伸ばす */
+const ANNOUNCE_DELAY_MS = 240;
+let announceTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * セッションをアーカイブしたら、入った先のカードの重なりから、乗せたときと同じめくれを伸ばして見せる。
+ * 動きを減らす設定のときと、一覧を開いているとき（一覧の中でアーカイブした）は何もしない
+ */
+function announceArchived(id: string) {
+  clearTimeout(announceTimer);
+  if (!motionEnabled() || flyOpen) return;
+  announceTimer = setTimeout(() => {
+    if (flyOpen) return;
+    for (const [key, refs] of cards) {
+      const card = refs.data;
+      if (!card || !refs.el.isConnected || !card.timeline.some((t) => t.session.id === id && t.archived)) continue;
+      // カードが一覧の見えている所から外れていたら出さない（めくれがタイトルバーなどにかかるため）
+      const view = cardsEl.getBoundingClientRect();
+      const tab = tabOf(refs);
+      if (tab.y < view.top || tab.y + tab.height > view.bottom) return;
+      // すでにこのカードのめくれを出しているなら、そのままにする
+      if (flyKey !== key) showCardFlyout(key, false, ANNOUNCE_HOLD_MS);
+      return;
+    }
+  }, ANNOUNCE_DELAY_MS);
 }
 
 /**
