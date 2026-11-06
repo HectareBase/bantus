@@ -9,6 +9,9 @@
   --selected: rgba(0, 0, 0, 0.06);
   --control-stroke: rgba(0, 0, 0, 0.14);
   --control: rgba(255, 255, 255, 0.7);
+  /* select を開いたときの一覧。ネイティブの一覧に重なるので不透明にする（Windows 11 のメニューの色） */
+  --menu: #f9f9f9;
+  --menu-text: #1a1a1a;
   --accent: #005fb8;
   --on-accent: #ffffff;
   --focus: #1a1a1a;
@@ -25,6 +28,8 @@
     --selected: rgba(255, 255, 255, 0.08);
     --control-stroke: rgba(255, 255, 255, 0.12);
     --control: rgba(255, 255, 255, 0.06);
+    --menu: #2b2b2b;
+    --menu-text: #ffffff;
     --accent: #60cdff;
     --on-accent: #000000;
     --focus: #ffffff;
@@ -148,6 +153,12 @@ select {
   border: 1px solid var(--control-stroke);
   border-radius: 4px;
   background: var(--control);
+}
+
+/* 一覧の選択肢は select の半透明の背景と inherit の文字色を受け継ぐため、色をはっきり決める */
+option, optgroup {
+  background: var(--menu);
+  color: var(--menu-text);
 }
 
 input[type="range"] { width: 200px; accent-color: var(--accent); }
