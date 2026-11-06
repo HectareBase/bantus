@@ -19,6 +19,8 @@ const POLL_MS = 30;
 const REOPEN_GUARD_MS = 400;
 /** 一覧を開いたまま、ほかの重なりに乗ったとき、切り替えるまでとどまるのを待つ長さ */
 const SWITCH_DWELL_MS = 150;
+/** めくれをカーソルによらず出しておける長さの上限（FlyRequest.hold） */
+const MAX_HOLD_MS = 3000;
 /** 出し入れの記録（FLY_DEBUG を付けたときだけ。docs/design/worktree-cards.md の「手で確かめること」） */
 const dbg = (...a: unknown[]) => {
   if (process.env.FLY_DEBUG) console.log('[fly]', ...a);
@@ -60,7 +62,8 @@ export function isFlyRequest(v: unknown): v is FlyRequest {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
   return typeof r.key === 'string' && typeof r.count === 'number' && typeof r.open === 'boolean'
-    && isRect(r.anchor) && isRect(r.hit) && (r.tab === undefined || isRect(r.tab)) && isContent(r.content);
+    && isRect(r.anchor) && isRect(r.hit) && (r.tab === undefined || isRect(r.tab)) && isContent(r.content)
+    && (r.hold === undefined || (typeof r.hold === 'number' && Number.isFinite(r.hold) && r.hold >= 0 && r.hold <= MAX_HOLD_MS));
 }
 
 export function isContent(v: unknown): v is FlyContent {
@@ -131,6 +134,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   let solid: TipRect[] = [];
   /** 重なりの的とめくれが飛び出す所（画面の座標）。ここかめくれの上にいる間は、めくれを消さない */
   let hit: Rect[] = [];
+  /** この時刻（Date.now）までは、カーソルが外れていてもめくれを消さない（FlyRequest.hold） */
+  let holdUntil = 0;
   let ignoring = true;
   let poll: NodeJS.Timeout | undefined;
   /** 重なりに反応する範囲（ウィジェットの中の座標、CSS px） */
@@ -214,7 +219,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     if (zone.solid && ignoring) win.moveTop();
     setIgnore(!zone.solid);
     // めくれだけのときは、重なりの的とめくれのどちらからも外れたら、すぐ消す
-    if (!open && !zone.solid && !zone.hit) hide();
+    // アーカイブを知らせているめくれ（hold）は、その長さが過ぎるまで消さない
+    if (!open && !zone.solid && !zone.hit && Date.now() >= holdUntil) hide();
     // めくれや一覧の上では、ほかの重なりの範囲に重なっていても反応しない
     watchOutside(c, zone.solid);
   }
@@ -223,6 +229,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     dbg('hide', key);
     cancelSwitch();
     const had = key !== undefined;
+    holdUntil = 0;
     key = undefined;
     open = false;
     ready = false;
@@ -351,6 +358,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
       solid = [];
       // 画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる
       hit = hitRects(wb, request, placed.zoom);
+      // 出している間はいつもカーソルを見ている（syncPoll）ので、長さが過ぎたら tick が消す
+      holdUntil = request.hold && !request.open ? Date.now() + request.hold : 0;
       // めくれの画面は CSS px で描くので、画面の座標から戻す。高さは画面から届いた値（CSS px）のまま
       const show: FlyShow = {
         key: request.key,
