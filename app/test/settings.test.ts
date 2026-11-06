@@ -101,6 +101,17 @@ describe('normalizeSettings の表示の拡大率', () => {
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ zoom: '125' }).zoom, 100));
 });
 
+describe('normalizeSettings の行の上下の余白', () => {
+  it('なければ 4px（今までの見た目）', () => assert.equal(normalizeSettings({}).rowPadding, 4));
+  it('0〜12 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ rowPadding: 0 }).rowPadding, 0);
+    assert.equal(normalizeSettings({ rowPadding: -3 }).rowPadding, 0);
+    assert.equal(normalizeSettings({ rowPadding: 40 }).rowPadding, 12);
+    assert.equal(normalizeSettings({ rowPadding: 6.6 }).rowPadding, 7);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ rowPadding: '8' }).rowPadding, 4));
+});
+
 describe('設定画面のカテゴリ', () => {
   const layout = (id: string) => {
     const out: [string, string[]][] = [];
@@ -123,10 +134,11 @@ describe('設定画面のカテゴリ', () => {
       ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
       ['状態の色', ['statusColors']],
     ]));
-  it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>
+  it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [
       ['アーカイブ', ['mainArchiveMinutes']],
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
+      ['行の大きさ', ['rowPadding']],
       ['行に出すもの', ['showUpdated', 'showState']],
     ]));
   it('通知は 知らせるとき → 音 → Windows の通知', () =>

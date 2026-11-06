@@ -151,10 +151,10 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, showState, archive, archivedCards } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, showState, archive, archivedCards,
+    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, archive, archivedCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors,
   };
 }

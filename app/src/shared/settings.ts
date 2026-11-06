@@ -32,6 +32,8 @@ export interface Settings {
   worktreeOrder: SortOrder;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
+  /** 行（セッション）の上下の余白（px）。小さくすると 1 画面に多くの行が入る */
+  rowPadding: number;
   /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
   showUpdated: boolean;
   /** 行の 2 行目に、状態を文字で出す（「処理中」「許可待ち」など） */
@@ -117,6 +119,7 @@ export const DEFAULT_SETTINGS: Settings = {
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
   sessionOrder: 'fixed',
+  rowPadding: 4,
   showUpdated: true,
   showState: true,
   openAtLogin: false,
@@ -184,7 +187,7 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string })
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' });
 
@@ -265,6 +268,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'sessionOrder', category: 'cards', group: '並び順', type: 'segmented',
     label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上',
     options: ORDER_OPTIONS,
+  },
+  {
+    key: 'rowPadding', category: 'cards', group: '行の大きさ', type: 'slider',
+    label: '上下の余白', description: 'セッションの行の上と下の余白。小さくすると 1 画面に多くの行が入る',
+    min: 0, max: 12, step: 1, unit: 'px',
   },
   {
     key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
