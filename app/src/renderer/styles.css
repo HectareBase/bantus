@@ -244,7 +244,7 @@ html[data-edge="left"] .stack-hit { right: -8px; }
   flex-basis: 100%;
   min-width: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   /* 名前の位置（見出しの左の余白のあと、印の列 16px + 2px + すき間 6px）にそろえる */
   padding-left: 24px;
@@ -436,10 +436,19 @@ html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
 .toggle[data-can]:not([data-held]):hover .alt { opacity: 0.75; }
 
 /* 保留の行の 2 行目：「保留」の文字とメモの枠。「◯分前」は出さない */
-.row[data-held] .state-pill, .card-hold .state-pill { background: var(--held-bg); color: var(--held); }
+/* 「保留」の文字とメモの枠は同じ高さ（--hold-h）にし、縦の真ん中でそろえる。入力中に枠が折り返して高くなったら、上端でそろえる */
+:root { --hold-h: 16px; }
+.row[data-held] .state-pill, .card-hold .state-pill {
+  display: inline-flex;
+  align-items: center;
+  height: var(--hold-h);
+  background: var(--held-bg);
+  color: var(--held);
+}
 .row[data-held] .state-pill { flex: none; }
 .row[data-held] .when { display: none; }
-.row[data-held] .meta { align-items: flex-start; }
+.row[data-held] .meta { align-items: center; }
+.row[data-held] .meta:has(.memo[data-editing]), .card-hold:has(.memo[data-editing]) { align-items: flex-start; }
 
 /* メモの枠。メモが空ならペンだけ、あればメモだけを 1 行で（はみ出す分は …）。押すとその場で入力欄になる（memo.ts） */
 .memo {
@@ -447,19 +456,20 @@ html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
   min-width: 0;
   max-width: 100%;
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
+  min-height: var(--hold-h);
   padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--held) 70%, transparent);
   border-radius: 4px;
-  line-height: 13px;
+  line-height: calc(var(--hold-h) - 2px);
   color: var(--text-secondary);
   cursor: text;
   overflow: hidden;
 }
 .memo[hidden] { display: none; }
 .memo:hover { background: var(--held-bg); }
-.memo-pen { display: flex; padding: 1px 0; color: var(--held); }
+.memo-pen { display: flex; color: var(--held); }
 .memo-pen svg { width: 11px; height: 11px; }
 .memo-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .memo-text:empty { display: none; }
