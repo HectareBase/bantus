@@ -341,7 +341,8 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 /* 設定で更新日時を出さないとき */
 html.hide-updated .when { display: none; }
 .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
+/* 2 行目の高さは、保留の「保留」とメモの枠（--hold-h）と同じに固定する。保留を切り替えても行の高さが変わらないように */
+.meta { display: flex; align-items: center; height: var(--hold-h); gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .when { flex: none; }
 /* 状態の文字の札（.badge と同じ作り）。幅が足りないときは日時を残し、札のほうを「…」で切る */
 .state-pill {
@@ -447,8 +448,8 @@ html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
 }
 .row[data-held] .state-pill { flex: none; }
 .row[data-held] .when { display: none; }
-.row[data-held] .meta { align-items: center; }
-.row[data-held] .meta:has(.memo[data-editing]), .card-hold:has(.memo[data-editing]) { align-items: flex-start; }
+.row[data-held] .meta:has(.memo[data-editing]) { height: auto; align-items: flex-start; }
+.card-hold:has(.memo[data-editing]) { align-items: flex-start; }
 
 /* メモの枠。メモが空ならペンだけ、あればメモだけを 1 行で（はみ出す分は …）。押すとその場で入力欄になる（memo.ts） */
 .memo {
@@ -458,7 +459,7 @@ html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: var(--hold-h);
+  height: var(--hold-h);
   padding: 0 5px;
   border: 1px solid color-mix(in srgb, var(--held) 70%, transparent);
   border-radius: 4px;
@@ -489,7 +490,7 @@ html.hide-updated.hide-state .row:not([data-held]) .meta { display: none; }
   line-height: inherit;
   user-select: text;
 }
-.memo[data-editing] { background: rgba(var(--card-rgb), 1); border-color: var(--held); }
+.memo[data-editing] { height: auto; min-height: var(--hold-h); background: rgba(var(--card-rgb), 1); border-color: var(--held); }
 .memo[data-editing] textarea { display: block; }
 .memo[data-editing] .memo-text { display: none; }
 /* 入力欄の幅を決めるために文字の幅を測る、見えない要素 */
