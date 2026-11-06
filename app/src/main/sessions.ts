@@ -1,7 +1,7 @@
 // Claude デスクトップのセッション一覧と状態を読む。データは読むだけで、書き換えない。
 // 読み取り元と項目は docs/research/data-sources.md、状態の判定は docs/research/session-status.md。
 
-import { readFileSync, readdirSync, watch, type FSWatcher } from 'node:fs';
+import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { SessionState, SessionView } from '../shared/types';
@@ -149,6 +149,39 @@ function findWorktreeRoot(folder: string, commonDir: string): string | undefined
   }
 }
 
+/** gitAnchors の 1 つ目と同じ形（gitRoot は作業フォルダの一番上、commonDir は元のリポジトリの .git） */
+interface GitAnchor {
+  gitRoot: string;
+  commonDir: string;
+}
+
+/**
+ * gitAnchors を持たないセッションのために、folder から上へ `.git` を探す。読むだけで、何も書き込まない。
+ * `.git` がフォルダならそのリポジトリ、ファイル（`gitdir: <場所>`）ならワークツリーで、その gitdir の `commondir`
+ * （なければ `<gitdir>/../..`）を commonDir とする。git の外なら undefined
+ */
+function findGitAnchor(folder: string): GitAnchor | undefined {
+  for (let dir = resolve(folder); ; dir = dirname(dir)) {
+    const dotGit = join(dir, '.git');
+    try {
+      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, commonDir: dotGit };
+      const m = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, 'utf8'));
+      if (!m?.[1]) return undefined;
+      const gitDir = resolve(dir, m[1].trim());
+      let commonDir: string;
+      try {
+        commonDir = resolve(gitDir, readFileSync(join(gitDir, 'commondir'), 'utf8').trim());
+      } catch {
+        commonDir = resolve(gitDir, '..', '..');
+      }
+      return { gitRoot: dir, commonDir };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
+    }
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+
 export const folderKey =(path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
 
 /** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
@@ -230,6 +263,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
     if (!roots.has(k)) roots.set(k, findWorktreeRoot(folder, commonDir));
     return roots.get(k);
   };
+  /** gitAnchors のないセッションの作業フォルダから探した git の情報（同じフォルダを何度も探さない） */
+  const found = new Map<string, GitAnchor | undefined>();
+  const gitAnchorOf = (folder: string) => {
+    const k = folderKey(folder);
+    if (!found.has(k)) found.set(k, findGitAnchor(folder));
+    return found.get(k);
+  };
   /** アプリが作ったワークツリーのフォルダ → そのセッションのワークツリー（同じフォルダで始めたセッションを同じカードにまとめる） */
   const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
   /** ワークツリーの名前を持たず、フォルダから見つけたセッション → そのフォルダ */
@@ -249,7 +289,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const r = running.get(d.cliSessionId);
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
-      const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
+      // リポジトリの外のワークツリー（git worktree add）で始めたセッションには gitAnchors がないことがあるので、作業フォルダから探す
+      const startDir: string = d.originCwd || d.cwd || '';
+      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors)
+        ? d.gitAnchors[0]
+        : startDir
+          ? gitAnchorOf(startDir)
+          : undefined;
       // アプリが作ったワークツリーでは gitRoot が元のリポジトリを指す。リポジトリの外のワークツリー（git worktree add）では
       // gitRoot がワークツリーのフォルダになるので、commonDir（元のリポジトリの .git）の親を元のリポジトリとする
       const commonDir: string | undefined = anchor?.commonDir;
