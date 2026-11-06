@@ -55,6 +55,8 @@ let lastSent = '';
 let appliedZoom = 1;
 /** タスクバーの点滅を止めるタイマー */
 let flashTimer: NodeJS.Timeout | undefined;
+/** 本当に終わるところ（トレイの「終了」、OS のシャットダウン）。立っていないときは、ウィジェットを閉じずに隠す */
+let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
 const toasts = new Set<Notification>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
@@ -230,7 +232,8 @@ function createWidget(): BrowserWindow {
     frame: false,
     resizable: false,
     movable: false,
-    minimizable: false,
+    // タスクバーのボタンのクリックで、最小化と元に戻すを切り替える
+    minimizable: true,
     maximizable: false,
     alwaysOnTop: getSettings().pinned,
     show: false,
@@ -249,6 +252,35 @@ function createWidget(): BrowserWindow {
     sendSessions(true);
     if (process.env.WIDGET_SCREENSHOT) void captureAndQuit(w, process.env.WIDGET_SCREENSHOT);
   });
+  // タスクバーなどから閉じても、終わらずにトレイへ隠れる。本当に閉じるのは終了するときだけ
+  // Windows のシャットダウンやサインアウトでは before-quit が来ないので、ここで目印を立てる（止めるとシャットダウンを妨げる）
+  w.on('session-end', () => {
+    quitting = true;
+  });
+  w.on('close', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    w.hide();
+  });
+  // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
+  w.on('move', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  w.on('resize', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  // 隠したときと最小化したときは、ツールチップとめくれも隠す
+  const hidden = () => {
+    hideTip();
+    flyout?.setWidgetVisible(false);
+  };
+  w.on('hide', hidden);
+  w.on('minimize', hidden);
+  // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
+  w.on('show', () => flyout?.setWidgetVisible(true));
+  w.on('restore', () => flyout?.setWidgetVisible(true));
   return w;
 }
 
@@ -401,11 +433,17 @@ function openSettingsWindow() {
   w.on('closed', () => (settingsWin = undefined));
 }
 
-/** ウィジェットを前に出す（固定を外して後ろに回ったときや、隠れたときに使う） */
+/** ウィジェットを前に出す（固定を外して後ろに回ったとき、最小化したとき、閉じてトレイに隠れたときに使う） */
 function showWidget() {
-  if (!win || win.isDestroyed()) return;
-  win.show();
+  // ふつうは閉じても隠れるだけだが、万一なくなっていたら作り直す（表示は ready-to-show で行う）
+  if (!win || win.isDestroyed()) {
+    win = createWidget();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
   win.moveTop();
+  win.focus();
 }
 
 /** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで表示、設定、終了 */
@@ -692,22 +730,8 @@ app.whenReady().then(() => {
   ipcMain.on('tip:size', (_e, width: unknown, height: unknown) => {
     if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
   });
-  // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
-  win.on('move', () => {
-    hideTip();
-    flyout?.hide();
-  });
-  win.on('resize', () => {
-    hideTip();
-    flyout?.hide();
-  });
-  win.on('hide', () => {
-    hideTip();
-    flyout?.setWidgetVisible(false);
-  });
-  // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
-  win.on('show', () => flyout?.setWidgetVisible(true));
-  if (win.isVisible()) flyout.setWidgetVisible(true);
+  // ウィジェットのイベント（隠す・最小化など）は createWidget で登録する。めくれより先に出ていたときだけ、ここで知らせる
+  if (win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));
@@ -742,6 +766,11 @@ app.whenReady().then(() => {
     stopForegroundProbe();
     tray?.destroy();
   });
+});
+
+// 終わるときだけ、ウィジェットを本当に閉じる（ふつうに閉じたときはトレイへ隠れる）
+app.on('before-quit', () => {
+  quitting = true;
 });
 
 app.on('window-all-closed', () => app.quit());
