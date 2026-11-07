@@ -6,7 +6,7 @@ import {
   NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
-  alertActions, hasAlertOutput, newlyFlagged, openedInClaude,
+  alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
 import { view } from './helpers';
@@ -15,6 +15,17 @@ const MIN = 60_000;
 const wt = (key: string) => ({ key, label: key, branch: `claude/${key}-123abc` });
 const opts = (patch: Partial<ArchiveOptions> = {}): ArchiveOptions => ({ ...NO_ARCHIVE, ...patch });
 const clean: GitChanges = { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false };
+
+describe('canToggleArchive：ホイールクリックで切り替えてよいか', () => {
+  it('処理中・対応待ちでまだアーカイブしていないときは切り替えない', () => {
+    assert.equal(canToggleArchive('busy', false), false);
+    assert.equal(canToggleArchive('waiting', false), false);
+  });
+  it('それ以外と、アーカイブ済みのものは切り替えられる', () => {
+    assert.equal(canToggleArchive('idle', false), true);
+    assert.equal(canToggleArchive('busy', true), true);
+  });
+});
 
 describe('buildRepos：カードの分け方', () => {
   it('リポジトリごとにまとめ、ワークツリー（元のフォルダを含む）ごとに 1 枚のカードにする', () => {

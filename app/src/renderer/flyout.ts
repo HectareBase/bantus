@@ -7,7 +7,7 @@
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { createIcon } from './icon.js';
-import { statusIconName, waitingLabel } from './model.js';
+import { canToggleArchive, statusIconName, waitingLabel } from './model.js';
 import { setStatus } from './status-icon.js';
 
 const flap = document.getElementById('flap')!;
@@ -97,6 +97,15 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     el.append(act);
   }
   el.addEventListener('click', () => window.flyoutApi.action({ type: 'open', id: item.id }));
+  // ホイールクリックでトグルと同じ処理を呼ぶ（トグルを出さない行は切り替えない）。mousedown でオートスクロールを止める
+  el.addEventListener('mousedown', (e) => {
+    if (e.button === 1) e.preventDefault();
+  });
+  el.addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    if (kind !== 'cards' && canToggleArchive(item.state, item.archived)) window.flyoutApi.action({ type: 'toggle', id: item.id });
+  });
   // 開いたときは一覧がカーソルの下に広がるので、乗っただけでは出さない。カーソルを動かしたときだけ、下の段にまとめを出す
   // 中身が変わったときに Chromium が送る動きのない pointermove も、動かしたとは見なさない
   el.addEventListener('pointermove', (e) => {

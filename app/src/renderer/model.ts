@@ -398,6 +398,11 @@ export function isLive(s: SessionView, attention: ReadonlySet<string>): boolean 
   return s.state === 'busy' || s.state === 'waiting' || attention.has(s.id);
 }
 
+/** ホイールクリックでアーカイブを切り替えてよいか。トグルが出ないとき（処理中・対応待ちでまだアーカイブしていない）は切り替えない */
+export function canToggleArchive(state: SessionView['state'], archived: boolean): boolean {
+  return archived || (state !== 'busy' && state !== 'waiting');
+}
+
 /** 戻ったセッションを出しておく分（main の自動アーカイブがオフのとき） */
 export const REVIVE_GRACE_MINUTES = 10;
 

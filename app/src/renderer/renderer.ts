@@ -23,6 +23,7 @@ import {
   pickAlerts,
   revivedCards,
   revivedSessions,
+  canToggleArchive,
   isLive,
   shortcutTarget,
   resolveFocus,
@@ -338,6 +339,16 @@ function getRow(s: SessionView): RowRefs {
     };
     const id = s.id;
     el.addEventListener('click', () => openRow(id));
+    // ホイールクリックで、トグルと同じ処理を呼ぶ。mousedown で既定の動き（オートスクロール）を止める
+    el.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    el.addEventListener('auxclick', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      const state = rows.get(id)?.data?.state;
+      if (state && canToggleArchive(state, false)) toggleArchive(id);
+    });
     refs.act.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleArchive(id);
