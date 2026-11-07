@@ -724,6 +724,9 @@ describe('コミットされていない変更と、元のブランチとの差'
   it('マージ済みなら、内訳の代わりにマージのアイコンだけ', () => {
     assert.deepEqual(changeItems({ ...some, merged: true }), [{ icon: 'git-merge', count: 0 }]);
     assert.equal(changesTooltip({ ...clean, merged: true }), 'マージ済み');
+    // 分岐元ではなく main に入っていたときは、先の名前と、分岐元には入っていないことを出す
+    assert.equal(changesTooltip({ ...clean, ahead: 1, merged: true, mergedInto: 'main' }, 'develop'), 'main にマージ済み（develop には未マージ）');
+    assert.equal(changesTooltip({ ...clean, merged: true, mergedInto: 'main' }), 'main にマージ済み');
   });
   it('元のフォルダの遅れは、追跡するブランチの名前を出す', () => {
     assert.equal(changesTooltip({ ...clean, ahead: 1, behind: 3, upstream: 'origin/main' }), 'push していないコミット：1\norigin/main からの遅れ：3');

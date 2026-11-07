@@ -154,6 +154,29 @@ describe('元のブランチとの差', () => {
   it('元のブランチが手元になければ、差なし', async () =>
     assert.deepEqual(await readBranchInfo('C:/W', 'gone', fake({})), { behind: 0, ahead: 0, merged: false }));
 
+  describe('マージした先（develop から切って main にマージしたもの）', () => {
+    const dev = 'rev-list --left-right --count refs/heads/develop...HEAD';
+    it('元のブランチに入っていなくても、main にマージコミットで入っていればマージ済みにし、先の名前を入れる', async () =>
+      assert.deepEqual(
+        await readBranchInfo('C:/W', 'develop', fake({ [dev]: '0\t1\n', [counts]: '1\t0\n', [first]: 'm\n', 'rev-parse m^1 HEAD': 'p\nh\n' }), undefined, 'main'),
+        { behind: 0, ahead: 1, merged: true, mergedInto: 'main' },
+      ));
+    it('main の線の上にある（main に追いついただけ）なら、マージ済みにしない', async () =>
+      assert.deepEqual(
+        await readBranchInfo('C:/W', 'develop', fake({ [dev]: '0\t3\n', [counts]: '0\t0\n' }), undefined, 'main'),
+        { behind: 0, ahead: 3, merged: false },
+      ));
+    it('元のブランチに入っていないコミットがなければ、main は調べない', async () => {
+      const keys: string[] = [];
+      const run = fake({ [dev]: '2\t0\n', 'rev-list --first-parent --reverse HEAD..refs/heads/develop': '' });
+      const info = await readBranchInfo('C:/W', 'develop', (dir, args) => (keys.push(args.join(' ')), run(dir, args)), undefined, 'main');
+      assert.deepEqual(info, { behind: 2, ahead: 0, merged: false });
+      assert.ok(keys.every((k) => !k.includes('refs/heads/main')), keys.join('\n'));
+    });
+    it('元のブランチが main と同じなら、もう一度は調べない', async () =>
+      assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [counts]: '2\t1\n' }), undefined, 'main'), { behind: 2, ahead: 1, merged: false }));
+  });
+
   it('元のブランチがあるフォルダだけ、差も調べて件数に入れる', async () => {
     const calls: string[] = [];
     const branch = async (dir: string, base: string) => {
@@ -171,6 +194,21 @@ describe('元のブランチとの差', () => {
       { changed: 0, untracked: 0, ahead: 3, behind: 5, merged: true, aheadOfBase: true },
       { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false },
     ]);
+  });
+
+  it('元のフォルダのブランチを渡し、main に入っていたらマージした先を changes に入れる', async () => {
+    const mains: (string | undefined)[] = [];
+    const branch = async (_dir: string, _base: string, _remote?: string, main?: string) => {
+      mains.push(main);
+      return { behind: 0, ahead: 1, merged: true, mergedInto: 'main' };
+    };
+    const status = createGitStatus(() => {}, async () => '', () => 0, branch, () => true);
+    const list = () => [view({ workDir: 'C:/W', baseBranch: 'develop', mainBranch: 'main' })];
+    status.apply(list());
+    await tick();
+    await tick();
+    assert.deepEqual(mains, ['main']);
+    assert.deepEqual(status.apply(list())[0]!.changes, { changed: 0, untracked: 0, ahead: 1, behind: 0, merged: true, mergedInto: 'main', aheadOfBase: true });
   });
 
   it('フォルダがもうなければ、ないことを印にする', async () => {

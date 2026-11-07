@@ -93,6 +93,8 @@ export const ja = {
   /** コミットされていない変更（docs/design/git-changes.md） */
   changes: {
     merged: 'マージ済み',
+    /** 分岐元ではなく main（元のフォルダのブランチ）に入っていたとき。base は分岐元（わからなければ undefined） */
+    mergedInto: (into: string, base?: string) => (base ? `${into} にマージ済み（${base} には未マージ）` : `${into} にマージ済み`),
     changed: (n: number) => `変更 ${n}`,
     untracked: (n: number) => `未追跡 ${n}`,
     /** 内訳（「変更 2」「未追跡 1」）を並べるときの区切り */
@@ -146,6 +148,10 @@ export const ja = {
     startedInUnknown: '元のフォルダで始めたセッション',
     /** タイムラインの根（分岐元）の下の段 */
     baseRoot: '分岐元',
+    /** 分岐元ではなく main に入ってマージ済みにしたとき */
+    baseRootMerged: (into: string) => `分岐元（${into} にマージ済み）`,
+    /** マージ済みのカードの見出しのツールチップ。分岐元ではなく main に入っていたとき */
+    mergedInto: (into: string) => `${into} にマージ済み`,
     unarchive: 'アーカイブから戻す',
     archive: 'アーカイブ',
     merged: 'マージ済み',

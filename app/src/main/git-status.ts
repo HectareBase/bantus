@@ -55,10 +55,15 @@ export interface BranchInfo {
   /** HEAD にあって、元のブランチにまだ入っていないコミット */
   ahead: number;
   merged: boolean;
+  /** 元のブランチではなく main（元のフォルダの今のブランチ）に入ってマージ済みにしたとき、そのブランチ名 */
+  mergedInto?: string;
 }
 
-/** remoteRef を渡すと、手元の元のブランチのほかに、そのリモートの写しに入ったかも調べる */
-export type ReadBranch = (dir: string, base: string, remoteRef?: string) => Promise<BranchInfo>;
+/**
+ * remoteRef を渡すと、手元の元のブランチのほかに、そのリモートの写しに入ったかも調べる。
+ * main（元のフォルダの今のブランチ）を渡すと、元のブランチに入っていないときに、そこに入ったかも調べる
+ */
+export type ReadBranch = (dir: string, base: string, remoteRef?: string, main?: string) => Promise<BranchInfo>;
 
 function git(dir: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -89,8 +94,10 @@ export function parseCounts(output: string): { left: number; right: number } {
  * 元のブランチが手元になければ、遅れ 0・マージ済みでないとする。
  * remoteRef（`refs/remotes/<リモート>/<元のブランチ>`）を渡すと、手元でマージ済みでなくても、そこに同じ決まりで入っていれば
  * マージ済みにする（GitHub でマージしたものを、手元に取り込む前に見分ける。docs/design/git-fetch.md）。遅れは手元と比べたまま
+ * main（元のフォルダの今のブランチ）を渡すと、元のブランチにまだ入っていないコミットがあるときだけ、main に同じ決まりで
+ * 入っていればマージ済みにして mergedInto に名前を入れる（develop から切って main にマージしたもの）。遅れと ahead は元のブランチと比べたまま
  */
-export async function readBranchInfo(dir: string, base: string, run = git, remoteRef?: string): Promise<BranchInfo> {
+export async function readBranchInfo(dir: string, base: string, run = git, remoteRef?: string, main?: string): Promise<BranchInfo> {
   const ref = `refs/heads/${base}`;
   let counts: { left: number; right: number };
   try {
@@ -100,12 +107,21 @@ export async function readBranchInfo(dir: string, base: string, run = git, remot
   }
   const info = { behind: counts.left, ahead: counts.right };
   if (await mergedInto(dir, ref, counts, run)) return { ...info, merged: true };
-  if (!remoteRef) return { ...info, merged: false };
+  if (remoteRef && (await mergedIntoRef(dir, remoteRef, run))) return { ...info, merged: true };
+  // 元のブランチに入っていないコミットがあるときだけ調べる（作ったばかりのものや、元のブランチに入ったものは調べない）
+  if (main && main !== base && info.ahead > 0 && (await mergedIntoRef(dir, `refs/heads/${main}`, run))) {
+    return { ...info, merged: true, mergedInto: main };
+  }
+  return { ...info, merged: false };
+}
+
+/** ref と HEAD の差を数えてから mergedInto で調べる。ref がなければ false */
+async function mergedIntoRef(dir: string, ref: string, run: typeof git): Promise<boolean> {
   try {
-    const remote = parseCounts(await run(dir, ['rev-list', '--left-right', '--count', `${remoteRef}...HEAD`]));
-    return { ...info, merged: await mergedInto(dir, remoteRef, remote, run) };
+    const counts = parseCounts(await run(dir, ['rev-list', '--left-right', '--count', `${ref}...HEAD`]));
+    return await mergedInto(dir, ref, counts, run);
   } catch {
-    return { ...info, merged: false };
+    return false;
   }
 }
 
@@ -157,6 +173,8 @@ export function withUpstream(changes: GitChanges, upstream: Upstream | undefined
 interface Folder {
   dir: string;
   base?: string;
+  /** 元のフォルダの今のブランチ。元のブランチと違えば、マージした先として調べる */
+  main?: string;
   commonDir?: string;
   states: SessionState[];
 }
@@ -169,7 +187,7 @@ export function createGitStatus(
   onUpdate: () => void,
   run: RunStatus = runGit,
   now = () => Date.now(),
-  branch: ReadBranch = (dir, base, remoteRef) => readBranchInfo(dir, base, git, remoteRef),
+  branch: ReadBranch = (dir, base, remoteRef, main) => readBranchInfo(dir, base, git, remoteRef, main),
   exists: (dir: string) => boolean = existsSync,
   options: () => GitOptions = () => DEFAULT_OPTIONS,
 ) {
@@ -178,7 +196,7 @@ export function createGitStatus(
   const lastStates = new Map<string, SessionState[]>();
   /** 作業フォルダの目印 → リポジトリの目印（取得のあとで、そのリポジトリの作業フォルダを調べ直すため） */
   const repoOf = new Map<string, string>();
-  const queue: { key: string; dir: string; base?: string; commonDir?: string }[] = [];
+  const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string }[] = [];
   let running = false;
 
   async function drain() {
@@ -186,7 +204,7 @@ export function createGitStatus(
     running = true;
     let changed = false;
     while (queue.length) {
-      const { key, dir, base, commonDir } = queue.shift()!;
+      const { key, dir, base, main, commonDir } = queue.shift()!;
       const opts = options();
       let changes: GitChanges | undefined;
       let upstream: Upstream | undefined;
@@ -195,9 +213,10 @@ export function createGitStatus(
         changes = parseStatus(output);
         if (base) {
           const remote = commonDir ? opts.remoteOf(commonDir) : undefined;
-          const info = await branch(dir, base, remote ? `refs/remotes/${remote}/${base}` : undefined);
+          const info = await branch(dir, base, remote ? `refs/remotes/${remote}/${base}` : undefined, main);
           changes.behind = info.behind;
           changes.merged = info.merged;
+          if (info.mergedInto) changes.mergedInto = info.mergedInto;
           // Claude が作るワークツリーのブランチには、ふつう追跡するブランチがない。そのときは push していないコミットの代わりに、
           // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）
           if (!hasUpstream(output)) {
@@ -219,7 +238,7 @@ export function createGitStatus(
 
   /** 作業フォルダの目印 → そのフォルダを使うセッションの状態。調べ直しが要るものを並べる */
   function update(folders: Map<string, Folder>) {
-    for (const [key, { dir, base, commonDir, states }] of folders) {
+    for (const [key, { dir, base, main, commonDir, states }] of folders) {
       if (commonDir) repoOf.set(key, folderKey(commonDir));
       const prev = lastStates.get(key);
       lastStates.set(key, states);
@@ -229,7 +248,7 @@ export function createGitStatus(
       const maxAge = active ? MAX_AGE_ACTIVE_MS : MAX_AGE_STOPPED_MS;
       // 処理中だったセッションが処理中でなくなった：ターンが終わり、変更が増えたかもしれない
       const turnEnded = prev !== undefined && prev.filter((s) => s === 'busy').length > states.filter((s) => s === 'busy').length;
-      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, commonDir: commonDir && folderKey(commonDir) });
+      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir) });
     }
     for (const key of cache.keys()) if (!folders.has(key)) cache.delete(key);
     for (const key of lastStates.keys()) if (!folders.has(key)) lastStates.delete(key);
@@ -243,8 +262,9 @@ export function createGitStatus(
     for (const s of sessions) {
       if (!s.workDir) continue;
       const key = folderKey(s.workDir);
-      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, commonDir: s.commonDir, states: [] };
+      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, main: s.mainBranch, commonDir: s.commonDir, states: [] };
       f.base ??= s.baseBranch;
+      f.main ??= s.mainBranch;
       f.commonDir ??= s.commonDir;
       f.states.push(s.state);
       folders.set(key, f);

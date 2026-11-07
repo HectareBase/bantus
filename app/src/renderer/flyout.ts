@@ -149,7 +149,7 @@ function line(side: 'in' | 'out', link: 'solid' | 'dashed'): HTMLElement {
  * 分岐元のブランチの行。起点（元のフォルダで始めたセッション）のすぐ上、起点がなければ一番下に置く。
  * セッションではないので押せない。線は上の行のつなぎ方をそのまま通す（in / out）
  */
-function baseNode(base: { branch: string; tip: string }, link: { in?: 'solid' | 'dashed'; out?: 'solid' | 'dashed' }): HTMLElement {
+function baseNode(base: { branch: string; tip: string; mergedInto?: string }, link: { in?: 'solid' | 'dashed'; out?: 'solid' | 'dashed' }): HTMLElement {
   const el = document.createElement('div');
   el.className = 'node linked base-root';
   el.title = base.tip;
@@ -165,7 +165,7 @@ function baseNode(base: { branch: string; tip: string }, link: { in?: 'solid' | 
   title.textContent = base.branch;
   const sub = document.createElement('div');
   sub.className = 'sub';
-  sub.textContent = ja.flyout.baseRoot;
+  sub.textContent = base.mergedInto ? ja.flyout.baseRootMerged(base.mergedInto) : ja.flyout.baseRoot;
   txt.append(title, sub);
   el.append(ic, txt);
   return el;
@@ -176,7 +176,7 @@ function cardBlock(card: FlyCard): HTMLElement {
   el.className = 'fcard';
   const head = document.createElement('div');
   head.className = 'fcard-head';
-  head.title = card.merged ? ja.flyout.merged : ja.flyout.archivedCard;
+  head.title = card.mergedInto ? ja.flyout.mergedInto(card.mergedInto) : card.merged ? ja.flyout.merged : ja.flyout.archivedCard;
   head.append(createIcon(card.merged ? 'git-merge' : 'git-branch'));
   const name = document.createElement('span');
   name.className = 'name';
