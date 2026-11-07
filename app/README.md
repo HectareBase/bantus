@@ -24,6 +24,7 @@ npm start       # いつものウィジェットと並べて起動する
 ```
 - `npm run setup`（`scripts/setup.mjs`）は、main のチェックアウトでは今までどおり `npm install` を実行し、ワークツリーでは main の `app/node_modules` へのジャンクション（管理者の権限はいらない）を作る。main の場所は `git rev-parse --git-common-dir` から求める。`app/node_modules` がもうあれば何もしない。main で先に `npm run setup` しておく
 - 依存（`package.json`）を変える作業では、ジャンクションを外して（`cmd /c rmdir app\node_modules`。ジャンクションだけが消え、main の中身は残る。PowerShell の `Remove-Item` は先の中身まで消すことがあるので使わない）から `cd app` で `npm install` する
+- ワークツリーを消すときも同じ。`tools/clean-worktrees.ps1` は消す前にジャンクションを外す。それ以外の方法（手での `Remove-Item -Recurse` など）で消すと main の `app/node_modules` まで消えることがある。`npm run build`（`npm start` を含む）は `scripts/check-deps.mjs` で依存の有無を先に確かめ、無ければ `npm run setup` を案内して止まる。`npm run setup` は、ジャンクションの先が消えていれば外して作り直す
 - アプリのフォルダから上へたどって最初の `.git` がファイルなら、ワークツリー版として動く（`src/main/worktree.ts`）。インストール版（`app.isPackaged`）では調べない
 - ワークツリー版は、データフォルダを `%APPDATA%\Bantus-wt-<ワークツリー名>`（見本データならさらに `-debug`）に分ける。二重起動の検査も別になるので、いつものウィジェットが動いていても起動できる
 - 初めて起動したときは、いつもの設定（`settings.json`）を写し、端（`edge`）を反対側にする（重ならないように）。あとは別の設定として変えられる。やり直すときは、そのフォルダを消す

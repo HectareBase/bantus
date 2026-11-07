@@ -31,6 +31,19 @@ function Get-SizeMB([string]$path) {
     [math]::Round([double]$sum / 1MB)
 }
 
+# ワークツリーの app\node_modules は、main の同じフォルダへのジャンクション（npm run setup が作る）。
+# 先に外さずに -Recurse で消すと、ジャンクションの先（main の中身）まで消えて、main で npm start できなくなる。
+# cmd の rmdir はジャンクションだけを消し、先は残す。
+function Remove-Junctions([string]$root) {
+    foreach ($rel in @('node_modules', 'app\node_modules')) {
+        $p = Join-Path $root $rel
+        $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            cmd /c rmdir "`"$p`"" | Out-Null
+        }
+    }
+}
+
 function Get-Worktrees {
     # git worktree list --porcelain は、空行で区切られたブロックが 1 つのワークツリー
     $items = @()
@@ -116,6 +129,8 @@ foreach ($name in $Remove) {
     if (-not $Force -and ($w.dirty -or $w.ahead)) {
         Write-Output "× $name : 未コミットの変更か、$Base にないコミットがある（消すなら -Force）"; $failed = $true; continue
     }
+    # 消す前に、ジャンクションだけを外す（フォルダがなければ何もしない）
+    Remove-Junctions $w.path
     switch ($w.kind) {
         'prunable' { git -C $repoRoot worktree prune }
         'orphan' { Remove-Item -LiteralPath $w.path -Recurse -Force -ErrorAction SilentlyContinue }

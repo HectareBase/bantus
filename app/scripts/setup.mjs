@@ -31,6 +31,12 @@ try {
   lstatSync(link);
   exists = true;
 } catch {}
+// ジャンクションの先が消えていると、lstat では「ある」のに中身は使えない。外して作り直す（cmd の rmdir はジャンクションだけを消す）
+if (exists && !existsSync(link)) {
+  console.log(`ジャンクションの先がありません。外して作り直します：${link}`);
+  spawnSync('cmd', ['/c', 'rmdir', link], { stdio: 'inherit' });
+  exists = false;
+}
 if (exists) {
   console.log(`app/node_modules はもうあります（${link}）。何もしません`);
   process.exit(0);
