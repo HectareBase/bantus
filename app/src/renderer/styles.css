@@ -561,6 +561,9 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
 html.floating .card, html.floating .titlebar, html.floating .repo { border-color: rgba(128, 128, 128, 0.35); }
+/* 背景がないときは、枠の中にウィンドウの背景色をカードの不透明度で敷き、壁紙が透けすぎないようにする。
+   カードの色より一段暗い（ライトでは一段濃い）ので、カードの不透明度を上げても枠とカードの見分けがつく */
+html.floating .repo { background: rgba(var(--bg-rgb), var(--card-alpha)); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
