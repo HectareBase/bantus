@@ -176,12 +176,13 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .repo-icon { flex: none; display: flex; color: var(--text-tertiary); }
 .repo-icon svg { width: 13px; height: 13px; }
 .repo-name { min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* カードごとアーカイブした件数。押すとその一覧を開く */
+/* カードごとアーカイブした件数。見出しの右端（バッジの右）に置き、高さをバッジ（18px）にそろえる。押すとその一覧を開く */
 .repo-archived {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  height: 18px;
   padding: 0 5px;
   border: 1px solid var(--divider);
   border-radius: 4px;

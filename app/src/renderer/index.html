@@ -21,15 +21,15 @@
   <!-- リポジトリの見出しと、ワークツリーごとのカード。data-icon の要素には icon.ts が lucide のアイコンを入れる -->
   <main id="cards"></main>
 
-  <!-- リポジトリ：見出し（名前、カードごとアーカイブした件数、バッジ）とカードの並び -->
+  <!-- リポジトリ：見出し（名前、バッジ、カードごとアーカイブした件数）とカードの並び。件数は右端に置く -->
   <template id="repo-template">
     <section class="repo">
       <h2 class="repo-header">
         <span class="repo-icon" data-icon="folder"></span>
         <span class="repo-name"></span>
-        <button class="repo-archived" hidden><span class="repo-archived-icon" data-icon="archive"></span><span class="n"></span></button>
         <span class="spacer"></span>
         <span class="badge"></span>
+        <button class="repo-archived" hidden><span class="repo-archived-icon" data-icon="archive"></span><span class="n"></span></button>
       </h2>
       <div class="repo-cards"></div>
     </section>
