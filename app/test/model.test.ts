@@ -7,7 +7,7 @@ import {
   nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
-  HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds,
+  HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds, startupConfirmedAt,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
 import { cardKeyOf } from '../src/shared/card-key';
@@ -352,6 +352,61 @@ describe('確認した直後の猶予', () => {
     assert.equal(hidden({}), 0);
     assert.equal(hidden({ now: now + 10 * MIN }), 1);
     assert.equal(hidden({ cardMarks: { [cardKeyOf(list[0]!)]: 'archived' } }), 1);
+  });
+});
+
+describe('startupConfirmedAt：起動した直後の猶予', () => {
+  const now = 100 * MIN;
+  // 再起動した直後の一覧。確認した時刻はまだない
+  const list = (originAt: number) => [
+    view({ id: 'r', state: 'idle', lastActivityAt: originAt }),
+    view({ id: 'w', worktree: wt('x'), spawnedFrom: 'r', state: 'idle', lastActivityAt: now - 40 * MIN }),
+  ];
+  const boot = (sessions: SessionView[], o: Partial<ArchiveOptions> = {}) =>
+    buildRepos(sessions, opts({ now, mainMinutes: 60, confirmedAt: startupConfirmedAt(sessions), ...o }))[0]!;
+
+  it('動いていないセッションは、最後に動いた時刻を確認した時刻とする。処理中・対応待ちは入れない', () => {
+    const seed = startupConfirmedAt([
+      view({ id: 'i', state: 'idle', lastActivityAt: 5 }),
+      view({ id: 's', state: 'stopped', lastActivityAt: 6 }),
+      view({ id: 'b', state: 'busy', lastActivityAt: 7 }),
+      view({ id: 'q', state: 'waiting', lastActivityAt: 8 }),
+    ]);
+    assert.deepEqual([...seed].sort(), [['i', 5], ['s', 6]]);
+  });
+  it('最後に動いてから猶予の内の起点は、main に残す', () => {
+    const repo = boot(list(now - 30 * MIN));
+    assert.deepEqual(repo.cards.find((c) => c.isMain)!.sessions.map((s) => s.id), ['r']);
+    const without = buildRepos(list(now - 30 * MIN), opts({ now, mainMinutes: 60 }))[0]!;
+    assert.deepEqual(without.cards.find((c) => c.isMain)!.sessions, [], '種がなければすぐに移る（直す前の動き）');
+  });
+  it('最後に動いてから猶予を過ぎた起点は、ワークツリーのカードへ移す', () => {
+    const repo = boot(list(now - 61 * MIN));
+    assert.deepEqual(repo.cards.find((c) => c.isMain)!.sessions, []);
+    assert.deepEqual(repo.cards.find((c) => !c.isMain)!.timeline.find((t) => t.origin)?.session.id, 'r');
+  });
+  it('ワークツリーの最新以外は、最後に動いてから猶予の内なら出し、過ぎたらアーカイブする', () => {
+    const sessions = [
+      view({ id: 'o', worktree: wt('x'), state: 'idle', lastActivityAt: now - 30 * MIN }),
+      view({ id: 'old', worktree: wt('x'), state: 'idle', lastActivityAt: now - 90 * MIN }),
+      view({ id: 'n', worktree: wt('x'), state: 'idle', lastActivityAt: now - 10 * MIN }),
+    ];
+    const card = boot(sessions).cards[0]!;
+    assert.deepEqual(card.sessions.map((s) => s.id).sort(), ['n', 'o']);
+    assert.deepEqual(card.archived.map((s) => s.id), ['old']);
+  });
+  it('main の自動アーカイブの結果は変えない（落ち着いた時刻は最後に動いた時刻のまま）', () => {
+    const sessions = [
+      view({ id: 'a', state: 'idle', lastActivityAt: now - 30 * MIN }),
+      view({ id: 'b', state: 'idle', lastActivityAt: now - 90 * MIN }),
+      view({ id: 'c', state: 'busy', lastActivityAt: now - 120 * MIN }),
+    ];
+    const ids = (r: ReturnType<typeof boot>) => {
+      const main = r.cards.find((c) => c.isMain)!;
+      return [main.sessions.map((s) => s.id).sort(), main.archived.map((s) => s.id)];
+    };
+    assert.deepEqual(ids(boot(sessions)), ids(buildRepos(sessions, opts({ now, mainMinutes: 60 }))[0]!));
+    assert.deepEqual(ids(boot(sessions)), [['a', 'c'], ['b']]);
   });
 });
 

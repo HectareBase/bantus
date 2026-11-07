@@ -543,6 +543,18 @@ function recentlyConfirmed(s: SessionView, opts: Pick<ArchiveOptions, 'confirmed
 }
 
 /**
+ * 起動して最初に受け取った一覧から、確認した時刻の種を作る。確認した時刻はウィジェットの中だけで覚えるので、再起動すると消える。
+ * 動いていない（処理中・対応待ちでない）セッションは、最後に動いた時刻に確認したものとみなし、そこから猶予を数える。
+ * 使っている最中の起点が、再起動したとたんにワークツリーのカードへ移らないようにする。
+ * settledAt は変わらないので、main の自動アーカイブの結果は変えない
+ */
+export function startupConfirmedAt(sessions: SessionView[]): Map<string, number> {
+  const seed = new Map<string, number>();
+  for (const s of sessions) if (s.state !== 'busy' && s.state !== 'waiting') seed.set(s.id, s.lastActivityAt);
+  return seed;
+}
+
+/**
  * 保留にしたのに動き出した（処理中・対応待ちになった）もの。印を外す（画面側が保存する）。
  * カードは、中のどれかのセッションが動き出したら外す
  */
