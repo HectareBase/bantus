@@ -53,6 +53,28 @@ describe('buildRepos：カードの分け方', () => {
     assert.equal(repo!.cards[0]!.tooltip, 'ワークツリー：claude/x-123abc\nC:/Repo/wt');
   });
 
+  it('見出しのツールチップに、分岐元を添える', () => {
+    const [repo] = buildRepos([view({ worktree: wt('x'), baseBranch: 'develop', workDir: 'C:/Repo/wt' })]);
+    assert.equal(repo!.cards[0]!.tooltip, 'ワークツリー：claude/x-123abc\n分岐元：develop\nC:/Repo/wt');
+  });
+
+  it('ワークツリーのカードには分岐元を持たせ、元のフォルダのブランチと違うときだけ offMain にする', () => {
+    const [repo] = buildRepos([
+      view({ mainBranch: 'main' }),
+      view({ mainBranch: 'main', worktree: wt('a'), baseBranch: 'main' }),
+      view({ mainBranch: 'main', worktree: wt('b'), baseBranch: 'integration/new_feature' }),
+      view({ mainBranch: 'main', worktree: wt('c') }),
+    ]);
+    const by = (label: string) => repo!.cards.find((c) => c.label === label)!;
+    assert.equal(by('main').base, undefined, '元のフォルダのカードには持たせない');
+    assert.equal(by('a').base?.branch, 'main', 'main から切ったいつものワークツリーも、一覧には分岐元を出す');
+    assert.equal(by('a').base?.offMain, false);
+    assert.equal(by('c').base, undefined, '分岐元がわからなければ持たせない');
+    assert.equal(by('b').base?.branch, 'integration/new_feature');
+    assert.equal(by('b').base?.offMain, true);
+    assert.match(by('b').base!.tip, /^分岐元：integration\/new_feature\n.*main/);
+  });
+
   it('リポジトリの並びは設定に従う（固定は名前順）', () => {
     const list = [
       view({ repoKey: 'k10', repoName: 'app10', lastActivityAt: 5 }),
@@ -161,7 +183,7 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     const x = repo!.cards.find((c) => c.key === cardKeyOf(sessions[2]!))!;
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.place]), [
       ['w1', undefined],
-      ['origin', { icon: 'house', label: 'main', tip: '元のフォルダ（main）で始めたセッション' }],
+      ['origin', { icon: 'house', label: '元のフォルダ', tip: '元のフォルダで始めたセッション' }],
     ]);
     const y = repo!.cards.find((c) => c.key === cardKeyOf(sessions[3]!))!;
     assert.ok(y.timeline.every((t) => !t.origin), '行き先ではないカードには起点を出さない');
@@ -719,6 +741,14 @@ describe('コミットされていない変更と、元のブランチとの差'
   });
   it('追跡するブランチがないワークツリーは、未マージのコミットとして説明する', () =>
     assert.equal(changesTooltip({ ...clean, ahead: 2, aheadOfBase: true }), '未マージのコミット：2'));
+  it('分岐元がわかれば、遅れと未マージに比べている先の名前を出す', () => {
+    assert.equal(
+      changesTooltip({ ...clean, ahead: 3, aheadOfBase: true, behind: 1 }, 'integration/new_feature'),
+      'integration/new_feature に未マージのコミット：3\nintegration/new_feature からの遅れ：1',
+    );
+    // push していないコミットは分岐元と関係ない。追跡するブランチがあれば、遅れはそちらの名前
+    assert.equal(changesTooltip({ ...clean, ahead: 1, behind: 2, upstream: 'origin/main' }, 'develop'), 'push していないコミット：1\norigin/main からの遅れ：2');
+  });
   it('セッションのツールチップの最後に添える', () => {
     assert.equal(tooltip(view({ title: 't', changes: { ...clean, changed: 1 } })), 't\n未コミットの変更：変更 1');
   });

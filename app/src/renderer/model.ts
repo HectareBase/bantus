@@ -173,7 +173,7 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
   if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
-  const changes = changesTooltip(s.changes);
+  const changes = changesTooltip(s.changes, s.worktree && s.baseBranch);
   if (changes) lines.push(changes);
   const context = contextTooltip(s.context);
   if (context) lines.push(context);
@@ -211,16 +211,25 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
   return items.filter((i) => i.count > 0);
 }
 
-/** 印とセッションのツールチップに添える内訳。何もなければ空 */
-export function changesTooltip(c: GitChanges | undefined): string {
+/**
+ * 印とセッションのツールチップに添える内訳。何もなければ空。
+ * base はワークツリーの分岐元（遅れと未マージを比べている先）。わかれば名前を出す
+ */
+export function changesTooltip(c: GitChanges | undefined, base?: string): string {
   if (!c) return '';
   if (c.merged) return ja.changes.merged;
   const parts: string[] = [];
   if (c.changed) parts.push(ja.changes.changed(c.changed));
   if (c.untracked) parts.push(ja.changes.untracked(c.untracked));
   const lines = parts.length ? [ja.changes.uncommitted(parts.join(ja.changes.separator))] : [];
-  if (c.ahead) lines.push(c.aheadOfBase ? ja.changes.aheadOfBase(c.ahead) : ja.changes.unpushed(c.ahead));
-  if (c.behind) lines.push(c.upstream ? ja.changes.behindUpstream(c.upstream, c.behind) : ja.changes.behind(c.behind));
+  if (c.ahead) {
+    if (!c.aheadOfBase) lines.push(ja.changes.unpushed(c.ahead));
+    else lines.push(base ? ja.changes.aheadOfNamedBase(base, c.ahead) : ja.changes.aheadOfBase(c.ahead));
+  }
+  if (c.behind) {
+    const target = c.upstream ?? base;
+    lines.push(target ? ja.changes.behindNamed(target, c.behind) : ja.changes.behind(c.behind));
+  }
   return lines.join('\n');
 }
 
@@ -478,8 +487,13 @@ export interface WorktreeCard {
   isMain: boolean;
   /** 見出しの名前（短くしたブランチ名、main はそのブランチ名） */
   label: string;
-  /** 見出しのツールチップ（ブランチ名の全体と作業フォルダ） */
+  /** 見出しのツールチップ（ブランチ名の全体、分岐元と作業フォルダ） */
   tooltip: string;
+  /**
+   * ワークツリーの分岐元（遅れと未マージを比べている先）。印のツールチップと、一覧の分岐元の行に使う。
+   * offMain は、分岐元が元のフォルダの今のブランチと違う（段階的に分岐した）とき。以前のセッションがなくても一覧を開けるようにする
+   */
+  base?: { branch: string; tip: string; offMain: boolean };
   changes?: GitChanges;
   /** カードに出す行（並び順の設定に従う） */
   sessions: SessionView[];
@@ -632,10 +646,11 @@ function destPlace(dest: SessionView): FlyPlace {
 
 /** 起点の出どころ（ワークツリーのカードの一覧に出す） */
 function sourcePlace(origin: SessionView): FlyPlace {
+  // 名前は「元のフォルダ」にする。今のブランチ名を出すと、分岐元や始めたときのブランチに見えてしまうため
   return {
     icon: 'house',
-    label: origin.mainBranch ?? ja.widget.originFolder,
-    tip: ja.flyout.startedIn(origin.mainBranch ?? ja.tooltip.unknownBranch),
+    label: ja.widget.originFolder,
+    tip: origin.workDir ? ja.flyout.startedIn(origin.workDir) : ja.flyout.startedInUnknown,
   };
 }
 
@@ -762,6 +777,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         isMain,
         label: isMain ? first.mainBranch ?? ja.widget.originFolder : first.worktree!.label,
         tooltip: cardTooltip(first),
+        ...baseOf(first),
         changes,
         sessions: shown.sort(order),
         archived,
@@ -790,11 +806,23 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
   return result.sort(compareItems<RepoView>(opts.sort.project, (r) => r.name));
 }
 
-/** カードの見出しのツールチップ。ブランチ名の全体と作業フォルダ */
+/** カードの見出しのツールチップ。ブランチ名の全体、分岐元と作業フォルダ */
 function cardTooltip(s: SessionView): string {
   const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(s.mainBranch ?? ja.tooltip.unknownBranch)];
+  if (s.worktree && s.baseBranch) lines.push(ja.tooltip.base(s.baseBranch));
   if (s.workDir) lines.push(s.workDir);
   return lines.join('\n');
+}
+
+/**
+ * ワークツリーの分岐元。一覧ではいつも分岐元の行を出す（どのカードでも同じ形にそろえる）。
+ * 段階的に分岐したとき（main → develop → feature）は offMain にし、以前のセッションがなくても一覧を開けるようにする
+ */
+function baseOf(s: SessionView): Pick<WorktreeCard, 'base'> {
+  const branch = s.baseBranch;
+  if (!s.worktree || !branch) return {};
+  const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? ja.tooltip.unknownBranch);
+  return { base: { branch, tip, offMain: branch !== s.mainBranch } };
 }
 
 /** 画面に並んでいる順（上から）の、アーカイブしていないセッション */

@@ -145,6 +145,32 @@ function line(side: 'in' | 'out', link: 'solid' | 'dashed'): HTMLElement {
   return el;
 }
 
+/**
+ * 分岐元のブランチの行。起点（元のフォルダで始めたセッション）のすぐ上、起点がなければ一番下に置く。
+ * セッションではないので押せない。線は上の行のつなぎ方をそのまま通す（in / out）
+ */
+function baseNode(base: { branch: string; tip: string }, link: { in?: 'solid' | 'dashed'; out?: 'solid' | 'dashed' }): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'node linked base-root';
+  el.title = base.tip;
+  if (link.in) el.append(line('in', link.in));
+  if (link.out) el.append(line('out', link.out));
+  const ic = document.createElement('span');
+  ic.className = 'base-ic';
+  ic.append(createIcon('git-branch'));
+  const txt = document.createElement('div');
+  txt.className = 'txt';
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = base.branch;
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  sub.textContent = ja.flyout.baseRoot;
+  txt.append(title, sub);
+  el.append(ic, txt);
+  return el;
+}
+
 function cardBlock(card: FlyCard): HTMLElement {
   const el = document.createElement('div');
   el.className = 'fcard';
@@ -177,7 +203,21 @@ function renderContent(content: FlyContent, keepSummary = false) {
     body.replaceChildren(...content.cards.map(cardBlock));
   } else {
     content.items.forEach((i) => items.set(i.id, i));
-    body.replaceChildren(...content.items.map((i, n) => node(i, content.kind, content.items[n - 1])));
+    const nodes = content.items.map((i, n) => node(i, content.kind, content.items[n - 1]));
+    if (content.kind === 'timeline' && content.base) {
+      // 時間の順：元のフォルダで始めた起点 → 分岐元のブランチからワークツリーを作る → ワークツリーのセッション
+      const at = content.items.findIndex((i) => i.origin);
+      const above = content.items[(at < 0 ? content.items.length : at) - 1];
+      if (at < 0) {
+        // 起点がなければ一番下。上の行（一番古いもの）からは破線でつなぐ
+        nodes.at(-1)?.append(line('out', 'dashed'));
+        nodes.push(baseNode(content.base, { in: 'dashed' }));
+      } else {
+        const link = above?.link ?? 'dashed';
+        nodes.splice(at, 0, baseNode(content.base, { ...(above && { in: link }), out: link }));
+      }
+    }
+    body.replaceChildren(...nodes);
   }
   // 下の段は、まとめのある行が 1 つでもあれば、乗せていなくてもいつも同じ高さで出しておく（flyout.css の .list-foot）
   foot.hidden = ![...items.values()].some((i) => i.summary);
@@ -214,11 +254,17 @@ function placeList() {
   list.style.top = `${Math.max(EDGE_MARGIN, Math.min(current.top, max))}px`;
 }
 
+/** めくれの件数。0（以前のセッションはないが、分岐元を見せるために開く）なら、件数の代わりにブランチのアイコン */
+function setFlapCount(count: number) {
+  if (count) flapCount.textContent = String(count);
+  else flapCount.replaceChildren(createIcon('git-branch'));
+}
+
 function placeFlap(show: FlyShow) {
   flap.style.top = `${show.top + FLAP_INSET}px`;
   flap.style.width = `${FLAP_WIDTH}px`;
   flap.style.height = `${flapHeight(show.height)}px`;
-  flapCount.textContent = String(show.count);
+  setFlapCount(show.count);
 }
 
 /**
@@ -286,7 +332,7 @@ window.flyoutApi.onShow((show) => {
 window.flyoutApi.onContent((content, count) => {
   if (!current) return;
   renderContent(content, true);
-  flapCount.textContent = String(count);
+  setFlapCount(count);
   if (open) placeList();
   reportSolid();
 });
