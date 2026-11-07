@@ -214,7 +214,8 @@ export interface FlyCard {
 }
 
 export type FlyContent =
-  | { kind: 'timeline'; items: FlyItem[] }
+  /** base：ワークツリーの分岐元。起点のすぐ上（起点がなければ一番下）に分岐元の行を出す */
+  | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string } }
   | { kind: 'plain'; items: FlyItem[] }
   | { kind: 'cards'; cards: FlyCard[] };
 

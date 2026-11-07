@@ -81,6 +81,8 @@ export const ja = {
   tooltip: {
     worktree: (branch: string) => `ワークツリー：${branch}`,
     origin: (branch: string) => `元のフォルダ：${branch}`,
+    /** ワークツリーのカードの見出し。遅れと未マージを比べている先 */
+    base: (branch: string) => `分岐元：${branch}`,
     waiting: (reason: string) => `対応待ち：${reason}`,
     needsAction: (what: string) => `次にすること：${what}`,
     unknownBranch: '（ブランチ不明）',
@@ -97,10 +99,12 @@ export const ja = {
     separator: '・',
     uncommitted: (parts: string) => `未コミットの変更：${parts}`,
     aheadOfBase: (n: number) => `未マージのコミット：${n}`,
+    /** 比べている分岐元がわかるとき */
+    aheadOfNamedBase: (base: string, n: number) => `${base} に未マージのコミット：${n}`,
     unpushed: (n: number) => `push していないコミット：${n}`,
     behind: (n: number) => `元のブランチからの遅れ：${n}`,
-    /** 元のフォルダで、取得がオンのとき。upstream は `origin/main` など */
-    behindUpstream: (upstream: string, n: number) => `${upstream} からの遅れ：${n}`,
+    /** 比べている分岐元がわかるとき。元のフォルダの追跡するブランチ（`origin/main` など）にも使う */
+    behindNamed: (base: string, n: number) => `${base} からの遅れ：${n}`,
   },
 
   /** トースト通知の本文 */
@@ -125,6 +129,9 @@ export const ja = {
     archivedCount: (n: number) => `アーカイブ済み ${n} 件`,
     /** カードの名前。main のブランチがわからないとき */
     originFolder: '元のフォルダ',
+    /** 一覧の分岐元の行のツールチップ */
+    branchedFromTip: (branch: string, mainBranch: string) =>
+      `分岐元：${branch}\n遅れと未マージのコミットは、このブランチと比べている（元のフォルダは ${mainBranch}）`,
     badgeWaiting: (n: number) => `対応待ち ${n}`,
     badgeBusy: (n: number) => `処理中 ${n}`,
     badgeHeld: (n: number) => `保留 ${n}`,
@@ -134,7 +141,11 @@ export const ja = {
   flyout: {
     startedOnMain: 'main で始めたセッション',
     continuedIn: (branch: string) => `ワークツリー（${branch}）で続けている`,
-    startedIn: (branch: string) => `元のフォルダ（${branch}）で始めたセッション`,
+    /** 起点の行のツールチップ。folder は元のフォルダの場所。分岐元と取り違えないよう、ブランチ名は出さない */
+    startedIn: (folder: string) => `元のフォルダで始めたセッション\n${folder}`,
+    startedInUnknown: '元のフォルダで始めたセッション',
+    /** タイムラインの根（分岐元）の下の段 */
+    baseRoot: '分岐元',
     unarchive: 'アーカイブから戻す',
     archive: 'アーカイブ',
     merged: 'マージ済み',

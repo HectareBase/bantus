@@ -71,7 +71,9 @@ svg { width: 14px; height: 14px; flex: none; }
 }
 .flap svg { width: 12px; height: 12px; stroke-width: 2.5; }
 html[data-side="left"] .flap { right: 0; border-right: 0; border-radius: 8px 0 0 8px; transform-origin: right center; }
-html[data-side="left"] .flap svg { transform: scaleX(-1); }
+html[data-side="left"] .flap-arrow svg { transform: scaleX(-1); }
+/* 件数の代わりのブランチのアイコン（以前のセッションがなく、分岐元だけを見せるカード） */
+.flap-count svg { width: 11px; height: 11px; stroke-width: 2; }
 html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8px 0; transform-origin: left center; }
 /* 伸びる動きは、めくれをカードの端（ウィンドウの端）の向こうから滑り出させて見せる。ウィンドウの外へ出た分は描かれない。
    横に縮める（scaleX）と件数と矢印も縮んでぶれるので、文字の形は変えない */
@@ -227,3 +229,13 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 @media (prefers-reduced-motion: reduce) {
   .flap.peek, .progress-ring { animation: none; }
 }
+
+/* ---- 分岐元（ワークツリーの分岐元が元のフォルダのブランチと違うときだけ） ---- */
+/* 分岐元のブランチの行：起点のすぐ上（なければ一番下）に、ブランチのアイコンと名前を出す。押せない */
+.node.base-root { cursor: default; }
+.node.base-root:hover { background: none; }
+.base-root .base-ic { position: absolute; left: 11px; top: calc(50% - 7.5px); width: 15px; height: 15px; display: grid; place-items: center; color: var(--text-tertiary); background: var(--pop); z-index: 1; }
+.base-root .base-ic svg { width: 13px; height: 13px; }
+.base-root .ln.in { height: calc(50% - 7.5px); }
+.base-root .ln.out { top: calc(50% + 7.5px); }
+.node.base-root .title { color: var(--text-secondary); font-weight: 400; }

@@ -567,10 +567,10 @@ function getRow(s: SessionView): RowRefs {
 // ---- コミットされていない変更と、元のブランチとの差 ----
 
 /** 見出しの内訳の印（変更、未追跡、push していないコミット、元のブランチからの遅れ）。何もなければ隠す */
-function setChanges(el: HTMLElement, c: GitChanges | undefined) {
+function setChanges(el: HTMLElement, c: GitChanges | undefined, base?: string) {
   const items = changeItems(c);
   // 毎回作り直さないよう、内訳が変わったときだけ描き直す
-  const key = items.map((i) => `${i.icon}:${i.count}`).join(',');
+  const key = `${items.map((i) => `${i.icon}:${i.count}`).join(',')}|${base ?? ''}`;
   if (el.dataset.items === key) return;
   el.dataset.items = key;
   el.hidden = items.length === 0;
@@ -586,7 +586,7 @@ function setChanges(el: HTMLElement, c: GitChanges | undefined) {
     }
     return item;
   }));
-  if (items.length) el.dataset.tip = changesTooltip(c);
+  if (items.length) el.dataset.tip = changesTooltip(c, base);
   else delete el.dataset.tip;
 }
 
@@ -612,7 +612,8 @@ function flyItem(t: TimelineItem): FlyItem {
 }
 
 function cardContent(card: WorktreeCard): FlyContent {
-  return { kind: card.isMain ? 'plain' : 'timeline', items: card.timeline.map(flyItem) };
+  if (card.isMain) return { kind: 'plain', items: card.timeline.map(flyItem) };
+  return { kind: 'timeline', items: card.timeline.map(flyItem), ...(card.base && { base: { branch: card.base.branch, tip: card.base.tip } }) };
 }
 
 function repoContent(repo: RepoView): FlyContent {
@@ -642,10 +643,18 @@ function tabOf(refs: CardRefs) {
   return flapRect(edgeOf(), rectOf(refs.card));
 }
 
+/**
+ * カードの一覧を開けるか。以前のセッション（重なり）があるときと、分岐元が元のフォルダのブランチと違うとき。
+ * 後のほうは重なりを出さず、見出しに乗せたときだけめくれを出す（めくれには件数の代わりにブランチのアイコン）
+ */
+function canFly(card: WorktreeCard | undefined): card is WorktreeCard {
+  return !!card && (card.stackCount > 0 || !!card.base?.offMain);
+}
+
 function showCardFlyout(key: string, open: boolean, hold?: number) {
   const refs = cards.get(key);
   const card = refs?.data;
-  if (!refs || !card || !card.stackCount) return;
+  if (!refs || !canFly(card)) return;
   window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), header: rectOf(refs.header), content: cardContent(card), open, hold });
 }
 
@@ -690,6 +699,7 @@ function reportTargets() {
     const view = cardsEl.getBoundingClientRect();
     const targets = [];
     for (const [key, refs] of cards) {
+      // 重なりのないカード（分岐元だけで開けるもの）は、見出しに乗せたときだけ出すので入れない
       if (!refs.data?.stackCount || !refs.el.isConnected) continue;
       const zone = tabOf(refs);
       if (zone.y + zone.height <= view.top || zone.y >= view.bottom) continue;
@@ -814,7 +824,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
   refs.act.hidden = card.isMain || running || !!card.held;
   refs.hold.hidden = !card.held && !refs.memo.editing;
   if (card.held) refs.memo.set(card.held.note);
-  setChanges(refs.changes, showChanges ? card.changes : undefined);
+  setChanges(refs.changes, showChanges ? card.changes : undefined, card.base?.branch);
   refs.el.toggleAttribute('data-stack', card.stackCount > 0);
   refs.stackHit.dataset.count = String(card.stackCount);
   if (sync) syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));
