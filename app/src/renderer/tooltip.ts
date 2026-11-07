@@ -3,11 +3,14 @@
 // 描くのは別のウィンドウ（tip.html）で、メインプロセスがウィジェットの外の、画面の内側に置く。ほかのセッションの行に重ならない。
 // ここでは出す・消すの時機を決め、文字と基準の要素の位置を渡す。
 
-const SHOW_DELAY_MS = 400;
+import { TOOLTIP_OFF_MS } from '../shared/settings.js';
+
 /** 消してからこの時間のうちに別の要素へ移ったら、待たずに出す（行をなぞったとき） */
 const WARM_MS = 300;
 
 export interface Tooltips {
+  /** 出るまでの時間（ms）を変える。TOOLTIP_OFF_MS なら出さず、出ているものも消す */
+  setDelay(ms: number): void;
   /** 基準の要素が画面から外れていたら消す。描画のあとに呼ぶ */
   prune(): void;
 }
@@ -17,6 +20,7 @@ export function initTooltips(): Tooltips {
   let pending: HTMLElement | undefined;
   let timer: number | undefined;
   let hiddenAt = 0;
+  let delayMs = 400;
   /** クリックしたあとは、その要素から離れるまで出さない */
   let suppressed: HTMLElement | undefined;
 
@@ -58,7 +62,7 @@ export function initTooltips(): Tooltips {
   }
 
   function schedule(target: HTMLElement) {
-    if (target === current || target === pending) return;
+    if (delayMs >= TOOLTIP_OFF_MS || target === current || target === pending) return;
     clearTimeout(timer);
     const warm = current !== undefined || Date.now() - hiddenAt < WARM_MS;
     if (warm) {
@@ -66,7 +70,7 @@ export function initTooltips(): Tooltips {
       return;
     }
     pending = target;
-    timer = window.setTimeout(() => show(target), SHOW_DELAY_MS);
+    timer = window.setTimeout(() => show(target), delayMs);
   }
 
   document.addEventListener('pointerover', (e) => {
@@ -86,7 +90,7 @@ export function initTooltips(): Tooltips {
   });
   document.addEventListener('focusin', (e) => {
     const target = findTarget(e.target);
-    if (target && target.matches(':focus-visible')) show(target);
+    if (target && delayMs < TOOLTIP_OFF_MS && target.matches(':focus-visible')) show(target);
   });
   document.addEventListener('focusout', (e) => {
     if (findTarget(e.target) === current) hide();
@@ -100,6 +104,10 @@ export function initTooltips(): Tooltips {
   document.documentElement.addEventListener('pointerleave', () => hide());
 
   return {
+    setDelay(ms) {
+      delayMs = ms;
+      if (ms >= TOOLTIP_OFF_MS) hide();
+    },
     prune() {
       if (current && !current.isConnected) hide();
       if (pending && !pending.isConnected) hide();

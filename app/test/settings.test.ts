@@ -127,9 +127,10 @@ describe('設定画面のカテゴリ', () => {
   };
   it('左の一覧は 全体 → 見た目 → カードの表示 → 通知 → 情報', () =>
     assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'notify', 'about']));
-  it('全体は 位置 → 起動', () =>
+  it('全体は 位置 → ツールチップ → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
+      ['ツールチップ', ['tooltipDelayMs']],
       ['起動', ['openAtLogin']],
     ]));
   it('見た目は 明るさ → ウィジェット → 状態の色', () =>
@@ -255,5 +256,16 @@ describe('normalizeSettings の holds と heldCards', () => {
     assert.equal(normalizeSettings({ holds: { local_a: { note: '  あと\nで\t再開\x00 ', since: 1 } } }).holds.local_a!.note, 'あと で 再開');
     assert.equal(normalizeNote('あ'.repeat(HOLD_NOTE_MAX + 50)).length, HOLD_NOTE_MAX);
     assert.equal(normalizeNote(42), '');
+  });
+});
+
+describe('normalizeSettings のツールチップ', () => {
+  it('なければ 0.4 秒', () => assert.equal(normalizeSettings({}).tooltipDelayMs, 400));
+  it('0 から右端（出さない）まで通し、範囲の外は丸める', () => {
+    assert.equal(normalizeSettings({ tooltipDelayMs: 0 }).tooltipDelayMs, 0);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 2000 }).tooltipDelayMs, 2000);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 9999 }).tooltipDelayMs, 2000);
+    assert.equal(normalizeSettings({ tooltipDelayMs: -5 }).tooltipDelayMs, 0);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 'x' }).tooltipDelayMs, 400);
   });
 });

@@ -19,6 +19,7 @@ const SAMPLES = {
   'window.flyout': [['Bantus']],
   'monitor.other': [[2, 1920, 1080]],
   'state.waitingWithReason': [['許可待ち']],
+  'settings.tooltipDelay.seconds': [[0.4]],
   'time.minutesAgo': [[5]],
   'time.hoursAgo': [[3]],
   'time.daysAgo': [[2]],

@@ -154,6 +154,7 @@ export const ja = {
     },
     groups: {
       position: '位置',
+      tooltip: 'ツールチップ',
       startup: '起動',
       brightness: '明るさ',
       widget: 'ウィジェット',
@@ -166,11 +167,17 @@ export const ja = {
       sound: '音',
       windowsNotify: 'Windows の通知',
     },
+    /** ツールチップの時間の見せ方 */
+    tooltipDelay: {
+      off: '表示しない',
+      seconds: (s: number) => `${s.toFixed(1)} 秒`,
+    },
     /** 項目ごとの名前と説明 */
     items: {
       edge: { label: '画面の端', description: 'ウィジェットを置く側' },
       display: { label: 'モニター' },
       openAtLogin: { label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える' },
+      tooltipDelayMs: { label: '表示までの時間', description: 'ポインタを載せてから出るまで。右端にすると出さない' },
       theme: { label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },

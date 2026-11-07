@@ -970,6 +970,7 @@ function applyLayout(layout: WidgetLayout) {
   holds = { ...layout.holds };
   heldCards = { ...layout.heldCards };
   mainMinutes = layout.mainArchiveMinutes;
+  tooltips.setDelay(layout.tooltipDelayMs);
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = layout;
   notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen };
   render(latest);

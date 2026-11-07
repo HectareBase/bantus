@@ -62,6 +62,8 @@ export interface Settings {
   flash: boolean;
   /** Claude が前面で、そのセッションを開いているときは知らせない */
   muteWhenOpen: boolean;
+  /** ツールチップが出るまでの時間（ms）。TOOLTIP_OFF_MS（スライダーの右端）なら出さない */
+  tooltipDelayMs: number;
   /**
    * Bantus の中だけのアーカイブで、手で決めたもの（セッションの ID → 手でアーカイブした／手で戻した）。
    * 自動の決まりより優先する。設定画面には出さず、行のトグルで切り替える。デスクトップの isArchived には書かない
@@ -157,6 +159,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toast: false,
   flash: true,
   muteWhenOpen: true,
+  tooltipDelayMs: 400,
   archive: {},
   archivedCards: {},
   holds: {},
@@ -166,6 +169,9 @@ export const DEFAULT_SETTINGS: Settings = {
 /** ドラッグで変えられる幅の範囲（px） */
 export const WIDTH_MIN = 200;
 export const WIDTH_MAX = 480;
+
+/** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
+export const TOOLTIP_OFF_MS = 2000;
 
 export type CategoryId = 'general' | 'look' | 'cards' | 'notify' | 'about';
 
@@ -215,7 +221,7 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string })
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' });
 
@@ -242,6 +248,12 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: 'left', label: T.options.left }, { value: 'right', label: T.options.right }],
   },
   { key: 'display', category: 'general', group: T.groups.position, type: 'display', ...T.items.display },
+  {
+    key: 'tooltipDelayMs', category: 'general', group: T.groups.tooltip, type: 'slider',
+    ...T.items.tooltipDelayMs,
+    min: 0, max: TOOLTIP_OFF_MS, step: 100, unit: '',
+    format: (v) => (v >= TOOLTIP_OFF_MS ? T.tooltipDelay.off : T.tooltipDelay.seconds(v / 1000)),
+  },
   {
     key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'segmented', packagedOnly: true,
     ...T.items.openAtLogin,
