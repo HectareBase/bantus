@@ -145,6 +145,7 @@ describe('使用率の表示', () => {
   });
   it('ツールチップ', () => {
     assert.equal(contextTooltip(c(120_000, 1_000_000)), 'コンテキスト：12%（120k / 1.0M）');
-    assert.equal(contextTooltip({ tokens: 5000, model: 'claude-unknown-9' }), 'コンテキスト：5.0k（窓の大きさがわからないモデル：claude-unknown-9）');
+    assert.equal(contextTooltip({ tokens: 5000, model: 'claude-unknown-9' }), 'コンテキスト：5.0k（上限不明：claude-unknown-9）');
+    assert.equal(contextTooltip({ tokens: 5000 }), 'コンテキスト：5.0k（上限不明）');
   });
 });

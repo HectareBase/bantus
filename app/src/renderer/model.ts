@@ -638,7 +638,7 @@ function rankOfList(list: SessionView[], holds: HoldOptions): { rank: number; la
 
 /**
  * リポジトリの見出しのバッジ。いちばん急ぐ状態の件数だけを出す。
- * 要対応・処理中がないときだけ、保留の件数（保留の行と保留のカード。held）を出す
+ * 対応待ち・処理中がないときだけ、保留の件数（保留の行と保留のカード。held）を出す
  */
 export function cardBadge(sessions: SessionView[], held = 0): { state: '' | 'waiting' | 'busy' | 'held'; text: string } {
   const waiting = sessions.filter((s) => s.state === 'waiting').length;

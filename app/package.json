@@ -21,6 +21,7 @@
     "dist:dir": "node scripts/clean-dist.mjs && npm run build && electron-builder --dir"
   },
   "devDependencies": {
+    "@textlint/kernel": "15.8.0",
     "@types/node": "24.19.2",
     "electron": "44.10.1",
     "electron-builder": "26.17.0",

@@ -134,7 +134,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
     assert.deepEqual(sessions.map((s) => s.title).sort(), [
-      '(無題)', 'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'outside worktree without anchors', 'shared worktree', 'spawned', 'waiting', 'worktree',
+      'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'outside worktree without anchors', 'shared worktree', 'spawned', 'waiting', 'worktree', '（無題）',
     ]);
   });
 
@@ -161,7 +161,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('PID のファイル名でないものや、終わったプロセスは停止中', () => {
     assert.equal(byTitle('dead')?.state, 'stopped');
-    assert.equal(byTitle('(無題)')?.state, 'stopped');
+    assert.equal(byTitle('（無題）')?.state, 'stopped');
   });
 
   it('ワークツリーも元のリポジトリのカードに入り、ブランチ名を短くする', () => {
@@ -236,7 +236,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
     const plain = byTitle('no git')!;
     assert.equal(plain.repoName, 'plain');
     assert.equal(plain.mainBranch, undefined);
-    assert.equal(byTitle('(無題)')?.repoKey, plain.repoKey);
+    assert.equal(byTitle('（無題）')?.repoKey, plain.repoKey);
   });
 
   it('git status を調べるフォルダ：ワークツリーはその場所、メインはリポジトリ、git でなければなし', () => {
@@ -251,7 +251,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(byTitle('dead')?.seq, 3);
     assert.equal(byTitle('worktree')?.seq, 1);
     assert.equal(byTitle('outside worktree')?.seq, 1);
-    assert.deepEqual(['no git', '(無題)', 'spawned'].map((t) => byTitle(t)?.seq), [1, 2, 3]);
+    assert.deepEqual(['no git', '（無題）', 'spawned'].map((t) => byTitle(t)?.seq), [1, 2, 3]);
   });
 
   it('最後のターンのまとめを読む', () => {

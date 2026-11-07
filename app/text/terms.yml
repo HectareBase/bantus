@@ -16,6 +16,15 @@ rules:
     patterns:
       - ログオン
       - サインオン
+  # 状態の名前は「対応待ち」にそろえる（バッジ、状態の色、ツールチップ）。
+  # 最後のターンのまとめの needs_action は別のもので、「次にすること」と呼ぶ
+  - expected: 対応待ち
+    patterns:
+      - 要対応
+      - 対応が必要
+    specs:
+      - from: 要対応 2
+        to: 対応待ち 2
   - expected: ツールチップ
     pattern: ツールヒント
   - expected: 既定
