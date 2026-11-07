@@ -189,6 +189,8 @@ export interface FlyRequest {
   hit: TipRect;
   /** めくれ（つまみ）が飛び出す所。ウィジェットの中の座標。めくれが隠れていても、ここに乗せれば出す */
   tab?: TipRect;
+  /** カードの見出し（タイトルバー）。ウィジェットの中の座標。ここにいる間もめくれを消さない */
+  header?: TipRect;
   content: FlyContent;
   /** true なら、めくれを出さずにすぐ一覧を開く（リポジトリの見出し） */
   open: boolean;

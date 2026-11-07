@@ -58,7 +58,8 @@ export function isFlyRequest(v: unknown): v is FlyRequest {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
   return typeof r.key === 'string' && typeof r.count === 'number' && typeof r.open === 'boolean'
-    && isRect(r.anchor) && isRect(r.hit) && (r.tab === undefined || isRect(r.tab)) && isContent(r.content);
+    && isRect(r.anchor) && isRect(r.hit) && (r.tab === undefined || isRect(r.tab))
+    && (r.header === undefined || isRect(r.header)) && isContent(r.content);
 }
 
 export function isContent(v: unknown): v is FlyContent {
@@ -84,9 +85,9 @@ function isAction(v: unknown): v is FlyAction {
   return a.type === 'toggle-card' && typeof a.key === 'string';
 }
 
-/** 重なりの的とめくれが飛び出す所を、画面の座標にする。画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる */
+/** 重なりの的とめくれが飛び出す所（とカードの見出し）を、画面の座標にする。画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる */
 function hitRects(widget: Rect, request: FlyRequest): Rect[] {
-  return [request.hit, ...(request.tab ? [request.tab] : [])].map((r) => ({ x: widget.x + r.x - 1, y: widget.y + r.y - 1, width: r.width + 2, height: r.height + 2 }));
+  return [request.hit, ...(request.tab ? [request.tab] : []), ...(request.header ? [request.header] : [])].map((r) => ({ x: widget.x + r.x - 1, y: widget.y + r.y - 1, width: r.width + 2, height: r.height + 2 }));
 }
 
 function sameRect(a: Rect, b: Rect): boolean {
