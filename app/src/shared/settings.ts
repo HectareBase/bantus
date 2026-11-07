@@ -1,5 +1,9 @@
 // 設定項目の定義。項目やカテゴリを足すときは、ここに足すだけで設定画面にも出る。
 
+import { ja } from './strings/ja.js';
+
+const T = ja.settings;
+
 export interface Settings {
   /** ウィジェットを置く画面の端 */
   edge: 'left' | 'right';
@@ -174,11 +178,11 @@ export interface Category {
 
 /** 左の一覧の並び。中身のないカテゴリは画面に出さない */
 export const CATEGORIES: Category[] = [
-  { id: 'general', label: '全体', icon: 'app-window' },
-  { id: 'look', label: '見た目', icon: 'palette' },
-  { id: 'cards', label: 'カードの表示', icon: 'list' },
-  { id: 'notify', label: '通知', icon: 'bell' },
-  { id: 'about', label: '情報', icon: 'info' },
+  { id: 'general', label: T.categories.general, icon: 'app-window' },
+  { id: 'look', label: T.categories.look, icon: 'palette' },
+  { id: 'cards', label: T.categories.cards, icon: 'list' },
+  { id: 'notify', label: T.categories.notify, icon: 'bell' },
+  { id: 'about', label: T.categories.about, icon: 'info' },
 ];
 
 interface Base<K extends keyof Settings> {
@@ -216,141 +220,140 @@ export type SettingDef =
   | (Base<'statusColors'> & { type: 'status-colors' });
 
 const SHOW_OPTIONS = [
-  { value: true, label: '表示' },
-  { value: false, label: '非表示' },
+  { value: true, label: T.options.show },
+  { value: false, label: T.options.hide },
 ];
 
 const NOTIFY_OPTIONS = [
-  { value: true, label: '知らせる' },
-  { value: false, label: '知らせない' },
+  { value: true, label: T.options.notify },
+  { value: false, label: T.options.noNotify },
 ];
 
 const ORDER_OPTIONS = [
-  { value: 'fixed', label: '固定' },
-  { value: 'recent', label: '更新日時' },
-  { value: 'priority', label: '優先度' },
+  { value: 'fixed', label: T.options.orderFixed },
+  { value: 'recent', label: T.options.orderRecent },
+  { value: 'priority', label: T.options.orderPriority },
 ];
 
 export const SETTING_DEFS: SettingDef[] = [
   {
-    key: 'edge', category: 'general', group: '位置', type: 'segmented',
-    label: '画面の端', description: 'ウィジェットを置く側',
-    options: [{ value: 'left', label: '左' }, { value: 'right', label: '右' }],
+    key: 'edge', category: 'general', group: T.groups.position, type: 'segmented',
+    ...T.items.edge,
+    options: [{ value: 'left', label: T.options.left }, { value: 'right', label: T.options.right }],
   },
-  { key: 'display', category: 'general', group: '位置', type: 'display', label: 'モニター' },
+  { key: 'display', category: 'general', group: T.groups.position, type: 'display', ...T.items.display },
   {
-    key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,
-    label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える',
-    options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
-  },
-  {
-    key: 'theme', category: 'look', group: '明るさ', type: 'segmented',
-    label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う',
-    options: [{ value: 'system', label: 'システム' }, { value: 'light', label: 'ライト' }, { value: 'dark', label: 'ダーク' }],
+    key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'segmented', packagedOnly: true,
+    ...T.items.openAtLogin,
+    options: [{ value: true, label: T.options.open }, { value: false, label: T.options.noOpen }],
   },
   {
-    key: 'backgroundOpacity', category: 'look', group: 'ウィジェット', type: 'slider',
-    label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
+    key: 'theme', category: 'look', group: T.groups.brightness, type: 'segmented',
+    ...T.items.theme,
+    options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
+  },
+  {
+    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.backgroundOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'look', group: 'ウィジェット', type: 'slider',
-    label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
+    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.cardOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'look', group: 'ウィジェット', type: 'slider',
-    label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
+    key: 'headerShade', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.headerShade,
     min: 0, max: 20, step: 1, unit: '%',
   },
   {
-    key: 'zoom', category: 'look', group: 'ウィジェット', type: 'slider',
-    label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ。Windows のディスプレイの拡大とは別に、その上からかける',
+    key: 'zoom', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.zoom,
     min: 80, max: 150, step: 5, unit: '%',
   },
   {
-    key: 'statusColors', category: 'look', group: '状態の色', type: 'status-colors',
-    label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う',
+    key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',
+    ...T.items.statusColors,
   },
   {
-    key: 'mainArchiveMinutes', category: 'cards', group: 'アーカイブ', type: 'segmented',
-    label: 'main を自動でアーカイブ',
-    description: '元のフォルダのセッションを、落ち着いてから（確認してから）この時間で隠す。ワークツリーは最後に動いたもの以外をすぐに隠す。Bantus の中だけで、デスクトップのアーカイブには触れない',
-    options: [{ value: 10, label: '10 分' }, { value: 30, label: '30 分' }, { value: 60, label: '1 時間' }, { value: 0, label: 'しない' }],
+    key: 'mainArchiveMinutes', category: 'cards', group: T.groups.archive, type: 'segmented',
+    ...T.items.mainArchiveMinutes,
+    options: [{ value: 10, label: T.options.minutes(10) }, { value: 30, label: T.options.minutes(30) }, { value: 60, label: T.options.hours(1) }, { value: 0, label: T.options.never }],
   },
   {
-    key: 'projectOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'プロジェクト', description: 'カードの並び。固定は名前順',
+    key: 'projectOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.projectOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'worktreeOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。固定は元のフォルダを先頭に、あとは名前順',
+    key: 'worktreeOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.worktreeOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'sessionOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上',
+    key: 'sessionOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.sessionOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'rowPadding', category: 'cards', group: '行の大きさ', type: 'slider',
-    label: '上下の余白', description: 'セッションの行の上と下の余白。小さくすると 1 画面に多くの行が入る',
+    key: 'rowPadding', category: 'cards', group: T.groups.rowSize, type: 'slider',
+    ...T.items.rowPadding,
     min: 0, max: 12, step: 1, unit: 'px',
   },
   {
-    key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: '更新日時', description: '2 行目の「◯分前」',
+    key: 'showUpdated', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showUpdated,
     options: SHOW_OPTIONS,
   },
   {
-    key: 'showState', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など。左の印を言葉で補う',
+    key: 'showState', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showState,
     options: SHOW_OPTIONS,
   },
   {
-    key: 'showContext', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: 'コンテキスト', description: '2 行目の使用率（「12%」）。会話の記録から数える。窓の大きさがわからないモデルはトークン数だけ',
+    key: 'showContext', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showContext,
     options: SHOW_OPTIONS,
   },
   {
-    key: 'notifyWaiting', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '対応待ちになったとき', description: '許可や回答を待っているとき',
+    key: 'notifyWaiting', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.notifyWaiting,
     options: NOTIFY_OPTIONS,
   },
   {
-    key: 'notifyDone', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある',
+    key: 'notifyDone', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.notifyDone,
     options: NOTIFY_OPTIONS,
   },
   {
-    key: 'muteWhenOpen', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき',
-    options: [{ value: false, label: '知らせる' }, { value: true, label: '知らせない' }],
+    key: 'muteWhenOpen', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.muteWhenOpen,
+    options: [{ value: false, label: T.options.notify }, { value: true, label: T.options.noNotify }],
   },
   {
-    key: 'sound', category: 'notify', group: '音', type: 'segmented',
-    label: '音を鳴らす', description: '何件かが一度に変わっても 1 回だけ鳴らし、続けて鳴るときは数秒あける',
-    options: [{ value: true, label: '鳴らす' }, { value: false, label: '鳴らさない' }],
+    key: 'sound', category: 'notify', group: T.groups.sound, type: 'segmented',
+    ...T.items.sound,
+    options: [{ value: true, label: T.options.ring }, { value: false, label: T.options.noRing }],
   },
   {
-    key: 'soundType', category: 'notify', group: '音', type: 'segmented', preview: 'sound',
-    label: '音の種類', description: '対応待ちは高め、完了は低めの音になる',
-    options: [{ value: 'chime', label: 'チャイム' }, { value: 'bell', label: 'ベル' }, { value: 'pop', label: 'ポン' }],
+    key: 'soundType', category: 'notify', group: T.groups.sound, type: 'segmented', preview: 'sound',
+    ...T.items.soundType,
+    options: [{ value: 'chime', label: T.options.soundChime }, { value: 'bell', label: T.options.soundBell }, { value: 'pop', label: T.options.soundPop }],
   },
   {
-    key: 'soundVolume', category: 'notify', group: '音', type: 'slider',
-    label: '音量', min: 0, max: 100, step: 5, unit: '%',
+    key: 'soundVolume', category: 'notify', group: T.groups.sound, type: 'slider',
+    ...T.items.soundVolume, min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'toast', category: 'notify', group: 'Windows の通知', type: 'segmented',
-    label: 'トースト通知', description: 'クリックするとそのセッションを開く。通知そのものの音は出さず、上の「音」に従う',
-    options: [{ value: true, label: '出す' }, { value: false, label: '出さない' }],
+    key: 'toast', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    ...T.items.toast,
+    options: [{ value: true, label: T.options.showToast }, { value: false, label: T.options.noToast }],
   },
   {
-    key: 'flash', category: 'notify', group: 'Windows の通知', type: 'segmented',
-    label: 'タスクバーの点滅', description: '3 秒ほどで止まり、オレンジのままにはしない。ウィジェットが前面にあるときは点滅させない',
-    options: [{ value: true, label: '点滅させる' }, { value: false, label: '点滅させない' }],
+    key: 'flash', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    ...T.items.flash,
+    options: [{ value: true, label: T.options.flash }, { value: false, label: T.options.noFlash }],
   },
 ];
 

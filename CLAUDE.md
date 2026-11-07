@@ -8,6 +8,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 - セッションを開くときは `claude://claude.ai/epitaxy/<local_ID>` を使う。UIA のクリックは補助としてだけ使う
 - 公開を前提にしている。個人情報と日付を書かない。コミットは git フック（`.githooks/`）が検査する。コミットの日時は書き換えない。詳しくは [docs/publishing.md](docs/publishing.md)
 - コミットメッセージは日本語で、1 行目を `<種別>(<範囲>): <要約>` にする（例：`feat(app): ツールチップを自前で描く`）。`commit-msg` フックが検査する。詳しくは [docs/commit-messages.md](docs/commit-messages.md)
+- 画面に出る文字は `app/src/shared/strings/ja.ts` にだけ書く。`npm run lint:ja` で検査する。詳しくは [docs/strings.md](docs/strings.md)
 - 状態の判定は [docs/research/session-status.md](docs/research/session-status.md) に従う。知らない `waitingFor` の値は「対応待ち（その他）」として扱う
 - 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める（`start_session` に `use_worktree: true` を渡す）。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
 
@@ -16,7 +17,10 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 |---|---|
 | `docs/` | 資料。`research/` に調査結果、`design/` に設計、直下に開発の決まり |
 | `tools/` | 検証用と作業用のスクリプト（ワークツリーの片付けはスキル `clean-worktrees` から使う） |
-| `app/` | Electron 版のウィジェット。`npm start` で起動、`npm test` でテスト、`npm run debug` で見本データの表示、`npm run typecheck` で型の確認（一番上でも `app/` でも動く。一番上の `package.json` は `app/` に渡すだけ） |
+| `app/` | Electron 版のウィジェット。`npm start` で起動、`npm test` でテスト（`npm run lint:ja` も含む）、`npm run lint:ja` で画面の文言の検査、`npm run debug` で見本データの表示、`npm run typecheck` で型の確認（一番上でも `app/` でも動く。一番上の `package.json` は `app/` に渡すだけ） |
+| `app/src/shared/strings/` | 画面の文言（`ja.ts`） |
+| `app/text/` | 用語の辞書（`terms.yml`、prh の形式） |
+| `.claude/skills/` | スキル（`clean-worktrees`、文言の見直しの `review-ja`） |
 | `.githooks/` | 公開前の検査 |
 | `local/` | 手元専用。git に入れない（生のログ、個人の語句のリスト） |
 

@@ -4,6 +4,7 @@ import {
   CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_STATUS_COLORS, SETTING_DEFS,
   type CategoryId, type ColorState, type SettingDef, type Settings, type StatusColors,
 } from '../shared/settings.js';
+import { ja } from '../shared/strings/ja.js';
 import type { SessionState } from '../shared/types.js';
 import { createIcon } from './icon.js';
 import type { IconName } from './icons.js';
@@ -11,7 +12,12 @@ import { statusIconName } from './model.js';
 import { playSound } from './sound.js';
 import { applyStatusColors } from './status-colors.js';
 import { setStatus } from './status-icon.js';
+import { fillStrings } from './strings.js';
 
+document.title = ja.window.settings(ja.app.name);
+fillStrings(document);
+
+const T = ja.settings;
 const api = window.settingsApi;
 const nav = document.getElementById('nav')!;
 const content = document.getElementById('content')!;
@@ -65,7 +71,7 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
         group.append(b);
       }
       if (def.preview !== 'sound') return group;
-      const preview = el('button', { className: 'preview-button', disabled }, [createIcon('volume-2'), '試聴']);
+      const preview = el('button', { className: 'preview-button', disabled }, [createIcon('volume-2'), T.preview]);
       preview.addEventListener('click', previewSound);
       return el('div', { className: 'control' }, [group, preview]);
     }
@@ -96,11 +102,11 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
 // ---- 状態の色 ----
 
 const COLOR_LABELS: Record<ColorState, { label: string; description: string }> = {
-  busy: { label: '処理中', description: 'Claude が作業している' },
-  waiting: { label: '対応待ち', description: '許可待ち・回答待ち・画面を表示中・その他。理由にかかわらず同じ色' },
-  idle: { label: '待機', description: '次の指示を待っている。完了したときの帯もこの色' },
-  held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
-  stopped: { label: '停止中', description: '動いていないセッション' },
+  busy: T.colors.busy,
+  waiting: T.colors.waiting,
+  idle: T.colors.idle,
+  held: T.colors.held,
+  stopped: T.colors.stopped,
 };
 
 /** 対応待ちの理由ごとの印（model.ts の statusIconName が出すもの）。縦に並べる */
@@ -108,12 +114,12 @@ const WAITING_REASONS = ['permission prompt', 'input needed', 'dialog open', und
 
 /** ウィジェットの行の見本 */
 const PREVIEW_ROWS: { state: SessionState | 'held'; waitingFor?: string; title: string }[] = [
-  { state: 'busy', title: '検索の結果を並べ替える' },
-  { state: 'waiting', waitingFor: 'permission prompt', title: 'コマンドの実行の許可を待つ' },
-  { state: 'waiting', waitingFor: 'input needed', title: '質問への回答を待つ' },
-  { state: 'idle', title: '設定画面の文言を直す' },
-  { state: 'held', title: 'ほかのブランチのマージを待つ' },
-  { state: 'stopped', title: '古いブランチを片付ける' },
+  { state: 'busy', title: T.previewRows.busy },
+  { state: 'waiting', waitingFor: 'permission prompt', title: T.previewRows.permission },
+  { state: 'waiting', waitingFor: 'input needed', title: T.previewRows.input },
+  { state: 'idle', title: T.previewRows.idle },
+  { state: 'held', title: T.previewRows.held },
+  { state: 'stopped', title: T.previewRows.stopped },
 ];
 
 function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElement {
@@ -135,9 +141,9 @@ function statusColors(): HTMLElement {
     row.dataset.state = r.state;
     return row;
   }));
-  preview.setAttribute('aria-label', 'ウィジェットの見本');
+  preview.setAttribute('aria-label', T.colors.previewAria);
 
-  const resetAll = el('button', { className: 'text-button', textContent: 'すべて既定に戻す' });
+  const resetAll = el('button', { className: 'text-button', textContent: T.colors.resetAll });
   const updaters: (() => void)[] = [];
   const palettes: { palette: HTMLElement; swatch: HTMLButtonElement }[] = [];
 
@@ -163,7 +169,7 @@ function statusColors(): HTMLElement {
     const icons = el('div', { className: 'state-icons' },
       state === 'waiting' ? WAITING_REASONS.map((w) => statusIcon('waiting', w)) : [statusIcon(state)]);
     const text = el('div', { className: 'label' }, [el('b', { textContent: label }), el('span', { textContent: description })]);
-    const reset = el('button', { className: 'text-button', textContent: '既定に戻す' });
+    const reset = el('button', { className: 'text-button', textContent: T.colors.reset });
     reset.addEventListener('click', () => setColor(state, DEFAULT_STATUS_COLORS[state]));
     const swatch = el('button', { className: 'swatch current' });
     swatch.setAttribute('aria-expanded', 'false');
@@ -177,13 +183,13 @@ function statusColors(): HTMLElement {
       return b;
     });
     const custom = el('input', { type: 'color' });
-    custom.setAttribute('aria-label', `${label}の色を自由に選ぶ`);
+    custom.setAttribute('aria-label', T.colors.customAria(label));
     custom.addEventListener('input', () => setColor(state, custom.value));
     const palette = el('div', { className: 'palette', hidden: true }, [
       el('div', { className: 'swatches', role: 'group' }, choices),
-      el('label', { className: 'custom' }, [custom, '自由に選ぶ']),
+      el('label', { className: 'custom' }, [custom, T.colors.custom]),
     ]);
-    palette.firstElementChild!.setAttribute('aria-label', `${label}の色の候補`);
+    palette.firstElementChild!.setAttribute('aria-label', T.colors.choicesAria(label));
     palettes.push({ palette, swatch });
     swatch.addEventListener('click', () => {
       const open = palette.hidden;
@@ -195,7 +201,7 @@ function statusColors(): HTMLElement {
     updaters.push(() => {
       const color = settings.statusColors[state];
       swatch.style.setProperty('--swatch', color);
-      swatch.setAttribute('aria-label', `${label}の色：${color}`);
+      swatch.setAttribute('aria-label', T.colors.currentAria(label, color));
       reset.hidden = color === DEFAULT_STATUS_COLORS[state];
       for (const [i, b] of choices.entries()) b.setAttribute('aria-pressed', String(COLOR_SWATCHES[i] === color));
       if (custom.value !== color) custom.value = color;
@@ -219,12 +225,12 @@ function statusColors(): HTMLElement {
 async function renderAbout() {
   const info = await api.about();
   content.append(
-    el('h2', { textContent: 'このアプリ' }),
-    card('バージョン', undefined, el('span', { className: 'about-value', textContent: info.version })),
-    el('h2', { textContent: '読み取っているデータ' }),
-    ...info.dataFolders.map((f) => card('フォルダ', '読むだけで、書き換えはしません', el('span', { className: 'about-value', textContent: f }), true)),
-    el('h2', { textContent: '設定の保存先' }),
-    card('ファイル', undefined, el('span', { className: 'about-value', textContent: info.settingsFile }), true),
+    el('h2', { textContent: T.about.app }),
+    card(T.about.version, undefined, el('span', { className: 'about-value', textContent: info.version })),
+    el('h2', { textContent: T.about.data }),
+    ...info.dataFolders.map((f) => card(T.about.folder, T.about.readOnly, el('span', { className: 'about-value', textContent: f }), true)),
+    el('h2', { textContent: T.about.settingsFile }),
+    card(T.about.file, undefined, el('span', { className: 'about-value', textContent: info.settingsFile }), true),
   );
 }
 

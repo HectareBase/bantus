@@ -3,19 +3,13 @@
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
 import type { ContextUsage, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
+import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
 /** 並び順の「優先度」での保留の順位。待機と停止中の間 */
 export const HELD_RANK = 2.5;
-export const WAITING_LABELS: Record<string, string> = {
-  'permission prompt': '許可待ち',
-  'input needed': '回答待ち',
-  'dialog open': '画面を表示中',
-  'sandbox request': 'サンドボックスの許可待ち',
-  'worker request': 'ワーカーの要求待ち',
-  'goal proposal': 'ゴールの確認待ち',
-};
+export const WAITING_LABELS: Readonly<Record<string, string>> = ja.waiting;
 
 function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
   return a.rank - b.rank || b.latest - a.latest;
@@ -76,11 +70,11 @@ export function compareSessions(order: SortOrder, holds: HoldOptions = NO_HOLDS)
 /** 保留にしてからの長さ（「保留 2 日」など）。ツールチップに出す */
 export function heldFor(since: number, now = Date.now()): string {
   const min = Math.floor((now - since) / 60_000);
-  if (min < 1) return '保留したばかり';
-  if (min < 60) return `保留 ${min} 分`;
+  if (min < 1) return ja.time.heldJustNow;
+  if (min < 60) return ja.time.heldMinutes(min);
   const h = Math.floor(min / 60);
-  if (h < 24) return `保留 ${h} 時間`;
-  return `保留 ${Math.floor(h / 24)} 日`;
+  if (h < 24) return ja.time.heldHours(h);
+  return ja.time.heldDays(Math.floor(h / 24));
 }
 
 /** 保留の印のツールチップの行。経過と、メモがあればその全文 */
@@ -126,30 +120,30 @@ export function contextLabel(c: ContextUsage | undefined): string {
 export function contextTooltip(c: ContextUsage | undefined): string {
   if (!c) return '';
   const pct = contextPercent(c);
-  if (pct === undefined) return `コンテキスト：${formatTokens(c.tokens)}（窓の大きさがわからないモデル${c.model ? `：${c.model}` : ''}）`;
-  return `コンテキスト：${pct}%（${formatTokens(c.tokens)} / ${formatTokens(c.window!)}）`;
+  if (pct === undefined) return ja.tooltip.contextUnknownWindow(formatTokens(c.tokens), c.model);
+  return ja.tooltip.contextPercent(pct, formatTokens(c.tokens), formatTokens(c.window!));
 }
 
 export function formatAgo(ms: number, now = Date.now()): string {
   if (!ms) return '';
   const min = Math.floor((now - ms) / 60_000);
-  if (min < 1) return 'たった今';
-  if (min < 60) return `${min} 分前`;
+  if (min < 1) return ja.time.justNow;
+  if (min < 60) return ja.time.minutesAgo(min);
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 時間前`;
-  return `${Math.floor(h / 24)} 日前`;
+  if (h < 24) return ja.time.hoursAgo(h);
+  return ja.time.daysAgo(Math.floor(h / 24));
 }
 
 /** 知らない waitingFor はそのまま出す（docs/research/session-status.md：「対応待ち（その他）」） */
 export function waitingLabel(waitingFor: string | undefined): string {
-  return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
+  return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? ja.state.unknown;
 }
 
-const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: '処理中', idle: '待機中', stopped: '停止' };
+const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.stopped };
 
 /** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
 export function stateLabel(state: SessionState, waitingFor?: string): string {
-  if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? 'その他';
+  if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
   return STATE_LABELS[state];
 }
 
@@ -175,9 +169,9 @@ export function statusIconName(state: SessionState, waitingFor?: string): Status
 export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): string {
   const lines = [s.title];
   if (hold) lines.push(holdTooltip(hold, now));
-  if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
-  if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
-  if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
+  if (s.worktree) lines.push(ja.tooltip.worktree(s.worktree.branch));
+  if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
+  if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes);
   if (changes) lines.push(changes);
@@ -209,13 +203,13 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
 /** 印とセッションのツールチップに添える内訳。何もなければ空 */
 export function changesTooltip(c: GitChanges | undefined): string {
   if (!c) return '';
-  if (c.merged) return 'マージ済み（元のブランチに入った）';
+  if (c.merged) return ja.changes.merged;
   const parts: string[] = [];
-  if (c.changed) parts.push(`変更 ${c.changed}`);
-  if (c.untracked) parts.push(`未追跡 ${c.untracked}`);
-  const lines = parts.length ? [`コミットされていない変更：${parts.join('・')}`] : [];
-  if (c.ahead) lines.push(c.aheadOfBase ? `元のブランチにまだ入っていないコミット：${c.ahead}` : `push していないコミット：${c.ahead}`);
-  if (c.behind) lines.push(`元のブランチからの遅れ：${c.behind}`);
+  if (c.changed) parts.push(ja.changes.changed(c.changed));
+  if (c.untracked) parts.push(ja.changes.untracked(c.untracked));
+  const lines = parts.length ? [ja.changes.uncommitted(parts.join(ja.changes.separator))] : [];
+  if (c.ahead) lines.push(c.aheadOfBase ? ja.changes.aheadOfBase(c.ahead) : ja.changes.unpushed(c.ahead));
+  if (c.behind) lines.push(ja.changes.behind(c.behind));
   return lines.join('\n');
 }
 
@@ -360,9 +354,9 @@ export function toastContent(alerts: Alert[], sessions: SessionView[]): ToastCon
   const first = alerts[0];
   const s = first && sessions.find((x) => x.id === first.id);
   if (!first || !s) return undefined;
-  const reason = first.reason === 'waiting' ? `対応待ち（${waitingLabel(s.waitingFor)}）` : '完了';
+  const reason = first.reason === 'waiting' ? ja.state.waitingWithReason(waitingLabel(s.waitingFor)) : ja.toast.done;
   const rest = alerts.length - 1;
-  return { id: s.id, title: s.title, body: rest ? `${reason}。ほかに ${rest} 件` : reason };
+  return { id: s.id, title: s.title, body: rest ? ja.toast.withRest(reason, rest) : reason };
 }
 
 /** クリックで開いたセッション。デスクトップがファイルに書くまでの間、これを今開いているものとして扱う */
@@ -610,15 +604,15 @@ function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
 /** 起点の行き先（main のカードの一覧に出す）。dest は移す先のカードのセッション */
 function destPlace(dest: SessionView): FlyPlace {
   const wt = dest.worktree!;
-  return { icon: 'corner-down-right', label: wt.label, tip: `ワークツリー：${wt.branch} で続けている` };
+  return { icon: 'corner-down-right', label: wt.label, tip: ja.flyout.continuedIn(wt.branch) };
 }
 
 /** 起点の出どころ（ワークツリーのカードの一覧に出す） */
 function sourcePlace(origin: SessionView): FlyPlace {
   return {
     icon: 'house',
-    label: origin.mainBranch ?? '元のフォルダ',
-    tip: `元のフォルダ：${origin.mainBranch ?? '(ブランチ不明)'} で始めたセッション`,
+    label: origin.mainBranch ?? ja.widget.originFolder,
+    tip: ja.flyout.startedIn(origin.mainBranch ?? ja.tooltip.unknownBranch),
   };
 }
 
@@ -649,9 +643,9 @@ function rankOfList(list: SessionView[], holds: HoldOptions): { rank: number; la
 export function cardBadge(sessions: SessionView[], held = 0): { state: '' | 'waiting' | 'busy' | 'held'; text: string } {
   const waiting = sessions.filter((s) => s.state === 'waiting').length;
   const busy = sessions.filter((s) => s.state === 'busy').length;
-  if (waiting) return { state: 'waiting', text: `要対応 ${waiting}` };
-  if (busy) return { state: 'busy', text: `処理中 ${busy}` };
-  if (held) return { state: 'held', text: `保留 ${held}` };
+  if (waiting) return { state: 'waiting', text: ja.widget.badgeWaiting(waiting) };
+  if (busy) return { state: 'busy', text: ja.widget.badgeBusy(busy) };
+  if (held) return { state: 'held', text: ja.widget.badgeHeld(held) };
   return { state: '', text: '' };
 }
 
@@ -743,7 +737,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       cards.push({
         key,
         isMain,
-        label: isMain ? first.mainBranch ?? '元のフォルダ' : first.worktree!.label,
+        label: isMain ? first.mainBranch ?? ja.widget.originFolder : first.worktree!.label,
         tooltip: cardTooltip(first),
         changes,
         sessions: shown.sort(order),
@@ -775,7 +769,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
 
 /** カードの見出しのツールチップ。ブランチ名の全体と作業フォルダ */
 function cardTooltip(s: SessionView): string {
-  const lines = [s.worktree ? `ワークツリー：${s.worktree.branch}` : `元のフォルダ：${s.mainBranch ?? '(ブランチ不明)'}`];
+  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(s.mainBranch ?? ja.tooltip.unknownBranch)];
   if (s.workDir) lines.push(s.workDir);
   return lines.join('\n');
 }
