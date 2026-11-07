@@ -14,17 +14,28 @@ export interface Rect {
 }
 
 /**
- * @param widget ウィジェットのウィンドウ（画面の座標）
- * @param anchor 基準の要素（ウィジェットの中の座標）
- * @param size ツールチップの中身の大きさ（影の余白を除く）
+ * 画面（CSS px）の四角を、画面の座標（DIP）にする。表示の拡大率（設定の zoom）が 1 でないと、2 つは食い違う。
+ * 逆向き（画面の座標から CSS px）は 1 / zoom を渡す
  */
-export function tipBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect, size: { width: number; height: number }): Rect {
-  const width = Math.ceil(size.width) + TIP_MARGIN * 2;
-  const height = Math.ceil(size.height) + TIP_MARGIN * 2;
-  const outside = edge === 'left' ? widget.x + widget.width + TIP_GAP - TIP_MARGIN : widget.x - TIP_GAP - width + TIP_MARGIN;
+export function scaleRect<T extends Rect>(r: T, zoom: number): T {
+  return { ...r, x: r.x * zoom, y: r.y * zoom, width: r.width * zoom, height: r.height * zoom };
+}
+
+/**
+ * @param widget ウィジェットのウィンドウ（画面の座標）
+ * @param anchor 基準の要素（ウィジェットの中の、画面の座標）
+ * @param size ツールチップの中身の大きさ（影の余白を除く、画面の座標）
+ * @param zoom 表示の拡大率。影の余白とすき間（CSS px）を画面の座標にするのに使う
+ */
+export function tipBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect, size: { width: number; height: number }, zoom = 1): Rect {
+  const margin = TIP_MARGIN * zoom;
+  const gap = TIP_GAP * zoom;
+  const width = Math.ceil(size.width + margin * 2);
+  const height = Math.ceil(size.height + margin * 2);
+  const outside = edge === 'left' ? widget.x + widget.width + gap - margin : widget.x - gap - width + margin;
   // 内側に入りきらないとき（ウィジェットが広い、モニターが狭い）は、作業領域の端で止める
-  const x = clamp(outside, area.x - TIP_MARGIN, area.x + area.width - width + TIP_MARGIN);
-  const y = clamp(widget.y + anchor.y - TIP_MARGIN, area.y - TIP_MARGIN, area.y + area.height - height + TIP_MARGIN);
+  const x = clamp(outside, area.x - margin, area.x + area.width - width + margin);
+  const y = clamp(widget.y + anchor.y - margin, area.y - margin, area.y + area.height - height + margin);
   return { x: Math.round(x), y: Math.round(y), width, height };
 }
 
@@ -45,13 +56,14 @@ export const FLY_SHADOW = 8;
  * めくれと一覧のウィンドウを置く場所。カードの端（画面の内側の端）から外へ、作業領域の高さいっぱいに取る。
  * めくれはカードの端から伸び、一覧はウィジェットの端からすき間をあけて開くので、ウィンドウはその両方が入る幅にする。
  * 縦の位置は一覧の画面が決めるので、ウィンドウは動かさずに済む。top はカードの上端（ウィンドウの中の座標）、
- * inset はウィンドウのカード側の端から一覧までの距離
- * @param anchor カード（ウィジェットの中の座標）
+ * inset はウィンドウのカード側の端から一覧までの距離。どれも画面の座標
+ * @param anchor カード（ウィジェットの中の、画面の座標）
+ * @param zoom 表示の拡大率。一覧の幅とすき間（CSS px）を画面の座標にするのに使う
  */
-export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect): { bounds: Rect; top: number; inset: number } {
+export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect, zoom = 1): { bounds: Rect; top: number; inset: number } {
   // ウィジェットが右端なら、カードの左端から左へ。左端なら、カードの右端から右へ
-  const inset = Math.round(edge === 'right' ? anchor.x : widget.width - (anchor.x + anchor.width)) + FLY_GAP;
-  const width = inset + FLY_LIST_WIDTH + FLY_SHADOW;
+  const inset = Math.round((edge === 'right' ? anchor.x : widget.width - (anchor.x + anchor.width)) + FLY_GAP * zoom);
+  const width = inset + Math.ceil((FLY_LIST_WIDTH + FLY_SHADOW) * zoom);
   const x = edge === 'right' ? widget.x + anchor.x - width : widget.x + anchor.x + anchor.width;
   return {
     bounds: { x: Math.round(x), y: area.y, width, height: area.height },

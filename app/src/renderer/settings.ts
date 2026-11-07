@@ -1,9 +1,16 @@
 // 設定ウィンドウ。カテゴリと項目は shared/settings.ts の定義から作る。変更はその場で反映し、保存ボタンは置かない。
 
-import { CATEGORIES, SETTING_DEFS, type CategoryId, type SettingDef, type Settings } from '../shared/settings.js';
+import {
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_STATUS_COLORS, SETTING_DEFS,
+  type CategoryId, type ColorState, type SettingDef, type Settings, type StatusColors,
+} from '../shared/settings.js';
+import type { SessionState } from '../shared/types.js';
 import { createIcon } from './icon.js';
 import type { IconName } from './icons.js';
+import { statusIconName } from './model.js';
 import { playSound } from './sound.js';
+import { applyStatusColors } from './status-colors.js';
+import { setStatus } from './status-icon.js';
 
 const api = window.settingsApi;
 const nav = document.getElementById('nav')!;
@@ -81,7 +88,130 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
       });
       return el('div', { className: 'control' }, [value, input]);
     }
+    case 'status-colors':
+      return statusColors();
   }
+}
+
+// ---- 状態の色 ----
+
+const COLOR_LABELS: Record<ColorState, { label: string; description: string }> = {
+  busy: { label: '処理中', description: 'Claude が作業している' },
+  waiting: { label: '対応待ち', description: '許可待ち・回答待ち・画面を表示中・その他。理由にかかわらず同じ色' },
+  idle: { label: '待機', description: '次の指示を待っている。完了したときの帯もこの色' },
+  held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
+  stopped: { label: '停止中', description: '動いていないセッション' },
+};
+
+/** 対応待ちの理由ごとの印（model.ts の statusIconName が出すもの）。縦に並べる */
+const WAITING_REASONS = ['permission prompt', 'input needed', 'dialog open', undefined];
+
+/** ウィジェットの行の見本 */
+const PREVIEW_ROWS: { state: SessionState | 'held'; waitingFor?: string; title: string }[] = [
+  { state: 'busy', title: '検索の結果を並べ替える' },
+  { state: 'waiting', waitingFor: 'permission prompt', title: 'コマンドの実行の許可を待つ' },
+  { state: 'waiting', waitingFor: 'input needed', title: '質問への回答を待つ' },
+  { state: 'idle', title: '設定画面の文言を直す' },
+  { state: 'held', title: 'ほかのブランチのマージを待つ' },
+  { state: 'stopped', title: '古いブランチを片付ける' },
+];
+
+function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElement {
+  const node = el('span', { className: 'status' });
+  node.dataset.state = state;
+  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor));
+  return node;
+}
+
+function isDefaultColors(colors: StatusColors): boolean {
+  return COLOR_STATES.every((st) => colors[st] === DEFAULT_STATUS_COLORS[st]);
+}
+
+/** 行の見本、状態ごとの行（四角を押すと候補が開く）、「すべて既定に戻す」 */
+function statusColors(): HTMLElement {
+  const panel = el('div', { className: 'status-colors' });
+  const preview = el('div', { className: 'card color-preview' }, PREVIEW_ROWS.map((r) => {
+    const row = el('div', { className: 'preview-row' }, [statusIcon(r.state, r.waitingFor), el('span', { textContent: r.title })]);
+    row.dataset.state = r.state;
+    return row;
+  }));
+  preview.setAttribute('aria-label', 'ウィジェットの見本');
+
+  const resetAll = el('button', { className: 'text-button', textContent: 'すべて既定に戻す' });
+  const updaters: (() => void)[] = [];
+  const palettes: { palette: HTMLElement; swatch: HTMLButtonElement }[] = [];
+
+  const setColor = (state: ColorState, color: string) => {
+    set('statusColors', { ...settings.statusColors, [state]: color });
+    refresh();
+  };
+  const refresh = () => {
+    applyStatusColors(settings.statusColors, panel);
+    for (const u of updaters) u();
+    resetAll.disabled = isDefaultColors(settings.statusColors);
+  };
+  const closePalettes = (except?: HTMLElement) => {
+    for (const p of palettes) {
+      if (p.palette === except) continue;
+      p.palette.hidden = true;
+      p.swatch.setAttribute('aria-expanded', 'false');
+    }
+  };
+
+  const rows = COLOR_STATES.map((state) => {
+    const { label, description } = COLOR_LABELS[state];
+    const icons = el('div', { className: 'state-icons' },
+      state === 'waiting' ? WAITING_REASONS.map((w) => statusIcon('waiting', w)) : [statusIcon(state)]);
+    const text = el('div', { className: 'label' }, [el('b', { textContent: label }), el('span', { textContent: description })]);
+    const reset = el('button', { className: 'text-button', textContent: '既定に戻す' });
+    reset.addEventListener('click', () => setColor(state, DEFAULT_STATUS_COLORS[state]));
+    const swatch = el('button', { className: 'swatch current' });
+    swatch.setAttribute('aria-expanded', 'false');
+
+    const choices = COLOR_SWATCHES.map((c) => {
+      const b = el('button', { className: 'swatch' });
+      b.style.setProperty('--swatch', c);
+      b.setAttribute('aria-label', c);
+      b.title = c;
+      b.addEventListener('click', () => setColor(state, c));
+      return b;
+    });
+    const custom = el('input', { type: 'color' });
+    custom.setAttribute('aria-label', `${label}の色を自由に選ぶ`);
+    custom.addEventListener('input', () => setColor(state, custom.value));
+    const palette = el('div', { className: 'palette', hidden: true }, [
+      el('div', { className: 'swatches', role: 'group' }, choices),
+      el('label', { className: 'custom' }, [custom, '自由に選ぶ']),
+    ]);
+    palette.firstElementChild!.setAttribute('aria-label', `${label}の色の候補`);
+    palettes.push({ palette, swatch });
+    swatch.addEventListener('click', () => {
+      const open = palette.hidden;
+      closePalettes(palette);
+      palette.hidden = !open;
+      swatch.setAttribute('aria-expanded', String(open));
+    });
+
+    updaters.push(() => {
+      const color = settings.statusColors[state];
+      swatch.style.setProperty('--swatch', color);
+      swatch.setAttribute('aria-label', `${label}の色：${color}`);
+      reset.hidden = color === DEFAULT_STATUS_COLORS[state];
+      for (const [i, b] of choices.entries()) b.setAttribute('aria-pressed', String(COLOR_SWATCHES[i] === color));
+      if (custom.value !== color) custom.value = color;
+    });
+
+    const head = el('div', { className: 'color-row' }, [icons, text, el('div', { className: 'control' }, [reset, swatch])]);
+    return el('div', { className: 'card color-card' }, [head, palette]);
+  });
+
+  resetAll.addEventListener('click', () => {
+    set('statusColors', { ...DEFAULT_STATUS_COLORS });
+    refresh();
+  });
+  panel.append(preview, ...rows, el('div', { className: 'reset-all' }, [resetAll]));
+  refresh();
+  return panel;
 }
 
 // ---- 画面 ----
@@ -110,6 +240,10 @@ async function renderContent() {
     if (def.group !== group) {
       group = def.group;
       content.append(el('h2', { textContent: group }));
+    }
+    if (def.type === 'status-colors') {
+      content.append(await control(def, false));
+      continue;
     }
     const disabled = def.packagedOnly === true && !packaged;
     const node = card(def.label, def.description, await control(def, disabled));

@@ -2,7 +2,9 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { CATEGORIES, DEFAULT_SETTINGS, SETTING_DEFS, normalizeSettings } from '../src/shared/settings';
+import {
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, normalizeColor, normalizeNote, normalizeSettings,
+} from '../src/shared/settings';
 
 describe('normalizeSettings の settingsWindow', () => {
   it('なければ入れない', () => assert.equal(normalizeSettings({}).settingsWindow, undefined));
@@ -43,6 +45,8 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.deepEqual([s.mainArchiveMinutes, s.archive, s.archivedCards], [10, {}, {}]);
     assert.deepEqual([s.projectOrder, s.worktreeOrder, s.sessionOrder], ['fixed', 'fixed', 'fixed']);
     assert.equal(s.showUpdated, true);
+    assert.equal(s.showState, true);
+    assert.equal(s.showContext, true);
   });
   it('選べる値だけを残す', () => {
     assert.equal(normalizeSettings({ mainArchiveMinutes: 0 }).mainArchiveMinutes, 0);
@@ -51,6 +55,8 @@ describe('normalizeSettings の一覧の項目', () => {
     assert.equal(normalizeSettings({ sessionOrder: 'recent' }).sessionOrder, 'recent');
     assert.equal(normalizeSettings({ projectOrder: 'name' }).projectOrder, 'fixed');
     assert.equal(normalizeSettings({ showUpdated: 'false' }).showUpdated, true);
+    assert.equal(normalizeSettings({ showState: false }).showState, false);
+    assert.equal(normalizeSettings({ showContext: false }).showContext, false);
   });
   it('前の版の項目（表示数、折りたたみ、番号）は読み捨てる', () => {
     const s = normalizeSettings({ groupLimit: 3, foldScope: 'worktree', showSeq: false }) as unknown as Record<string, unknown>;
@@ -89,6 +95,27 @@ describe('normalizeSettings の見出しの濃さ', () => {
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
 });
 
+describe('normalizeSettings の表示の拡大率', () => {
+  it('なければ 100%', () => assert.equal(normalizeSettings({}).zoom, 100));
+  it('80〜150 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ zoom: 50 }).zoom, 80);
+    assert.equal(normalizeSettings({ zoom: 300 }).zoom, 150);
+    assert.equal(normalizeSettings({ zoom: 124.6 }).zoom, 125);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ zoom: '125' }).zoom, 100));
+});
+
+describe('normalizeSettings の行の上下の余白', () => {
+  it('なければ 4px（今までの見た目）', () => assert.equal(normalizeSettings({}).rowPadding, 4));
+  it('0〜12 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ rowPadding: 0 }).rowPadding, 0);
+    assert.equal(normalizeSettings({ rowPadding: -3 }).rowPadding, 0);
+    assert.equal(normalizeSettings({ rowPadding: 40 }).rowPadding, 12);
+    assert.equal(normalizeSettings({ rowPadding: 6.6 }).rowPadding, 7);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ rowPadding: '8' }).rowPadding, 4));
+});
+
 describe('設定画面のカテゴリ', () => {
   const layout = (id: string) => {
     const out: [string, string[]][] = [];
@@ -98,18 +125,25 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → カードの表示 → 通知 → 情報', () => assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'cards', 'notify', 'about']));
-  it('全体は 位置 → 見た目 → 起動', () =>
+  it('左の一覧は 全体 → 見た目 → カードの表示 → 通知 → 情報', () =>
+    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'notify', 'about']));
+  it('全体は 位置 → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
-      ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']],
       ['起動', ['openAtLogin']],
     ]));
-  it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>
+  it('見た目は 明るさ → ウィジェット → 状態の色', () =>
+    assert.deepEqual(layout('look'), [
+      ['明るさ', ['theme']],
+      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
+      ['状態の色', ['statusColors']],
+    ]));
+  it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [
       ['アーカイブ', ['mainArchiveMinutes']],
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
-      ['行に出すもの', ['showUpdated']],
+      ['行の大きさ', ['rowPadding']],
+      ['行に出すもの', ['showUpdated', 'showState', 'showContext']],
     ]));
   it('通知は 知らせるとき → 音 → Windows の通知', () =>
     assert.deepEqual(layout('notify'), [
@@ -140,4 +174,86 @@ describe('normalizeSettings の通知', () => {
   });
   it('音の種類だけに試聴のボタンを付ける', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.type === 'segmented' && d.preview).map((d) => d.key), ['soundType']));
+});
+
+describe('normalizeSettings の theme', () => {
+  it('なければ Windows に従う', () => assert.equal(normalizeSettings({}).theme, 'system'));
+  it('選べる値を残す', () => {
+    assert.equal(normalizeSettings({ theme: 'light' }).theme, 'light');
+    assert.equal(normalizeSettings({ theme: 'dark' }).theme, 'dark');
+  });
+  it('知らない値は既定値に戻す', () => {
+    for (const theme of ['Dark', 'auto', 1, null]) assert.equal(normalizeSettings({ theme }).theme, 'system');
+  });
+});
+
+describe('normalizeSettings の statusColors', () => {
+  it('なければ既定の色', () => assert.deepEqual(normalizeSettings({}).statusColors, DEFAULT_STATUS_COLORS));
+  it('#rrggbb を小文字にそろえて残す', () =>
+    assert.deepEqual(normalizeSettings({ statusColors: { busy: '#A371F7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000' } }).statusColors, {
+      busy: '#a371f7', waiting: '#e5534b', idle: '#26a69a', stopped: '#000000', held: DEFAULT_STATUS_COLORS.held,
+    }));
+  it('壊れた色・欠けた状態は、その状態だけ既定の色に戻す', () =>
+    assert.deepEqual(normalizeSettings({ statusColors: { busy: 'red', waiting: '#e5534', idle: 123 } }).statusColors, DEFAULT_STATUS_COLORS));
+  it('知らない状態（対応待ちの理由ごとの色など）は捨てる', () => {
+    const colors = normalizeSettings({ statusColors: { waiting: '#e5534b', 'permission prompt': '#000000' } }).statusColors;
+    assert.deepEqual(colors, { ...DEFAULT_STATUS_COLORS, waiting: '#e5534b' });
+  });
+  it('入れ物が表でなければ既定の色', () => {
+    for (const statusColors of ['#000000', ['#000000'], null]) assert.deepEqual(normalizeSettings({ statusColors }).statusColors, DEFAULT_STATUS_COLORS);
+  });
+  it('既定の色と候補は #rrggbb', () => {
+    for (const c of [...Object.values(DEFAULT_STATUS_COLORS), ...COLOR_SWATCHES]) assert.equal(normalizeColor(c), c);
+  });
+});
+
+
+describe('保留の色', () => {
+  it('5 つめの状態の色として、既定はピンク', () => {
+    assert.equal(DEFAULT_STATUS_COLORS.held, '#e05aa8');
+    assert.ok(COLOR_SWATCHES.includes(DEFAULT_STATUS_COLORS.held));
+  });
+  it('設定画面では待機と停止中の間に並べる', () => assert.deepEqual(COLOR_STATES, ['busy', 'waiting', 'idle', 'held', 'stopped']));
+  it('保存されている色に held がなければ既定の色。あれば残す', () => {
+    assert.equal(normalizeSettings({ statusColors: { busy: '#000000' } }).statusColors.held, '#e05aa8');
+    assert.equal(normalizeSettings({ statusColors: { held: '#A371F7' } }).statusColors.held, '#a371f7');
+  });
+});
+
+describe('normalizeSettings の holds と heldCards', () => {
+  it('なければ空', () => {
+    assert.deepEqual(normalizeSettings({}).holds, {});
+    assert.deepEqual(normalizeSettings({}).heldCards, {});
+  });
+  it('正しい印を残す', () => {
+    const s = normalizeSettings({
+      holds: { 'local_a-1': { note: 'マージ待ち', since: 1000 } },
+      heldCards: { 'c:/repo|fix': { note: '', since: 2000 } },
+    });
+    assert.deepEqual(s.holds, { 'local_a-1': { note: 'マージ待ち', since: 1000 } });
+    assert.deepEqual(s.heldCards, { 'c:/repo|fix': { note: '', since: 2000 } });
+  });
+  it('目印が合わない・note が文字列でない・since が有限の数でないものは捨てる', () => {
+    const s = normalizeSettings({
+      holds: {
+        'not-a-session': { note: '', since: 1 },
+        local_b: { note: 1, since: 1 },
+        local_c: { note: '', since: Infinity },
+        local_d: { note: '', since: '1' },
+        local_e: 'held',
+        local_f: { note: 'ok', since: 5 },
+      },
+      heldCards: { '': { note: '', since: 1 }, 'a\nb': { note: '', since: 1 }, 'r|x': { note: 'ok', since: 6 } },
+    });
+    assert.deepEqual(s.holds, { local_f: { note: 'ok', since: 5 } });
+    assert.deepEqual(s.heldCards, { 'r|x': { note: 'ok', since: 6 } });
+  });
+  it('入れ物が表でなければ空', () => {
+    for (const holds of [null, 'x', [{ note: '', since: 1 }]]) assert.deepEqual(normalizeSettings({ holds, heldCards: holds }).holds, {});
+  });
+  it('メモは制御文字と改行を空白にし、前後の空白を除いて 200 文字まで', () => {
+    assert.equal(normalizeSettings({ holds: { local_a: { note: '  あと\nで\t再開\x00 ', since: 1 } } }).holds.local_a!.note, 'あと で 再開');
+    assert.equal(normalizeNote('あ'.repeat(HOLD_NOTE_MAX + 50)).length, HOLD_NOTE_MAX);
+    assert.equal(normalizeNote(42), '');
+  });
 });

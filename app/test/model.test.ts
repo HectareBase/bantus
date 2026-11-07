@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, formatAgo, isLive, revivedCards, revivedSessions,
-  nextAttention, nextCycleTarget, resolveFocus, shortcutTarget, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
+  nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
+  HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
+import { cardKeyOf } from '../src/shared/card-key';
 import { view } from './helpers';
 
 const MIN = 60_000;
@@ -145,6 +147,30 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     assert.equal(main.stackCount, 1);
     assert.deepEqual(x.archived.map((s) => s.id), ['origin']);
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.origin, t.link]), [['w1', false, 'solid'], ['origin', true, undefined]]);
+  });
+
+  it('main のカードの起点の行には行き先のワークツリー、ワークツリーのカードの起点の行には元のフォルダを出す', () => {
+    const sessions = list().map((s) => ({ ...s, mainBranch: 'main' }));
+    // 同じ起点から 2 つ目のワークツリーを作っても、行き先は一番古い 1 つだけ
+    sessions.push({ ...view({ id: 'w2', worktree: wt('y'), spawnedFrom: 'origin', createdAt: 4, lastActivityAt: 40 }), mainBranch: 'main' });
+    const [repo] = buildRepos(sessions);
+    const main = repo!.cards.find((c) => c.isMain)!;
+    assert.deepEqual(main.timeline.map((t) => [t.session.id, t.place]), [
+      ['origin', { icon: 'corner-down-right', label: 'x', tip: 'ワークツリー：claude/x-123abc で続けている' }],
+    ]);
+    const x = repo!.cards.find((c) => c.key === cardKeyOf(sessions[2]!))!;
+    assert.deepEqual(x.timeline.map((t) => [t.session.id, t.place]), [
+      ['w1', undefined],
+      ['origin', { icon: 'house', label: 'main', tip: '元のフォルダ：main で始めたセッション' }],
+    ]);
+    const y = repo!.cards.find((c) => c.key === cardKeyOf(sessions[3]!))!;
+    assert.ok(y.timeline.every((t) => !t.origin), '行き先ではないカードには起点を出さない');
+  });
+
+  it('元のフォルダのブランチがわからなければ「元のフォルダ」と出す', () => {
+    const [repo] = buildRepos(list('busy'));
+    const x = repo!.cards.find((c) => !c.isMain)!;
+    assert.deepEqual(x.timeline.find((t) => t.origin)!.place?.label, '元のフォルダ');
   });
 
   it('処理中・対応待ちのうちは main に出す（タイムラインの一番下にも出す）', () => {
@@ -288,6 +314,47 @@ describe('戻ったセッションの猶予', () => {
   });
 });
 
+describe('確認した直後の猶予', () => {
+  const now = 100 * MIN;
+  const sessions = [
+    view({ id: 'o', worktree: wt('x'), state: 'idle', lastActivityAt: now - 30 * MIN }),
+    view({ id: 'n', worktree: wt('x'), state: 'idle', lastActivityAt: now - 20 * MIN }),
+  ];
+  const confirmedAt = new Map([['o', now]]);
+  const card = (o: Partial<ArchiveOptions>) => buildRepos(sessions, opts({ now, mainMinutes: 10, confirmedAt, ...o }))[0]!.cards[0]!;
+  it('ワークツリーで一番新しくなくても、確認した直後は出しておく', () => {
+    assert.deepEqual(card({}).sessions.map((s) => s.id).sort(), ['n', 'o']);
+    assert.deepEqual(card({ confirmedAt: new Map() }).archived.map((s) => s.id), ['o'], '確認していなければ今までどおり');
+  });
+  it('猶予がすぎたらアーカイブする', () => {
+    assert.deepEqual(card({ now: now + 10 * MIN }).archived.map((s) => s.id), ['o']);
+    assert.deepEqual(card({ mainMinutes: 0, now: now + 9 * MIN }).sessions.length, 2, 'main の自動アーカイブがオフなら 10 分');
+  });
+  it('手でアーカイブしたものは、確認した直後でもアーカイブのまま', () => {
+    assert.deepEqual(card({ marks: { o: 'archived' } }).archived.map((s) => s.id), ['o']);
+    assert.deepEqual(card({ marks: { n: 'archived' }, confirmedAt: new Map([['n', now]]) }).sessions.length, 0, '一番新しいものでも');
+  });
+  it('起点は、確認した直後は main に残す。手でアーカイブしたら移す', () => {
+    const list = [
+      view({ id: 'r', state: 'idle', lastActivityAt: now - 30 * MIN }),
+      view({ id: 'w', worktree: wt('x'), spawnedFrom: 'r', lastActivityAt: now }),
+    ];
+    const mainCard = (o: Partial<ArchiveOptions>) =>
+      buildRepos(list, opts({ now, mainMinutes: 10, confirmedAt: new Map([['r', now]]), ...o }))[0]!.cards.find((c) => c.isMain);
+    assert.deepEqual(mainCard({})!.sessions.map((s) => s.id), ['r']);
+    assert.deepEqual(mainCard({ now: now + 10 * MIN })!.sessions, [], '猶予がすぎたら移す');
+    assert.deepEqual(mainCard({ marks: { r: 'archived' } })!.sessions, []);
+  });
+  it('マージ済みのカードは、確認した直後は隠さない。手でアーカイブしたら隠す', () => {
+    const list = [view({ id: 'm', worktree: wt('x'), state: 'idle', lastActivityAt: now - 30 * MIN, changes: { ...clean, merged: true } })];
+    const hidden = (o: Partial<ArchiveOptions>) =>
+      buildRepos(list, opts({ now, mainMinutes: 10, confirmedAt: new Map([['m', now]]), ...o }))[0]!.hiddenCards.length;
+    assert.equal(hidden({}), 0);
+    assert.equal(hidden({ now: now + 10 * MIN }), 1);
+    assert.equal(hidden({ cardMarks: { [cardKeyOf(list[0]!)]: 'archived' } }), 1);
+  });
+});
+
 describe('cardBadge', () => {
   const badge = (...patches: Partial<SessionView>[]) => cardBadge(patches.map((p) => view(p)));
   it('対応待ちがあれば件数を出す', () =>
@@ -404,6 +471,22 @@ describe('Claude 本体で開いたか（openedInClaude）', () => {
   it('時刻がないままなら開いていない', () => assert.equal(openedInClaude(0, undefined), false));
 });
 
+describe('stateLabel', () => {
+  it('処理中、待機中、停止', () => {
+    assert.equal(stateLabel('busy'), '処理中');
+    assert.equal(stateLabel('idle'), '待機中');
+    assert.equal(stateLabel('stopped'), '停止');
+  });
+  it('対応待ちは理由を言葉にする', () => {
+    assert.equal(stateLabel('waiting', 'permission prompt'), '許可待ち');
+    assert.equal(stateLabel('waiting', 'input needed'), '回答待ち');
+  });
+  it('知らない理由やないときは「その他」（対応待ち（その他））', () => {
+    assert.equal(stateLabel('waiting', 'some new reason'), 'その他');
+    assert.equal(stateLabel('waiting', undefined), 'その他');
+  });
+});
+
 describe('tooltip と waitingLabel', () => {
   it('知っている理由は日本語にする', () => assert.equal(waitingLabel('permission prompt'), '許可待ち'));
   it('知らない理由はそのまま、なければ「不明」', () => {
@@ -436,19 +519,31 @@ describe('formatAgo', () => {
 });
 
 describe('resolveFocus', () => {
-  const sessions = [view({ id: 'a', focused: true }), view({ id: 'b' })];
-  const pending = { id: 'b', until: 2000 };
+  // a を開いていた（focusedAt 500）。1000 に b をクリックした
+  const sessions = [view({ id: 'a', focused: true, focusedAt: 500 }), view({ id: 'b' })];
+  const pending = { id: 'b', at: 1000, until: 1000 + PENDING_FOCUS_MS };
 
   it('クリックがなければファイルの値', () => assert.deepEqual(resolveFocus(sessions, undefined, 1000), { id: 'a', pending: undefined }));
   it('ファイルが追いつくまでは、クリックしたセッション', () =>
-    assert.deepEqual(resolveFocus(sessions, pending, 1000), { id: 'b', pending }));
+    assert.deepEqual(resolveFocus(sessions, pending, 1500), { id: 'b', pending }));
+  it('5 秒を過ぎてもファイルが古いままなら、クリックしたセッションを保つ（前の行に戻さない）', () =>
+    assert.deepEqual(resolveFocus(sessions, pending, 1000 + 6_000), { id: 'b', pending }));
   it('ファイルが追いついたら、待つのをやめる', () => {
-    const caught = [view({ id: 'a' }), view({ id: 'b', focused: true })];
-    assert.deepEqual(resolveFocus(caught, pending, 1000), { id: 'b', pending: undefined });
+    const caught = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b', focused: true, focusedAt: 4500 })];
+    assert.deepEqual(resolveFocus(caught, pending, 4500), { id: 'b', pending: undefined });
   });
-  it('時間が過ぎたら、ファイルの値に戻す', () => assert.deepEqual(resolveFocus(sessions, pending, 2000), { id: 'a', pending: undefined }));
+  it('クリックのあとで別のセッションの focusedAt が進んだら、そちらに従う', () => {
+    const other = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b' }), view({ id: 'c', focused: true, focusedAt: 2000 })];
+    assert.deepEqual(resolveFocus(other, pending, 2500), { id: 'c', pending: undefined });
+  });
+  it('クリックより前の focusedAt は、本体で開いたものとみなさない', () => {
+    const older = [view({ id: 'a', focused: true, focusedAt: 1000 }), view({ id: 'b' })];
+    assert.deepEqual(resolveFocus(older, pending, 1500), { id: 'b', pending });
+  });
+  it('安全のための期限が過ぎたら、ファイルの値に戻す', () =>
+    assert.deepEqual(resolveFocus(sessions, pending, pending.until), { id: 'a', pending: undefined }));
   it('クリックしたセッションがなくなったら、ファイルの値', () =>
-    assert.deepEqual(resolveFocus([view({ id: 'a', focused: true })], pending, 1000), { id: 'a', pending: undefined }));
+    assert.deepEqual(resolveFocus([view({ id: 'a', focused: true, focusedAt: 500 })], pending, 1500), { id: 'a', pending: undefined }));
 });
 
 describe('statusIconName', () => {
@@ -508,17 +603,19 @@ describe('displayOrder と nextCycleTarget', () => {
   });
 
   it('Claude が前面になくても、未確認の行があればそちらを開く', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', false, withMain), 't1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['t1']), 'm1', false, withMain), { id: 't1', raise: false }));
   it('未確認が今開いている行だけなら、前面になければ今開いている行を前面に出す', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['m1']), 'm1', false, withMain), 'm1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['m1']), 'm1', false, withMain), { id: 'm1', raise: true }));
   it('未確認がなく Claude が前面になければ、今開いている行を前面に出す', () =>
-    assert.equal(shortcutTarget(sessions, new Set(), 'm1', false, withMain), 'm1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(), 'm1', false, withMain), { id: 'm1', raise: true }));
   it('Claude が前面にあれば、いつもどおり次へ進む', () =>
-    assert.equal(shortcutTarget(sessions, new Set(['t1']), 'm1', true, withMain), 't1'));
+    assert.deepEqual(shortcutTarget(sessions, new Set(['t1']), 'm1', true, withMain), { id: 't1', raise: false }));
   it('前面になくても、今開いている行が一覧にない（アーカイブした）か、わからなければ次へ進む', () => {
-    assert.equal(shortcutTarget(sessions, new Set(), 't0', false, withMain), 'w1');
-    assert.equal(shortcutTarget(sessions, new Set(), undefined, false, withMain), 'w1');
+    assert.deepEqual(shortcutTarget(sessions, new Set(), 't0', false, withMain), { id: 'w1', raise: false });
+    assert.deepEqual(shortcutTarget(sessions, new Set(), undefined, false, withMain), { id: 'w1', raise: false });
   });
+  it('ほかに行がなければ何もしない', () =>
+    assert.equal(shortcutTarget([view({ id: 'a' })], new Set(), 'a', true), undefined));
 });
 
 describe('コミットされていない変更と、元のブランチとの差', () => {
@@ -559,5 +656,170 @@ describe('newlyFlagged', () => {
   });
   it('最初の描画では返さない', () => {
     assert.deepEqual(newlyFlagged(new Set(), new Set(['a', 'b']), false), []);
+  });
+});
+
+// ---- 保留（docs/design/hold.md） ----
+
+describe('保留：アーカイブにかからない', () => {
+  const held = (note = '') => ({ note, since: 0 });
+
+  it('ワークツリーで一番新しくなくても、保留の行は出す', () => {
+    const sessions = [
+      view({ id: 'old', worktree: wt('x'), state: 'stopped', lastActivityAt: 10 }),
+      view({ id: 'new', worktree: wt('x'), state: 'idle', lastActivityAt: 30 }),
+    ];
+    const c = buildRepos(sessions, opts({ holds: { old: held() } }))[0]!.cards[0]!;
+    assert.deepEqual(c.sessions.map((s) => s.id).sort(), ['new', 'old']);
+    assert.deepEqual(c.archived, []);
+  });
+
+  it('main の時間がたっても、保留の行は出す', () => {
+    const sessions = [view({ id: 'm', state: 'idle', lastActivityAt: 0 })];
+    const o = opts({ mainMinutes: 10, now: 60 * MIN, holds: { m: held() } });
+    assert.deepEqual(buildRepos(sessions, o)[0]!.cards[0]!.sessions.map((s) => s.id), ['m']);
+  });
+
+  it('手でアーカイブした印が残っていても、保留が先', () => {
+    const sessions = [view({ id: 'm', state: 'idle' })];
+    const c = buildRepos(sessions, opts({ marks: { m: 'archived' }, holds: { m: held() } }))[0]!.cards[0]!;
+    assert.deepEqual(c.sessions.map((s) => s.id), ['m']);
+  });
+
+  it('保留の起点は、ワークツリーのカードへ移さず main に出す', () => {
+    const origin = view({ id: 'o', repoKey: 'r', state: 'stopped', lastActivityAt: 1 });
+    const child = view({ id: 'c', repoKey: 'r', worktree: wt('x'), spawnedFrom: 'o', state: 'idle', lastActivityAt: 2 });
+    const repo = buildRepos([origin, child], opts({ holds: { o: held() } }))[0]!;
+    assert.deepEqual(repo.cards.find((c) => c.isMain)!.sessions.map((s) => s.id), ['o']);
+  });
+
+  it('保留のカードは、マージ済みでも隠さない（マージ済みの印は残す）', () => {
+    const merged = { ...clean, merged: true };
+    const sessions = [view({ repoKey: 'r', worktree: wt('x'), changes: merged })];
+    assert.equal(buildRepos(sessions, opts())[0]!.cards.length, 0);
+    const repo = buildRepos(sessions, opts({ heldCards: { 'r|x': held('レビュー待ち') } }))[0]!;
+    assert.equal(repo.cards.length, 1);
+    assert.equal(repo.cards[0]!.merged, true);
+    assert.deepEqual(repo.cards[0]!.held, held('レビュー待ち'));
+  });
+
+  it('手でアーカイブしたカードの印が残っていても、保留が先', () => {
+    const sessions = [view({ repoKey: 'r', worktree: wt('x') })];
+    const repo = buildRepos(sessions, opts({ cardMarks: { 'r|x': 'archived' }, heldCards: { 'r|x': held() } }))[0]!;
+    assert.equal(repo.cards.length, 1);
+  });
+
+  it('元のフォルダのカードには、保留を付けない', () => {
+    const sessions = [view({ repoKey: 'r' })];
+    assert.equal(buildRepos(sessions, opts({ heldCards: { 'r|': held() } }))[0]!.cards[0]!.held, undefined);
+  });
+});
+
+describe('保留：動き出したら外す', () => {
+  const sessions = [
+    view({ id: 'a', repoKey: 'r', state: 'busy' }),
+    view({ id: 'b', repoKey: 'r', state: 'waiting' }),
+    view({ id: 'c', repoKey: 'r', state: 'idle' }),
+    view({ id: 'd', repoKey: 'r', worktree: wt('x'), state: 'stopped' }),
+    view({ id: 'e', repoKey: 'r', worktree: wt('y'), state: 'idle' }),
+    view({ id: 'f', repoKey: 'r', worktree: wt('y'), state: 'busy' }),
+  ];
+  const mark = { note: 'メモ', since: 0 };
+  const holds = { a: mark, b: mark, c: mark };
+  const heldCards = { 'r|x': mark, 'r|y': mark };
+
+  it('処理中・対応待ちになった保留の行を返す。待機・停止中のものは残す', () =>
+    assert.deepEqual(releasedHolds(sessions, { holds, heldCards: {} }).sessions, ['a', 'b']));
+  it('カードは、中のどれかが動き出したら返す', () =>
+    assert.deepEqual(releasedHolds(sessions, { holds: {}, heldCards }).cards, ['r|y']));
+  it('印のないものは返さない', () => assert.deepEqual(releasedHolds(sessions, { holds: {}, heldCards: {} }), { sessions: [], cards: [] }));
+  it('処理中・対応待ちのものは、外す前でも保留として扱わない', () => {
+    assert.equal(isHeld(sessions[0]!, { holds, heldCards }), false);
+    assert.equal(isHeld(sessions[2]!, { holds, heldCards }), true);
+    assert.equal(isHeld(sessions[3]!, { holds: {}, heldCards }), true, 'カードの保留の中の行');
+  });
+});
+
+describe('保留：並び順と巡回', () => {
+  it('優先度では、待機と停止中の間', () => {
+    const h = { holds: { held: { note: '', since: 0 } }, heldCards: {} };
+    const sessions = [
+      view({ id: 'stopped', state: 'stopped', lastActivityAt: 50 }),
+      view({ id: 'held', state: 'idle', lastActivityAt: 40 }),
+      view({ id: 'idle', state: 'idle', lastActivityAt: 10 }),
+      view({ id: 'busy', state: 'busy', lastActivityAt: 20 }),
+    ];
+    assert.deepEqual([...sessions].sort(compareSessions('priority', h)).map((s) => s.id), ['busy', 'idle', 'held', 'stopped']);
+    assert.equal(rankOf(sessions[1]!, h), HELD_RANK);
+    assert.ok(HELD_RANK > rankOf(sessions[2]!, h) && HELD_RANK < rankOf(sessions[0]!, h));
+  });
+
+  it('固定・更新日時では今のまま', () => {
+    const h = { holds: { a: { note: '', since: 0 } }, heldCards: {} };
+    const sessions = [view({ id: 'b', lastActivityAt: 5 }), view({ id: 'a', lastActivityAt: 10 })];
+    assert.deepEqual([...sessions].sort(compareSessions('recent', h)).map((s) => s.id), ['a', 'b']);
+  });
+
+  it('カードの並びの優先度にも使う', () => {
+    const sessions = [
+      view({ id: 'p', repoKey: 'r', worktree: wt('p'), state: 'idle', lastActivityAt: 99 }),
+      view({ id: 'q', repoKey: 'r', worktree: wt('q'), state: 'stopped', lastActivityAt: 1 }),
+      view({ id: 'i', repoKey: 'r', worktree: wt('i'), state: 'idle', lastActivityAt: 1 }),
+    ];
+    const repo = buildRepos(sessions, opts({ heldCards: { 'r|p': { note: '', since: 0 } } }))[0]!;
+    assert.deepEqual(repo.cards.map((c) => c.label), ['i', 'p', 'q']);
+  });
+
+  describe('巡回（Ctrl+Alt+N）からは外す', () => {
+    const sessions = [
+      view({ id: 'a', repoKey: 'r', state: 'idle', lastActivityAt: 30 }),
+      view({ id: 'h', repoKey: 'r', state: 'idle', lastActivityAt: 20 }),
+      view({ id: 'b', repoKey: 'r', state: 'idle', lastActivityAt: 10 }),
+      view({ id: 'c', repoKey: 's', worktree: wt('x'), state: 'idle', lastActivityAt: 5 }),
+    ];
+    const o = opts({
+      sort: { project: 'fixed', worktree: 'fixed', session: 'recent' },
+      holds: { h: { note: '', since: 0 } },
+      heldCards: { 's|x': { note: '', since: 0 } },
+    });
+    it('保留の行と、保留のカードの行は飛ばす', () => {
+      assert.equal(nextCycleTarget(sessions, new Set(), 'a', o), 'b');
+      assert.equal(nextCycleTarget(sessions, new Set(), 'b', o), 'a');
+    });
+    it('今開いている行が保留なら、その次から', () => assert.equal(nextCycleTarget(sessions, new Set(), 'h', o), 'b'));
+    it('未確認の帯があれば、保留の行でも入れる', () => assert.equal(nextCycleTarget(sessions, new Set(['h']), 'a', o), 'h'));
+  });
+});
+
+describe('保留：バッジとツールチップ', () => {
+  it('要対応・処理中がないときだけ、保留の件数を出す', () => {
+    assert.deepEqual(cardBadge([view({ state: 'idle' })], 2), { state: 'held', text: '保留 2' });
+    assert.deepEqual(cardBadge([view({ state: 'busy' })], 2), { state: 'busy', text: '処理中 1' });
+    assert.deepEqual(cardBadge([view({ state: 'idle' })], 0), { state: '', text: '' });
+  });
+
+  it('リポジトリの件数は、保留のカードと、保留のカードの外の保留の行', () => {
+    const sessions = [
+      view({ id: 'm', repoKey: 'r', state: 'idle' }),
+      view({ id: 'x1', repoKey: 'r', worktree: wt('x'), state: 'idle' }),
+      view({ id: 'y1', repoKey: 'r', worktree: wt('y'), state: 'stopped' }),
+    ];
+    const mark = { note: '', since: 0 };
+    const repo = buildRepos(sessions, opts({ holds: { m: mark, x1: mark }, heldCards: { 'r|x': mark } }))[0]!;
+    assert.deepEqual(repo.badge, { state: 'held', text: '保留 2' });
+  });
+
+  it('保留してからの長さ', () => {
+    assert.equal(heldFor(0, 30_000), '保留したばかり');
+    assert.equal(heldFor(0, 5 * MIN), '保留 5 分');
+    assert.equal(heldFor(0, 3 * 60 * MIN), '保留 3 時間');
+    assert.equal(heldFor(0, 2 * 24 * 60 * MIN), '保留 2 日');
+  });
+
+  it('ツールチップは経過とメモの全文。行では名前のすぐ下', () => {
+    const mark = { note: 'fix-login のマージ後に再開', since: 0 };
+    assert.equal(holdTooltip(mark, 2 * 24 * 60 * MIN), '保留 2 日\nfix-login のマージ後に再開');
+    assert.equal(holdTooltip({ note: '', since: 0 }, 10 * MIN), '保留 10 分');
+    assert.equal(tooltip(view({ title: 't' }), mark, 0), 't\n保留したばかり\nfix-login のマージ後に再開');
   });
 });

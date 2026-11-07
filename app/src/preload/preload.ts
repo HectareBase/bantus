@@ -2,7 +2,7 @@
 // sandbox の preload は自分のファイル以外を読み込めないので、shared からは型だけを使う。
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Settings } from '../shared/settings';
+import type { Settings, StatusColors } from '../shared/settings';
 import type { FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
@@ -17,6 +17,7 @@ const widget: WidgetApi = {
     ipcRenderer.on('cycle', (_e, claudeInFront: unknown) => listener(claudeInFront !== false));
   },
   openSession: (id) => ipcRenderer.send('open-session', id),
+  raiseSession: (id) => ipcRenderer.send('raise-session', id),
   setClickThrough: (through) => ipcRenderer.send('set-click-through', through),
   resizeStart: () => ipcRenderer.send('resize-start'),
   resizeMove: () => ipcRenderer.send('resize-move'),
@@ -25,6 +26,8 @@ const widget: WidgetApi = {
   setPinned: (pinned) => ipcRenderer.send('set-pinned', pinned),
   setArchive: (id, mark) => ipcRenderer.send('set-archive', id, mark),
   setCardArchive: (key, mark) => ipcRenderer.send('set-card-archive', key, mark),
+  setHold: (id, mark) => ipcRenderer.send('set-hold', id, mark),
+  setCardHold: (key, mark) => ipcRenderer.send('set-card-hold', key, mark),
   showFlyout: (request) => ipcRenderer.send('fly-show', request),
   updateFlyout: (key, content, count) => ipcRenderer.send('fly-update', key, content, count),
   leaveFlyout: (key) => ipcRenderer.send('fly-leave', key),
@@ -72,6 +75,9 @@ const flyoutApi: FlyoutApi = {
     ipcRenderer.on('fly:hide', () => listener());
   },
   reportSolid: (rects) => ipcRenderer.send('fly:solid', rects),
+  onColors: (listener) => {
+    ipcRenderer.on('fly:colors', (_e, colors: StatusColors) => listener(colors));
+  },
   requestOpen: () => ipcRenderer.send('fly:request-open'),
   action: (action) => ipcRenderer.send('fly:action', action),
   close: () => ipcRenderer.send('fly:close'),

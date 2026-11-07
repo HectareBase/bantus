@@ -7,8 +7,9 @@
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { createIcon } from './icon.js';
-import { canToggleArchive, statusIconName, waitingLabel } from './model.js';
+import { canToggleArchive, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
+import { applyStatusColors } from './status-colors.js';
 
 const flap = document.getElementById('flap')!;
 const flapCount = flap.querySelector<HTMLElement>('.flap-count')!;
@@ -42,15 +43,21 @@ function reportSolid() {
 
 // ---- 一覧の行 ----
 
+/** 行の状態の印。保留の行はウィジェットと同じ circle-pause */
+function itemIcon(item: FlyItem): StatusIcon {
+  return item.held ? 'circle-pause' : statusIconName(item.state, item.waitingFor);
+}
+
 function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyItem | undefined): HTMLElement {
   const el = document.createElement('div');
   el.className = 'node';
   el.dataset.id = item.id;
   el.dataset.state = item.state;
+  el.toggleAttribute('data-held', !!item.held);
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);
-  if (item.origin) el.title = 'main で始めたセッション';
+  if (item.origin) el.title = item.place?.tip ?? 'main で始めたセッション';
   if (kind === 'timeline') {
     el.classList.add('linked');
     // 線は点の上下から伸ばす。上の線は上の行（より新しいもの）のつなぎ方、下の線はこの行のつなぎ方
@@ -62,7 +69,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   } else {
     const ico = document.createElement('span');
     ico.className = 'status';
-    setStatus(ico, statusIconName(item.state, item.waitingFor));
+    setStatus(ico, itemIcon(item));
     el.append(ico);
   }
   const txt = document.createElement('div');
@@ -75,16 +82,31 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   if (!item.archived && kind === 'timeline') {
     const ico = document.createElement('span');
     ico.className = 'status';
-    setStatus(ico, statusIconName(item.state, item.waitingFor));
+    setStatus(ico, itemIcon(item));
     sub.append(ico);
     if (item.state === 'waiting') sub.append(`対応待ち（${waitingLabel(item.waitingFor)}）`);
+  }
+  if (item.place) {
+    const place = document.createElement('span');
+    place.className = 'place';
+    place.append(createIcon(item.place.icon));
+    const name = document.createElement('span');
+    name.className = 'place-name';
+    name.textContent = item.place.label;
+    place.append(name);
+    sub.append(place);
+    if (item.sub) {
+      const sep = document.createElement('span');
+      sep.textContent = '·';
+      sub.append(sep);
+    }
   }
   if (item.sub) sub.append(item.sub);
   txt.append(title, sub);
   el.append(txt);
-  // 処理中・対応待ちのものはアーカイブできない（動いているものは隠さない）ので、トグルを出さない
+  // 処理中・対応待ちのものはアーカイブできない（動いているものは隠さない）ので、トグルを出さない。保留のものも出さない（保留とアーカイブは同時に付けない）
   const live = !item.archived && (item.state === 'busy' || item.state === 'waiting');
-  if (kind !== 'cards' && !live) {
+  if (kind !== 'cards' && !live && !item.held) {
     const act = document.createElement('button');
     act.className = 'act';
     act.setAttribute('aria-pressed', String(item.archived));
@@ -141,7 +163,11 @@ function cardBlock(card: FlyCard): HTMLElement {
   return el;
 }
 
-function renderContent(content: FlyContent) {
+/** 下の段に出している行（まとめのない行に乗せたときも、その行を覚えておく） */
+let summaryId: string | undefined;
+
+/** 中身を作り直す。新しい中身を知らせてきたとき（onContent）は、乗せている行のまとめを出したままにする */
+function renderContent(content: FlyContent, keepSummary = false) {
   items = new Map();
   if (content.kind === 'cards') {
     for (const c of content.cards) for (const i of c.items) items.set(i.id, i);
@@ -150,17 +176,30 @@ function renderContent(content: FlyContent) {
     content.items.forEach((i) => items.set(i.id, i));
     body.replaceChildren(...content.items.map((i, n) => node(i, content.kind, content.items[n - 1])));
   }
-  showSummary(undefined);
+  // 下の段は、まとめのある行が 1 つでもあれば、乗せていなくてもいつも同じ高さで出しておく（flyout.css の .list-foot）
+  foot.hidden = ![...items.values()].some((i) => i.summary);
+  summaryId = undefined;
+  showSummary(keepSummary ? summaryId : undefined, true);
 }
 
-/** 行に乗せたら、一覧の下の段に最後のターンのまとめを出す */
-function showSummary(id: string | undefined) {
+/** 行に乗せたら、一覧の下の段に最後のターンのまとめを出す。下の段の大きさは変えず、中の文字だけを入れ替える */
+function showSummary(id: string | undefined, force = false) {
+  if (!force && id === summaryId) return;
+  summaryId = id;
+  if (foot.hidden) return;
   const item = id ? items.get(id) : undefined;
-  foot.hidden = !item?.summary;
-  if (!item?.summary) return foot.replaceChildren();
+  if (!item?.summary) {
+    const hint = document.createElement('span');
+    hint.className = 'hint';
+    hint.textContent = item ? 'この行にはまとめがありません' : '行に乗せると、最後のターンのまとめを出します';
+    return foot.replaceChildren(hint);
+  }
   const b = document.createElement('b');
   b.textContent = item.title;
-  foot.replaceChildren(b, item.summary);
+  const text = document.createElement('div');
+  text.className = 'summary';
+  text.textContent = item.summary;
+  foot.replaceChildren(b, text);
 }
 
 // ---- 置き方と動き ----
@@ -212,6 +251,7 @@ function setOpen(animate: boolean) {
   reportSolid();
 }
 
+window.flyoutApi.onColors((colors) => applyStatusColors(colors));
 window.flyoutApi.onShow((show) => {
   current = show;
   open = false;
@@ -236,7 +276,7 @@ window.flyoutApi.onShow((show) => {
 
 window.flyoutApi.onContent((content, count) => {
   if (!current) return;
-  renderContent(content);
+  renderContent(content, true);
   flapCount.textContent = String(count);
   if (open) placeList();
   reportSolid();
@@ -261,3 +301,5 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') window.flyoutApi.close();
 });
 list.addEventListener('pointerleave', () => showSummary(undefined));
+// 下の段はスクロールしないので、その上で回したホイールは一覧のスクロールに回す
+foot.addEventListener('wheel', (e) => body.scrollBy({ top: e.deltaY }), { passive: true });

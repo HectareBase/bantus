@@ -9,6 +9,9 @@
   --selected: rgba(0, 0, 0, 0.06);
   --control-stroke: rgba(0, 0, 0, 0.14);
   --control: rgba(255, 255, 255, 0.7);
+  /* select を開いたときの一覧。ネイティブの一覧に重なるので不透明にする（Windows 11 のメニューの色） */
+  --menu: #f9f9f9;
+  --menu-text: #1a1a1a;
   --accent: #005fb8;
   --on-accent: #ffffff;
   --focus: #1a1a1a;
@@ -25,6 +28,8 @@
     --selected: rgba(255, 255, 255, 0.08);
     --control-stroke: rgba(255, 255, 255, 0.12);
     --control: rgba(255, 255, 255, 0.06);
+    --menu: #2b2b2b;
+    --menu-text: #ffffff;
     --accent: #60cdff;
     --on-accent: #000000;
     --focus: #ffffff;
@@ -150,8 +155,98 @@ select {
   background: var(--control);
 }
 
+/* 一覧の選択肢は select の半透明の背景と inherit の文字色を受け継ぐため、色をはっきり決める */
+option, optgroup {
+  background: var(--menu);
+  color: var(--menu-text);
+}
+
 input[type="range"] { width: 200px; accent-color: var(--accent); }
 .value { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* 情報 */
 .about-value { font-size: 12px; color: var(--text-secondary); user-select: text; word-break: break-all; }
+
+/* ---- 状態の色 ---- */
+/* 状態の色はライトとダークで同じ。ここは既定の色で、選んだ色は settings.ts が .status-colors に入れる */
+.status-colors { --busy: #3b8eea; --waiting: #e6a100; --idle: #4caf50; --stopped: #8b8b8b; --held: #e05aa8; }
+.status { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.status svg { width: 14px; height: 14px; }
+.status[data-state="busy"] { color: var(--busy); }
+.status[data-state="waiting"] { color: var(--waiting); }
+.status[data-state="idle"] { color: var(--idle); }
+.status[data-state="stopped"] { color: var(--stopped); }
+.status[data-state="held"] { color: var(--held); }
+.progress-ring { animation: spin 1.6s linear infinite; }
+.progress-ring circle { fill: none; stroke: currentColor; }
+.progress-ring .track { stroke-width: 2; stroke-opacity: 0.18; }
+.progress-ring .arc { stroke-width: 2.4; stroke-linecap: round; animation: arc 1.4s ease-in-out infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes arc {
+  0% { stroke-dasharray: 1 30; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 18 30; stroke-dashoffset: -6; }
+  100% { stroke-dasharray: 1 30; stroke-dashoffset: -27; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-ring, .progress-ring .arc { animation: none; }
+}
+
+/* ウィジェットの行の見本 */
+.color-preview { display: block; min-height: 0; padding: 8px; }
+.preview-row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; font-size: 13px; }
+.preview-row[data-state="stopped"] span { color: var(--text-secondary); }
+
+/* 状態ごとの行。四角を押すと、カードの下に候補が開く */
+.color-card { display: block; padding: 0; }
+.color-row { display: flex; align-items: center; gap: 16px; min-height: 64px; padding: 12px 16px; }
+/* アイコンの列は幅を固定し、どの行も名前の書き出しをそろえる。対応待ちは理由ごとの印を縦に並べる */
+.state-icons { flex: none; width: 20px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.color-row .label { flex: 1 1 160px; min-width: 0; }
+.color-row .label b { display: block; font-weight: 400; }
+.color-row .label span { display: block; font-size: 12px; color: var(--text-secondary); }
+.color-row .control { flex: none; display: flex; align-items: center; gap: 10px; }
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--control-stroke);
+  border-radius: 4px;
+  background: var(--swatch);
+}
+.swatch.current { width: 40px; height: 28px; }
+.swatch:hover { filter: brightness(1.08); }
+.swatch[aria-pressed="true"], .swatch.current[aria-expanded="true"] { outline: 2px solid var(--text); outline-offset: 2px; }
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px 14px 52px;
+  border-top: 1px solid var(--card-stroke);
+}
+.palette[hidden] { display: none; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.custom { display: flex; align-items: center; gap: 8px; }
+.custom input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--control-stroke);
+  border-radius: 4px;
+  background: var(--control);
+}
+
+/* 文字だけのボタン（既定に戻す） */
+.text-button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--control-stroke);
+  border-radius: 4px;
+  background: var(--control);
+}
+.text-button:hover { background: var(--hover); }
+.text-button[hidden] { display: none; }
+.text-button:disabled { opacity: 0.45; pointer-events: none; }
+.reset-all { display: flex; justify-content: flex-end; margin-top: 8px; }

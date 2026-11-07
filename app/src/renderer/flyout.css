@@ -14,10 +14,12 @@
   --stack-strong: #b4b4b4;
   --stack-edge: rgba(0, 0, 0, 0.18);
   --stripe: rgba(0, 0, 0, 0.025);
-  --waiting: #c27c00;
-  --busy: #005fb8;
-  --idle: #0f7b0f;
-  --stopped: #8a8a8a;
+  /* 状態の色。ライトとダークで同じで、設定の色で上書きする（status-colors.ts） */
+  --waiting: #e6a100;
+  --busy: #3b8eea;
+  --idle: #4caf50;
+  --stopped: #8b8b8b;
+  --held: #e05aa8;
   color-scheme: light dark;
 }
 
@@ -35,10 +37,6 @@
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
     --stripe: rgba(255, 255, 255, 0.03);
-    --waiting: #fce100;
-    --busy: #60cdff;
-    --idle: #6ccb5f;
-    --stopped: #9a9a9a;
   }
 }
 
@@ -95,23 +93,34 @@ html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8p
 /* 一覧はめくれと同じ端（カードの端）から開く。めくれの形から一覧の形へ変形し、めくれは一覧の下に隠れる */
 html[data-side="left"] .list { right: 0; transform-origin: right top; }
 html[data-side="right"] .list { left: 0; transform-origin: left top; }
-.list-body { overflow-y: auto; min-height: 0; }
+/* スクロールバーの場所はいつも空けておき、出入りで行の幅が変わらないようにする */
+.list-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .list-body::-webkit-scrollbar { width: 6px; }
 .list-body::-webkit-scrollbar-thumb { background: var(--stroke); border-radius: 3px; }
+/* 下の段（まとめ）。高さはいつも同じにする。乗せた行で出し入れしたり高さを変えたりすると、
+   スクロールする所の高さが変わって行がカーソルの下でずれ、また別のまとめが出る、をくり返してちらつくため。
+   題名 1 行とまとめ 3 行の分を取り、長いまとめは省く */
 .list-foot {
   flex: none;
+  height: calc(4 * 1.4em + 2px + 12px);
   margin: 6px 8px 0;
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--selected);
   font-size: 11.5px;
   color: var(--text-secondary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 9em;
   overflow: hidden;
 }
-.list-foot b { display: block; color: var(--text); margin-bottom: 2px; }
+.list-foot b { display: block; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-foot .summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.list-foot .hint { color: var(--text-tertiary); }
 
 /* ---- 行。点（状態）とトグルは行の縦の真ん中。つなぐ線は点の上下から伸ばす ---- */
 .node {
@@ -143,6 +152,7 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .node:not([data-archived])[data-state="waiting"] .dot { border-color: var(--waiting); background: var(--waiting); }
 .node:not([data-archived])[data-state="busy"] .dot { border-color: var(--busy); background: var(--busy); }
 .node:not([data-archived])[data-state="idle"] .dot { border-color: var(--idle); background: var(--idle); }
+.node:not([data-archived])[data-held] .dot { border-color: var(--held); background: var(--held); }
 /* 起点（main で始めたセッション）は ◇ */
 .node[data-origin] .dot { border-radius: 2px; transform: rotate(45deg); width: 11px; height: 11px; left: 13px; top: calc(50% - 5.5px); }
 .ln { position: absolute; left: 17.5px; border-left: 2px solid var(--stopped); opacity: 0.55; }
@@ -154,6 +164,10 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .node:not([data-archived]) .title { color: var(--text); font-weight: 600; }
 .sub { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .sub:empty { display: none; }
+/* 起点の行の場所（行き先のワークツリー、または元のフォルダ）。長い名前は省き、時刻は残す */
+.sub .place { display: inline-flex; gap: 3px; align-items: center; min-width: 0; }
+.sub .place svg { width: 12px; height: 12px; flex: none; }
+.sub .place-name { overflow: hidden; text-overflow: ellipsis; }
 
 .status { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
 .sub .status { width: 12px; height: 12px; }
@@ -162,6 +176,7 @@ html[data-side="right"] .list { left: 0; transform-origin: left top; }
 .node[data-state="busy"] .status { color: var(--busy); }
 .node[data-state="idle"] .status { color: var(--idle); }
 .node[data-state="stopped"] .status { color: var(--stopped); }
+.node[data-held] .status { color: var(--held); }
 .progress-ring { animation: spin 1.6s linear infinite; }
 .progress-ring circle { fill: none; stroke: currentColor; }
 .progress-ring .track { stroke-width: 2; stroke-opacity: 0.18; }
