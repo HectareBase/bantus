@@ -37,17 +37,17 @@ export const ja = {
 
   /** セッションの読み取りで、値がないときの代わり */
   session: {
-    untitled: '(無題)',
-    noFolder: '(フォルダなし)',
+    untitled: '（無題）',
+    noFolder: '（フォルダなし）',
   },
 
   /** 対応待ちの理由（waitingFor の値ごと）。docs/research/session-status.md */
   waiting: {
     'permission prompt': '許可待ち',
     'input needed': '回答待ち',
-    'dialog open': '画面を表示中',
+    'dialog open': 'ダイアログの応答待ち',
     'sandbox request': 'サンドボックスの許可待ち',
-    'worker request': 'ワーカーの要求待ち',
+    'worker request': 'ワーカーへの応答待ち',
     'goal proposal': 'ゴールの確認待ち',
   },
 
@@ -55,7 +55,7 @@ export const ja = {
   state: {
     busy: '処理中',
     idle: '待機中',
-    stopped: '停止',
+    stopped: '停止中',
     /** 知らない waitingFor（「対応待ち（その他）」） */
     waitingOther: 'その他',
     /** waitingFor がないとき */
@@ -82,21 +82,21 @@ export const ja = {
     worktree: (branch: string) => `ワークツリー：${branch}`,
     origin: (branch: string) => `元のフォルダ：${branch}`,
     waiting: (reason: string) => `対応待ち：${reason}`,
-    needsAction: (what: string) => `対応が必要：${what}`,
-    unknownBranch: '(ブランチ不明)',
+    needsAction: (what: string) => `次にすること：${what}`,
+    unknownBranch: '（ブランチ不明）',
     contextPercent: (pct: number, tokens: string, window: string) => `コンテキスト：${pct}%（${tokens} / ${window}）`,
-    contextUnknownWindow: (tokens: string, model?: string) => `コンテキスト：${tokens}（窓の大きさがわからないモデル${model ? `：${model}` : ''}）`,
+    contextUnknownWindow: (tokens: string, model?: string) => `コンテキスト：${tokens}（上限不明${model ? `：${model}` : ''}）`,
   },
 
   /** コミットされていない変更（docs/design/git-changes.md） */
   changes: {
-    merged: 'マージ済み（元のブランチに入った）',
+    merged: 'マージ済み',
     changed: (n: number) => `変更 ${n}`,
     untracked: (n: number) => `未追跡 ${n}`,
     /** 内訳（「変更 2」「未追跡 1」）を並べるときの区切り */
     separator: '・',
-    uncommitted: (parts: string) => `コミットされていない変更：${parts}`,
-    aheadOfBase: (n: number) => `元のブランチにまだ入っていないコミット：${n}`,
+    uncommitted: (parts: string) => `未コミットの変更：${parts}`,
+    aheadOfBase: (n: number) => `未マージのコミット：${n}`,
     unpushed: (n: number) => `push していないコミット：${n}`,
     behind: (n: number) => `元のブランチからの遅れ：${n}`,
   },
@@ -109,21 +109,21 @@ export const ja = {
 
   /** ウィジェット（index.html と renderer.ts） */
   widget: {
-    pinned: '最前面に固定中（クリックで外す）',
+    pinned: '最前面の固定を外す',
     pin: '最前面に固定する',
     pinAria: '最前面に固定',
     settings: '設定',
     resize: 'ドラッグで幅を変える',
     archiveCard: 'カードをアーカイブ',
     archive: 'アーカイブ',
-    archiveTip: 'アーカイブ（Bantus の中だけ）',
+    archiveTip: 'アーカイブ',
     holdNoteAria: '保留の理由のメモ',
-    holdOff: '押すと保留を外す',
-    holdOn: '押すと保留',
-    archivedCount: (n: number) => `アーカイブした作業 ${n} 件（マージ済みなど）`,
+    holdOff: '保留を外す',
+    holdOn: '保留する',
+    archivedCount: (n: number) => `アーカイブ済み ${n} 件`,
     /** カードの名前。main のブランチがわからないとき */
     originFolder: '元のフォルダ',
-    badgeWaiting: (n: number) => `要対応 ${n}`,
+    badgeWaiting: (n: number) => `対応待ち ${n}`,
     badgeBusy: (n: number) => `処理中 ${n}`,
     badgeHeld: (n: number) => `保留 ${n}`,
   },
@@ -131,15 +131,15 @@ export const ja = {
   /** 以前のセッションの一覧（flyout） */
   flyout: {
     startedOnMain: 'main で始めたセッション',
-    continuedIn: (branch: string) => `ワークツリー：${branch} で続けている`,
-    startedIn: (branch: string) => `元のフォルダ：${branch} で始めたセッション`,
+    continuedIn: (branch: string) => `ワークツリー（${branch}）で続けている`,
+    startedIn: (branch: string) => `元のフォルダ（${branch}）で始めたセッション`,
     unarchive: 'アーカイブから戻す',
     archive: 'アーカイブ',
     merged: 'マージ済み',
     archivedCard: 'アーカイブしたカード',
     unarchiveCard: 'カードをアーカイブから戻す',
-    noSummary: 'この行にはまとめがありません',
-    summaryHint: '行に乗せると、最後のターンのまとめを出します',
+    noSummary: 'まとめはありません',
+    summaryHint: 'マウスを乗せると、最後のターンのまとめを表示します',
   },
 
   /** 設定の画面 */
@@ -174,28 +174,28 @@ export const ja = {
       theme: { label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
-      headerShade: { label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる' },
-      zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ。Windows のディスプレイの拡大とは別に、その上からかける' },
+      headerShade: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% で区切り線だけになる' },
+      zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
       mainArchiveMinutes: {
-        label: 'main を自動でアーカイブ',
-        description: '元のフォルダのセッションを、落ち着いてから（確認してから）この時間で隠す。ワークツリーは最後に動いたもの以外をすぐに隠す。Bantus の中だけで、デスクトップのアーカイブには触れない',
+        label: '元のフォルダを自動でアーカイブ',
+        description: '待機になってからこの時間が過ぎたセッションを隠す。デスクトップのアーカイブには影響しない',
       },
       projectOrder: { label: 'プロジェクト', description: 'カードの並び。固定は名前順' },
       worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。固定は元のフォルダを先頭に、あとは名前順' },
       sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上' },
-      rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白。小さくすると 1 画面に多くの行が入る' },
+      rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
-      showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など。左の印を言葉で補う' },
-      showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。会話の記録から数える。窓の大きさがわからないモデルはトークン数だけ' },
+      showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
+      showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。上限がわからないモデルはトークン数' },
       notifyWaiting: { label: '対応待ちになったとき', description: '許可や回答を待っているとき' },
       notifyDone: { label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある' },
       muteWhenOpen: { label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき' },
-      sound: { label: '音を鳴らす', description: '何件かが一度に変わっても 1 回だけ鳴らし、続けて鳴るときは数秒あける' },
+      sound: { label: '音を鳴らす' },
       soundType: { label: '音の種類', description: '対応待ちは高め、完了は低めの音になる' },
       soundVolume: { label: '音量' },
-      toast: { label: 'トースト通知', description: 'クリックするとそのセッションを開く。通知そのものの音は出さず、上の「音」に従う' },
-      flash: { label: 'タスクバーの点滅', description: '3 秒ほどで止まり、オレンジのままにはしない。ウィジェットが前面にあるときは点滅させない' },
+      toast: { label: 'トースト通知', description: 'クリックするとそのセッションを開く。音は上の「音」の設定に従う' },
+      flash: { label: 'タスクバーの点滅', description: '3 秒ほどで止まる。ウィジェットが前面にあるときは点滅しない' },
     },
     /** 選択肢の文字 */
     options: {
@@ -230,8 +230,8 @@ export const ja = {
     /** 状態の色 */
     colors: {
       busy: { label: '処理中', description: 'Claude が作業している' },
-      waiting: { label: '対応待ち', description: '許可待ち・回答待ち・画面を表示中・その他。理由にかかわらず同じ色' },
-      idle: { label: '待機', description: '次の指示を待っている。完了したときの帯もこの色' },
+      waiting: { label: '対応待ち', description: '許可や回答など、操作を待っている' },
+      idle: { label: '待機中', description: '次の指示を待っている。完了したときの帯もこの色' },
       held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
       stopped: { label: '停止中', description: '動いていないセッション' },
       previewAria: 'ウィジェットの見本',
@@ -245,7 +245,7 @@ export const ja = {
     /** 状態の色の見本に並べる行の名前 */
     previewRows: {
       busy: '検索の結果を並べ替える',
-      permission: 'コマンドの実行の許可を待つ',
+      permission: 'コマンドを動かす許可を待つ',
       input: '質問への回答を待つ',
       idle: '設定画面の文言を直す',
       held: 'ほかのブランチのマージを待つ',

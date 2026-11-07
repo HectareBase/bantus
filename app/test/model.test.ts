@@ -156,12 +156,12 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     const [repo] = buildRepos(sessions);
     const main = repo!.cards.find((c) => c.isMain)!;
     assert.deepEqual(main.timeline.map((t) => [t.session.id, t.place]), [
-      ['origin', { icon: 'corner-down-right', label: 'x', tip: 'ワークツリー：claude/x-123abc で続けている' }],
+      ['origin', { icon: 'corner-down-right', label: 'x', tip: 'ワークツリー（claude/x-123abc）で続けている' }],
     ]);
     const x = repo!.cards.find((c) => c.key === cardKeyOf(sessions[2]!))!;
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.place]), [
       ['w1', undefined],
-      ['origin', { icon: 'house', label: 'main', tip: '元のフォルダ：main で始めたセッション' }],
+      ['origin', { icon: 'house', label: 'main', tip: '元のフォルダ（main）で始めたセッション' }],
     ]);
     const y = repo!.cards.find((c) => c.key === cardKeyOf(sessions[3]!))!;
     assert.ok(y.timeline.every((t) => !t.origin), '行き先ではないカードには起点を出さない');
@@ -358,7 +358,7 @@ describe('確認した直後の猶予', () => {
 describe('cardBadge', () => {
   const badge = (...patches: Partial<SessionView>[]) => cardBadge(patches.map((p) => view(p)));
   it('対応待ちがあれば件数を出す', () =>
-    assert.deepEqual(badge({ state: 'waiting' }, { state: 'waiting' }, { state: 'busy' }), { state: 'waiting', text: '要対応 2' }));
+    assert.deepEqual(badge({ state: 'waiting' }, { state: 'waiting' }, { state: 'busy' }), { state: 'waiting', text: '対応待ち 2' }));
   it('なければ処理中', () => assert.deepEqual(badge({ state: 'busy' }, { state: 'idle' }), { state: 'busy', text: '処理中 1' }));
   it('待機と停止中だけなら出さない', () => assert.deepEqual(badge({ state: 'idle' }, { state: 'stopped' }), { state: '', text: '' }));
 });
@@ -475,7 +475,7 @@ describe('stateLabel', () => {
   it('処理中、待機中、停止', () => {
     assert.equal(stateLabel('busy'), '処理中');
     assert.equal(stateLabel('idle'), '待機中');
-    assert.equal(stateLabel('stopped'), '停止');
+    assert.equal(stateLabel('stopped'), '停止中');
   });
   it('対応待ちは理由を言葉にする', () => {
     assert.equal(stateLabel('waiting', 'permission prompt'), '許可待ち');
@@ -502,7 +502,7 @@ describe('tooltip と waitingLabel', () => {
       needsAction: 'review',
       detail: 'done',
     }));
-    assert.equal(text, 't\nワークツリー：claude/l-abcdef\n対応待ち：回答待ち\n対応が必要：review\ndone');
+    assert.equal(text, 't\nワークツリー：claude/l-abcdef\n対応待ち：回答待ち\n次にすること：review\ndone');
   });
   it('対応待ちでなければ理由を出さない', () => assert.equal(tooltip(view({ title: 't', waitingFor: 'x' })), 't'));
 });
@@ -632,18 +632,18 @@ describe('コミットされていない変更と、元のブランチとの差'
     assert.deepEqual(changeItems(undefined), []);
   });
   it('内訳はあるものだけ', () => {
-    assert.equal(changesTooltip(some), 'コミットされていない変更：変更 3・未追跡 2\npush していないコミット：1\n元のブランチからの遅れ：4');
-    assert.equal(changesTooltip({ ...clean, untracked: 1 }), 'コミットされていない変更：未追跡 1');
+    assert.equal(changesTooltip(some), '未コミットの変更：変更 3・未追跡 2\npush していないコミット：1\n元のブランチからの遅れ：4');
+    assert.equal(changesTooltip({ ...clean, untracked: 1 }), '未コミットの変更：未追跡 1');
     assert.equal(changesTooltip(clean), '');
   });
   it('マージ済みなら、内訳の代わりにマージのアイコンだけ', () => {
     assert.deepEqual(changeItems({ ...some, merged: true }), [{ icon: 'git-merge', count: 0 }]);
-    assert.equal(changesTooltip({ ...clean, merged: true }), 'マージ済み（元のブランチに入った）');
+    assert.equal(changesTooltip({ ...clean, merged: true }), 'マージ済み');
   });
-  it('追跡するブランチがないワークツリーは、元のブランチにまだ入っていないコミットとして説明する', () =>
-    assert.equal(changesTooltip({ ...clean, ahead: 2, aheadOfBase: true }), '元のブランチにまだ入っていないコミット：2'));
+  it('追跡するブランチがないワークツリーは、未マージのコミットとして説明する', () =>
+    assert.equal(changesTooltip({ ...clean, ahead: 2, aheadOfBase: true }), '未マージのコミット：2'));
   it('セッションのツールチップの最後に添える', () => {
-    assert.equal(tooltip(view({ title: 't', changes: { ...clean, changed: 1 } })), 't\nコミットされていない変更：変更 1');
+    assert.equal(tooltip(view({ title: 't', changes: { ...clean, changed: 1 } })), 't\n未コミットの変更：変更 1');
   });
 });
 
@@ -792,7 +792,7 @@ describe('保留：並び順と巡回', () => {
 });
 
 describe('保留：バッジとツールチップ', () => {
-  it('要対応・処理中がないときだけ、保留の件数を出す', () => {
+  it('対応待ち・処理中がないときだけ、保留の件数を出す', () => {
     assert.deepEqual(cardBadge([view({ state: 'idle' })], 2), { state: 'held', text: '保留 2' });
     assert.deepEqual(cardBadge([view({ state: 'busy' })], 2), { state: 'busy', text: '処理中 1' });
     assert.deepEqual(cardBadge([view({ state: 'idle' })], 0), { state: '', text: '' });

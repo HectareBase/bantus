@@ -1,10 +1,12 @@
 // 画面の文言（src/shared/strings/ja.ts）を textlint で 1 つずつ検査する。npm run lint:ja と npm test から動く。
-//   規則は .textlintrc、用語の辞書は text/terms.yml。
+//   規則は .textlintrc と自作の text/rules/、用語の辞書は text/terms.yml。
 //   関数の文言は、下の SAMPLES の引数で呼んだ結果を検査する。関数を足したら SAMPLES にも足す（ないと失敗する）。
 // ja.ts は Node の型の取り除きで直接読む（package.json に "type" がないという警告は止めて動かす）。
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { TextlintKernelDescriptor } from '@textlint/kernel';
 import { createLinter, loadTextlintrc } from 'textlint';
+import noPlainPast from '../text/rules/no-plain-past.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { ja } = await import(pathToFileURL(join(root, 'src', 'shared', 'strings', 'ja.ts')).href);
@@ -62,7 +64,13 @@ function collect(node, path, out, missing) {
 
 const missing = [];
 const texts = collect(ja, '', [], missing);
-const descriptor = await loadTextlintrc({ configFilePath: join(root, '.textlintrc'), node_modulesDir: join(root, 'node_modules') });
+const base = await loadTextlintrc({ configFilePath: join(root, '.textlintrc'), node_modulesDir: join(root, 'node_modules') });
+// 自作の規則（text/rules/）は .textlintrc では読めないので、ここで足す
+const descriptor = base.concat(new TextlintKernelDescriptor({
+  rules: [{ ruleId: 'no-plain-past', rule: noPlainPast, options: true }],
+  plugins: [],
+  filterRules: [],
+}));
 const linter = createLinter({ descriptor });
 
 let count = 0;
