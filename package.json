@@ -9,6 +9,7 @@
     "screenshots": "npm --prefix app run screenshots --",
     "icons": "npm --prefix app run icons --",
     "test": "npm --prefix app test --",
+    "lint:ja": "npm --prefix app run lint:ja --",
     "typecheck": "npm --prefix app run typecheck --",
     "dist": "npm --prefix app run dist --",
     "dist:dir": "npm --prefix app run dist:dir --"

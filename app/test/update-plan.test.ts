@@ -4,8 +4,8 @@ import { describe, it } from 'node:test';
 import { fileAction, updatePlan } from '../src/main/update-plan';
 
 describe('fileAction', () => {
-  it('app/ の外、テスト、見本データ、文書は何もしない', () => {
-    for (const f of ['docs/README.md', 'tools/watch-status.ps1', 'package.json', 'app/test/model.test.ts', 'app/fixtures/empty.json', 'app/README.md', 'app/scripts/debug.mjs', 'app/electron-builder.yml']) {
+  it('app/ の外、テスト、見本データ、文書、文言の検査の設定は何もしない', () => {
+    for (const f of ['docs/README.md', 'tools/watch-status.ps1', 'package.json', 'app/test/model.test.ts', 'app/fixtures/empty.json', 'app/README.md', 'app/scripts/debug.mjs', 'app/electron-builder.yml', 'app/text/terms.yml', 'app/.textlintrc', 'app/scripts/lint-ja.mjs']) {
       assert.equal(fileAction(f), 'none', f);
     }
   });

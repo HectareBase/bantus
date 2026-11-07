@@ -14,6 +14,7 @@ import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
 import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { ja } from '../shared/strings/ja';
 import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
@@ -105,7 +106,7 @@ if (WORKTREE) useWorktreeUserData(WORKTREE);
 else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
-const APP_LABEL = WORKTREE ? `Bantus（ワークツリー：${WORKTREE}）` : 'Bantus';
+const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
 
 /**
  * main に入った新しいコードへ自動で切り替えるか。main のチェックアウトから npm start したときだけ。
@@ -219,8 +220,8 @@ function displayOptions(): DisplayOption[] {
   const primaryId = screen.getPrimaryDisplay().id;
   const others = screen.getAllDisplays().filter((d) => d.id !== primaryId);
   return [
-    { id: 'primary', label: 'メインのモニター' },
-    ...others.map((d, i) => ({ id: String(d.id), label: `モニター ${i + 2}（${d.size.width}×${d.size.height}）` })),
+    { id: 'primary', label: ja.monitor.primary },
+    ...others.map((d, i) => ({ id: String(d.id), label: ja.monitor.other(i + 2, d.size.width, d.size.height) })),
   ];
 }
 
@@ -408,7 +409,7 @@ function openSettingsWindow() {
     ...SETTINGS_SIZE,
     minWidth: SETTINGS_MIN.width,
     minHeight: SETTINGS_MIN.height,
-    title: `${APP_LABEL} — 設定`,
+    title: ja.window.settings(APP_LABEL),
     icon: ICON,
     autoHideMenuBar: true,
     show: false,
@@ -452,10 +453,10 @@ function createTray(): Tray {
   t.setToolTip(APP_LABEL);
   t.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '表示', click: () => showWidget() },
-      { label: '設定', click: () => openSettingsWindow() },
+      { label: ja.tray.show, click: () => showWidget() },
+      { label: ja.tray.settings, click: () => openSettingsWindow() },
       { type: 'separator' },
-      { label: '終了', click: () => app.quit() },
+      { label: ja.tray.quit, click: () => app.quit() },
     ]),
   );
   t.on('click', () => showWidget());

@@ -5,6 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
+import { ja } from '../shared/strings/ja';
 import { updatePlan } from './update-plan';
 
 /** 続けて変わったとき（マージ、pull など）に、まとめて 1 回にするための待ち時間 */
@@ -91,7 +92,7 @@ export function startSelfUpdate(appPath: string, handlers: SelfUpdateHandlers): 
       }
       if (plan === 'reinstall') {
         current = head;
-        handlers.notice('依存パッケージが変わりました。npm run setup を実行してから起動し直してください');
+        handlers.notice(ja.update.reinstall);
         return;
       }
       try {
@@ -99,7 +100,7 @@ export function startSelfUpdate(appPath: string, handlers: SelfUpdateHandlers): 
       } catch (e) {
         failed = head;
         console.error(e);
-        handlers.notice('新しいコードをビルドできませんでした。今の版のまま動きます');
+        handlers.notice(ja.update.buildFailed);
         return;
       }
       if (stopped) return;

@@ -6,10 +6,13 @@
 
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
+import { ja } from '../shared/strings/ja.js';
 import { createIcon } from './icon.js';
 import { canToggleArchive, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
 import { applyStatusColors } from './status-colors.js';
+
+document.title = ja.window.flyout(ja.app.name);
 
 const flap = document.getElementById('flap')!;
 const flapCount = flap.querySelector<HTMLElement>('.flap-count')!;
@@ -57,7 +60,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);
-  if (item.origin) el.title = item.place?.tip ?? 'main で始めたセッション';
+  if (item.origin) el.title = item.place?.tip ?? ja.flyout.startedOnMain;
   if (kind === 'timeline') {
     el.classList.add('linked');
     // 線は点の上下から伸ばす。上の線は上の行（より新しいもの）のつなぎ方、下の線はこの行のつなぎ方
@@ -84,7 +87,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     ico.className = 'status';
     setStatus(ico, itemIcon(item));
     sub.append(ico);
-    if (item.state === 'waiting') sub.append(`対応待ち（${waitingLabel(item.waitingFor)}）`);
+    if (item.state === 'waiting') sub.append(ja.state.waitingWithReason(waitingLabel(item.waitingFor)));
   }
   if (item.place) {
     const place = document.createElement('span');
@@ -110,7 +113,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     const act = document.createElement('button');
     act.className = 'act';
     act.setAttribute('aria-pressed', String(item.archived));
-    act.title = item.archived ? 'アーカイブから戻す' : 'アーカイブ';
+    act.title = item.archived ? ja.flyout.unarchive : ja.flyout.archive;
     act.append(createIcon('archive'));
     act.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -147,7 +150,7 @@ function cardBlock(card: FlyCard): HTMLElement {
   el.className = 'fcard';
   const head = document.createElement('div');
   head.className = 'fcard-head';
-  head.title = card.merged ? 'マージ済み' : 'アーカイブしたカード';
+  head.title = card.merged ? ja.flyout.merged : ja.flyout.archivedCard;
   head.append(createIcon(card.merged ? 'git-merge' : 'git-branch'));
   const name = document.createElement('span');
   name.className = 'name';
@@ -155,7 +158,7 @@ function cardBlock(card: FlyCard): HTMLElement {
   const act = document.createElement('button');
   act.className = 'act';
   act.setAttribute('aria-pressed', 'true');
-  act.title = 'カードをアーカイブから戻す';
+  act.title = ja.flyout.unarchiveCard;
   act.append(createIcon('archive'));
   act.addEventListener('click', () => window.flyoutApi.action({ type: 'toggle-card', key: card.key }));
   head.append(name, act);
@@ -191,7 +194,7 @@ function showSummary(id: string | undefined, force = false) {
   if (!item?.summary) {
     const hint = document.createElement('span');
     hint.className = 'hint';
-    hint.textContent = item ? 'この行にはまとめがありません' : '行に乗せると、最後のターンのまとめを出します';
+    hint.textContent = item ? ja.flyout.noSummary : ja.flyout.summaryHint;
     return foot.replaceChildren(hint);
   }
   const b = document.createElement('b');

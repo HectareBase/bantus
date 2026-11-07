@@ -1,0 +1,50 @@
+# 用語の辞書（prh の形式）。画面の文言（src/shared/strings/ja.ts）の表記をそろえる。
+# npm run lint:ja で textlint-rule-prh が使う。docs/ を書くときもこれに合わせる。
+# 今の文言と docs/ で実際に揺れていたものと、そろえ方を決めておきたい言葉を置く。
+version: 1
+rules:
+  # ---- このアプリの用語 ----
+  # 文の中では英語で書かない（コードの名前は文言に出さない）。docs/ では worktree と書いた所がある
+  - expected: ワークツリー
+    pattern: /\b[Ww]orktrees?\b/
+    specs:
+      - from: worktree を片付ける
+        to: ワークツリー を片付ける
+  # Windows に入ることは「サインイン」（設定の説明）。docs/ には「ログオン時の起動」がある。
+  # Claude に入ること（docs/research/ の「ログイン」）はそのままでよいので、ここでは Windows の言い方だけをそろえる
+  - expected: サインイン
+    patterns:
+      - ログオン
+      - サインオン
+  - expected: ツールチップ
+    pattern: ツールヒント
+  - expected: 既定
+    pattern: デフォルト
+  # ---- 長音（今の文言にそろえる）----
+  - expected: フォルダ
+    pattern: フォルダー
+  - expected: ユーザー
+    pattern: /ユーザ(?!ー)/
+  - expected: モニター
+    pattern: /モニタ(?!ー)/
+  - expected: ウィンドウ
+    pattern: ウインドウ
+  # ---- ひらがなで書く言葉 ----
+  # 文言は「わからない」、docs/ には「分かる」がある
+  - expected: わか
+    pattern: /分か(?=[らりるれろっ])/
+    specs:
+      - from: 分からない
+        to: わからない
+  - expected: すべて
+    pattern: 全て
+  - expected: できる
+    pattern: 出来る
+  - expected: ください
+    pattern: 下さい
+  # ---- 製品名の書き方 ----
+  # 文の中の製品名。URL やメールアドレスの小文字は文言に出さない
+  - expected: GitHub
+    pattern: /\b[Gg]ithub\b/
+  - expected: PowerShell
+    pattern: /\bPowershell\b/

@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
 import { createContextReader } from './context-usage';
 import type { HoldMark } from '../shared/settings';
+import { ja } from '../shared/strings/ja';
 import type { SessionState, SessionView } from '../shared/types';
 
 /** 読み取るフォルダ。テストでは偽のフォルダを渡す */
@@ -356,10 +357,10 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const view: SessionView = {
         id: d.sessionId,
-        title: d.title || '(無題)',
+        title: d.title || ja.session.untitled,
         // git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
         repoKey: folderKey(root),
-        repoName: root ? basename(root) : '(フォルダなし)',
+        repoName: root ? basename(root) : ja.session.noFolder,
         mainBranch: commonDir ? readHeadBranch(commonDir, heads) : undefined,
         worktree: d.worktreeName
           ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }

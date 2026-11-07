@@ -45,12 +45,14 @@ import {
   type WorktreeCard,
 } from './model.js';
 import { flapRect } from '../shared/flap.js';
+import { ja } from '../shared/strings/ja.js';
 import { enabled as motionEnabled, flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { createMemo, type MemoBox } from './memo.js';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
 import { applyStatusColors } from './status-colors.js';
+import { fillStrings } from './strings.js';
 import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
 
@@ -111,6 +113,7 @@ const rowTemplate = document.getElementById('row-template') as HTMLTemplateEleme
 const cardTemplate = document.getElementById('card-template') as HTMLTemplateElement;
 const repoTemplate = document.getElementById('repo-template') as HTMLTemplateElement;
 fillIcons(document);
+fillStrings(document);
 const tooltips = initTooltips();
 
 const rows = new Map<string, RowRefs>();
@@ -464,7 +467,7 @@ function setToggle(el: HTMLElement, alt: HTMLElement, held: boolean, can: boolea
   el.toggleAttribute('data-can', can);
   el.toggleAttribute('data-held', held);
   if (can) {
-    el.dataset.tip = held ? '押すと保留を外す' : '押すと保留';
+    el.dataset.tip = held ? ja.widget.holdOff : ja.widget.holdOn;
     el.setAttribute('role', 'button');
     el.setAttribute('aria-label', el.dataset.tip);
   } else {
@@ -535,10 +538,10 @@ function getRow(s: SessionView): RowRefs {
   if (prev?.state !== s.state) refs.el.dataset.state = s.state;
   refs.el.toggleAttribute('data-held', !!hold);
   refs.el.toggleAttribute('data-attention', attention.has(s.id));
-  refs.act.dataset.tip = 'アーカイブ（Bantus の中だけ）';
+  refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
-  const label = hold ? '保留' : stateLabel(s.state, s.waitingFor);
+  const label = hold ? ja.state.held : stateLabel(s.state, s.waitingFor);
   if (refs.pill.textContent !== label) refs.pill.textContent = label;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   const ctx = contextLabel(s.context);
@@ -739,7 +742,7 @@ function getRepo(repo: RepoView): RepoRefs {
   const n = repo.hiddenCards.length;
   refs.archived.hidden = n === 0;
   refs.archivedCount.textContent = String(n);
-  refs.archived.dataset.tip = `アーカイブした作業 ${n} 件（マージ済みなど）`;
+  refs.archived.dataset.tip = ja.widget.archivedCount(n);
   refs.archived.setAttribute('aria-label', refs.archived.dataset.tip);
   refs.data = repo;
   return refs;
@@ -902,7 +905,7 @@ let pinned = true;
 function showPinned(value: boolean) {
   pinned = value;
   pinButton.setAttribute('aria-pressed', String(pinned));
-  pinButton.dataset.tip = pinned ? '最前面に固定中（クリックで外す）' : '最前面に固定する';
+  pinButton.dataset.tip = pinned ? ja.widget.pinned : ja.widget.pin;
 }
 pinButton.addEventListener('click', () => {
   showPinned(!pinned);

@@ -14,7 +14,8 @@
     "screenshots": "npm run build && node scripts/screenshots.mjs",
     "icons": "electron scripts/make-icons.mjs",
     "lucide-icons": "node scripts/make-lucide-icons.mjs",
-    "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\"",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\" && npm run lint:ja",
+    "lint:ja": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/lint-ja.mjs",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "dist": "node scripts/clean-dist.mjs && npm run build && electron-builder",
     "dist:dir": "node scripts/clean-dist.mjs && npm run build && electron-builder --dir"
@@ -24,6 +25,10 @@
     "electron": "44.10.1",
     "electron-builder": "26.17.0",
     "lucide": "1.66.0",
+    "textlint": "15.8.0",
+    "textlint-rule-ja-space-between-half-and-full-width": "3.0.4",
+    "textlint-rule-preset-ja-technical-writing": "12.0.2",
+    "textlint-rule-prh": "6.1.1",
     "typescript": "7.0.2"
   }
 }
