@@ -1,19 +1,15 @@
 // 画面に出す形への組み立て（リポジトリ、ワークツリーのカード、アーカイブ、ツールチップ）。DOM を使わないので、テストから直接呼べる。
 
 import { cardKeyOf } from '../shared/card-key.js';
-import type { ArchiveMark, SortOrder } from '../shared/settings';
-import type { GitChanges, SessionState, SessionView } from '../shared/types';
+import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
+import type { ContextUsage, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
+import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
 export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
-export const WAITING_LABELS: Record<string, string> = {
-  'permission prompt': '許可待ち',
-  'input needed': '回答待ち',
-  'dialog open': '画面を表示中',
-  'sandbox request': 'サンドボックスの許可待ち',
-  'worker request': 'ワーカーの要求待ち',
-  'goal proposal': 'ゴールの確認待ち',
-};
+/** 並び順の「優先度」での保留の順位。待機と停止中の間 */
+export const HELD_RANK = 2.5;
+export const WAITING_LABELS: Readonly<Record<string, string>> = ja.waiting;
 
 function byUrgency(a: { rank: number; latest: number }, b: { rank: number; latest: number }) {
   return a.rank - b.rank || b.latest - a.latest;
@@ -38,28 +34,117 @@ function compareItems<T extends { key: string; rank: number; latest: number }>(
   };
 }
 
-/** セッションの比べ方。fixed は新しく作ったものが上、recent は最後に動きがあった順、priority は急ぐ順 */
-export function compareSessions(order: SortOrder) {
+/** 保留の印。セッションの ID → 印と、カードの目印 → 印 */
+export interface HoldOptions {
+  holds: Readonly<Record<string, HoldMark>>;
+  heldCards: Readonly<Record<string, HoldMark>>;
+}
+
+/** 保留の印がない */
+export const NO_HOLDS: HoldOptions = { holds: {}, heldCards: {} };
+
+/** 保留にしている（そのセッションか、そのカードに印がある）。処理中・対応待ちのものは保留として扱わない（外す前でも） */
+export function isHeld(s: SessionView, holds: HoldOptions): boolean {
+  if (s.state === 'busy' || s.state === 'waiting') return false;
+  return !!holds.holds[s.id] || !!holds.heldCards[cardKeyOf(s)];
+}
+
+/** 並べる順位。保留は待機と停止中の間 */
+export function rankOf(s: SessionView, holds: HoldOptions = NO_HOLDS): number {
+  return isHeld(s, holds) ? HELD_RANK : RANK[s.state];
+}
+
+/** セッションの比べ方。fixed は新しく作ったものが上、recent は最後に動きがあった順、priority は急ぐ順（保留は待機と停止中の間） */
+export function compareSessions(order: SortOrder, holds: HoldOptions = NO_HOLDS) {
   return (a: SessionView, b: SessionView): number => {
     if (order === 'fixed') return b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
-    if (order === 'priority' && RANK[a.state] !== RANK[b.state]) return RANK[a.state] - RANK[b.state];
+    if (order === 'priority') {
+      const ra = rankOf(a, holds);
+      const rb = rankOf(b, holds);
+      if (ra !== rb) return ra - rb;
+    }
     return b.lastActivityAt - a.lastActivityAt;
   };
+}
+
+/** 保留にしてからの長さ（「保留 2 日」など）。ツールチップに出す */
+export function heldFor(since: number, now = Date.now()): string {
+  const min = Math.floor((now - since) / 60_000);
+  if (min < 1) return ja.time.heldJustNow;
+  if (min < 60) return ja.time.heldMinutes(min);
+  const h = Math.floor(min / 60);
+  if (h < 24) return ja.time.heldHours(h);
+  return ja.time.heldDays(Math.floor(h / 24));
+}
+
+/** 保留の印のツールチップの行。経過と、メモがあればその全文 */
+export function holdTooltip(mark: HoldMark, now = Date.now()): string {
+  return mark.note ? `${heldFor(mark.since, now)}\n${mark.note}` : heldFor(mark.since, now);
+}
+
+// ---- コンテキストの使用量（docs/design/worktree-cards.md） ----
+
+/** 色を変える使用率（%）。ここから「多い」（濃い文字）、CONTEXT_FULL から「残りわずか」（赤） */
+export const CONTEXT_HIGH = 50;
+export const CONTEXT_FULL = 75;
+
+/** 使用率（%、整数）。窓の大きさがわからなければ undefined */
+export function contextPercent(c: ContextUsage | undefined): number | undefined {
+  if (!c?.window) return undefined;
+  return Math.round((c.tokens / c.window) * 100);
+}
+
+/** 色の段階。割合がわからなければ normal */
+export function contextLevel(c: ContextUsage | undefined): 'normal' | 'high' | 'full' {
+  const pct = contextPercent(c);
+  if (pct === undefined || pct < CONTEXT_HIGH) return 'normal';
+  return pct < CONTEXT_FULL ? 'high' : 'full';
+}
+
+/** 1234 → 1.2k、123456 → 123k、1234567 → 1.2M */
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** 行の 2 行目に出す文字。割合がわかれば「12%」、わからなければトークン数（「120k tok」）。割合と見分けられるよう単位を付ける */
+export function contextLabel(c: ContextUsage | undefined): string {
+  if (!c) return '';
+  const pct = contextPercent(c);
+  return pct === undefined ? `${formatTokens(c.tokens)} tok` : `${pct}%`;
+}
+
+/** ツールチップの行 */
+export function contextTooltip(c: ContextUsage | undefined): string {
+  if (!c) return '';
+  const pct = contextPercent(c);
+  if (pct === undefined) return ja.tooltip.contextUnknownWindow(formatTokens(c.tokens), c.model);
+  return ja.tooltip.contextPercent(pct, formatTokens(c.tokens), formatTokens(c.window!));
 }
 
 export function formatAgo(ms: number, now = Date.now()): string {
   if (!ms) return '';
   const min = Math.floor((now - ms) / 60_000);
-  if (min < 1) return 'たった今';
-  if (min < 60) return `${min} 分前`;
+  if (min < 1) return ja.time.justNow;
+  if (min < 60) return ja.time.minutesAgo(min);
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} 時間前`;
-  return `${Math.floor(h / 24)} 日前`;
+  if (h < 24) return ja.time.hoursAgo(h);
+  return ja.time.daysAgo(Math.floor(h / 24));
 }
 
 /** 知らない waitingFor はそのまま出す（docs/research/session-status.md：「対応待ち（その他）」） */
 export function waitingLabel(waitingFor: string | undefined): string {
-  return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? '不明';
+  return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? ja.state.unknown;
+}
+
+const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.stopped };
+
+/** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
+export function stateLabel(state: SessionState, waitingFor?: string): string {
+  if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
+  return STATE_LABELS[state];
 }
 
 /** 対応待ちの理由ごとの印。ここにない理由は丸に感嘆符（「対応待ち（その他）」） */
@@ -80,14 +165,18 @@ export function statusIconName(state: SessionState, waitingFor?: string): Status
   return STATE_ICONS[state];
 }
 
-export function tooltip(s: SessionView): string {
+/** 行のツールチップ。hold を渡すと、保留の経過とメモを名前のすぐ下に出す */
+export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): string {
   const lines = [s.title];
-  if (s.worktree) lines.push(`ワークツリー：${s.worktree.branch}`);
-  if (s.state === 'waiting') lines.push(`対応待ち：${waitingLabel(s.waitingFor)}`);
-  if (s.needsAction) lines.push(`対応が必要：${s.needsAction}`);
+  if (hold) lines.push(holdTooltip(hold, now));
+  if (s.worktree) lines.push(ja.tooltip.worktree(s.worktree.branch));
+  if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
+  if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes);
   if (changes) lines.push(changes);
+  const context = contextTooltip(s.context);
+  if (context) lines.push(context);
   return lines.join('\n');
 }
 
@@ -114,13 +203,13 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
 /** 印とセッションのツールチップに添える内訳。何もなければ空 */
 export function changesTooltip(c: GitChanges | undefined): string {
   if (!c) return '';
-  if (c.merged) return 'マージ済み（元のブランチに入った）';
+  if (c.merged) return ja.changes.merged;
   const parts: string[] = [];
-  if (c.changed) parts.push(`変更 ${c.changed}`);
-  if (c.untracked) parts.push(`未追跡 ${c.untracked}`);
-  const lines = parts.length ? [`コミットされていない変更：${parts.join('・')}`] : [];
-  if (c.ahead) lines.push(c.aheadOfBase ? `元のブランチにまだ入っていないコミット：${c.ahead}` : `push していないコミット：${c.ahead}`);
-  if (c.behind) lines.push(`元のブランチからの遅れ：${c.behind}`);
+  if (c.changed) parts.push(ja.changes.changed(c.changed));
+  if (c.untracked) parts.push(ja.changes.untracked(c.untracked));
+  const lines = parts.length ? [ja.changes.uncommitted(parts.join(ja.changes.separator))] : [];
+  if (c.ahead) lines.push(c.aheadOfBase ? ja.changes.aheadOfBase(c.ahead) : ja.changes.unpushed(c.ahead));
+  if (c.behind) lines.push(ja.changes.behind(c.behind));
   return lines.join('\n');
 }
 
@@ -265,24 +354,33 @@ export function toastContent(alerts: Alert[], sessions: SessionView[]): ToastCon
   const first = alerts[0];
   const s = first && sessions.find((x) => x.id === first.id);
   if (!first || !s) return undefined;
-  const reason = first.reason === 'waiting' ? `対応待ち（${waitingLabel(s.waitingFor)}）` : '完了';
+  const reason = first.reason === 'waiting' ? ja.state.waitingWithReason(waitingLabel(s.waitingFor)) : ja.toast.done;
   const rest = alerts.length - 1;
-  return { id: s.id, title: s.title, body: rest ? `${reason}。ほかに ${rest} 件` : reason };
+  return { id: s.id, title: s.title, body: rest ? ja.toast.withRest(reason, rest) : reason };
 }
 
 /** クリックで開いたセッション。デスクトップがファイルに書くまでの間、これを今開いているものとして扱う */
 export interface PendingFocus {
   id: string;
-  /** この時刻（Unix ミリ秒）を過ぎたら、ファイルの値に戻す */
+  /** クリックした時刻（Unix ミリ秒）。これより新しい `lastFocusedAt` を持つ別のセッションが出たら、本体でそちらを開いたとみなす */
+  at: number;
+  /** 安全のための期限（Unix ミリ秒）。本体で開けなかったときに残り続けないよう、これを過ぎたらファイルの値に戻す */
   until: number;
 }
 
-/** クリックしてからファイルに反映されるまで待つ長さ */
-export const PENDING_FOCUS_MS = 5_000;
+/**
+ * クリックしてからファイルに反映されるのを待つ最長の長さ。
+ * 本体の書き込みは 3 秒以上かかることがあり、短いと先に切れて前の行に戻り、そのあと書き込みで戻ってくる（行が揺れる）。
+ * そのため、ふだんは期限ではなくファイルの変化で仮の値を外し、これは本体で開けなかったときの備えにする
+ */
+export const PENDING_FOCUS_MS = 30_000;
 
 /**
  * 今開いているセッションの ID を決める。
- * クリックしたセッションがあれば、ファイルが追いつく（またはその時間が過ぎる）まではそちらを優先する。
+ * クリックしたセッションがあれば、次のどれかが起きるまではそちらを優先する。
+ * ファイルが追いついた（クリックしたセッションが今開いているものになった）。
+ * クリックより新しい `lastFocusedAt` を持つ別のセッションが出た（本体で別のセッションを開いた）。
+ * クリックしたセッションが一覧から消えた。安全のための期限が過ぎた。
  * 返す pending は、まだ待つなら同じもの、もう要らなければ undefined。
  */
 export function resolveFocus(
@@ -291,7 +389,13 @@ export function resolveFocus(
   now = Date.now(),
 ): { id: string | undefined; pending: PendingFocus | undefined } {
   const fromData = sessions.find((s) => s.focused)?.id;
-  if (pending && now < pending.until && fromData !== pending.id && sessions.some((s) => s.id === pending.id)) {
+  if (
+    pending &&
+    now < pending.until &&
+    fromData !== pending.id &&
+    sessions.some((s) => s.id === pending.id) &&
+    !sessions.some((s) => s.id !== pending.id && (s.focusedAt ?? 0) > pending.at)
+  ) {
     return { id: pending.id, pending };
   }
   return { id: fromData, pending: undefined };
@@ -299,8 +403,8 @@ export function resolveFocus(
 
 // ---- カード（ワークツリーごと）と Bantus のアーカイブ（docs/design/worktree-cards.md） ----
 
-/** アーカイブを決めるもの。手で決めた印、未確認の行、確認した時刻、設定、今の時刻 */
-export interface ArchiveOptions {
+/** アーカイブを決めるもの。手で決めた印、保留の印、未確認の行、確認した時刻、設定、今の時刻 */
+export interface ArchiveOptions extends HoldOptions {
   /** セッションの ID → 手で決めた印 */
   marks: Readonly<Record<string, ArchiveMark>>;
   /** カードの目印 → 手で決めた印 */
@@ -334,6 +438,8 @@ export const PRIORITY_SORT: SortOptions = { project: 'priority', worktree: 'prio
 export const NO_ARCHIVE: ArchiveOptions = {
   marks: {},
   cardMarks: {},
+  holds: {},
+  heldCards: {},
   attention: new Set(),
   confirmedAt: new Map(),
   mainMinutes: 0,
@@ -348,6 +454,8 @@ export interface TimelineItem {
   archived: boolean;
   /** main で始めたセッション（起点） */
   origin: boolean;
+  /** 起点の行の場所：main のカードでは行き先のワークツリー、ワークツリーのカードでは元のフォルダ */
+  place?: FlyPlace;
   /** 1 つ下（より古いもの）とのつなぎ方。一番下はなし */
   link?: 'solid' | 'dashed';
 }
@@ -375,6 +483,8 @@ export interface WorktreeCard {
   stackCount: number;
   /** カードごとアーカイブしている（マージ済み、ワークツリーがない、手でアーカイブした） */
   hidden: boolean;
+  /** カードを保留にしている（docs/design/hold.md） */
+  held?: HoldMark;
   /** マージ済み（ワークツリーがないものも含む） */
   merged: boolean;
   rank: number;
@@ -388,7 +498,7 @@ export interface RepoView {
   cards: WorktreeCard[];
   /** カードごとアーカイブしたもの（見出しの件数） */
   hiddenCards: WorktreeCard[];
-  badge: { state: '' | 'waiting' | 'busy'; text: string };
+  badge: { state: '' | 'waiting' | 'busy' | 'held'; text: string };
   rank: number;
   latest: number;
 }
@@ -396,6 +506,11 @@ export interface RepoView {
 /** 動いているもの（処理中、対応待ち、未確認）。どの決まりでもアーカイブしない */
 export function isLive(s: SessionView, attention: ReadonlySet<string>): boolean {
   return s.state === 'busy' || s.state === 'waiting' || attention.has(s.id);
+}
+
+/** ホイールクリックでアーカイブを切り替えてよいか。トグルが出ないとき（処理中・対応待ちでまだアーカイブしていない）は切り替えない */
+export function canToggleArchive(state: SessionView['state'], archived: boolean): boolean {
+  return archived || (state !== 'busy' && state !== 'waiting');
 }
 
 /** 戻ったセッションを出しておく分（main の自動アーカイブがオフのとき） */
@@ -410,7 +525,47 @@ function settledAt(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt'>): n
 export function isKept(s: SessionView, opts: Pick<ArchiveOptions, 'attention' | 'revived' | 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
   if (isLive(s, opts.attention)) return true;
   if (!opts.revived.has(s.id)) return false;
+  return withinGrace(s, opts);
+}
+
+/** 落ち着いてから、猶予（main の自動アーカイブと同じ分。オフなら REVIVE_GRACE_MINUTES）がまだたっていない */
+function withinGrace(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
   return opts.now - settledAt(s, opts) < (opts.mainMinutes || REVIVE_GRACE_MINUTES) * 60_000;
+}
+
+/**
+ * ウィジェットか Claude 本体で確認して（帯が消えて）から、まだ猶予の内にあるもの。
+ * 行を押して開いたとたんに隠れたり、ワークツリーのカードへ移ったりしないようにする。
+ * isKept と違って手の印より弱い（手でアーカイブするときも帯を消すので、印を先に見る）
+ */
+function recentlyConfirmed(s: SessionView, opts: Pick<ArchiveOptions, 'confirmedAt' | 'mainMinutes' | 'now'>): boolean {
+  return opts.confirmedAt.has(s.id) && withinGrace(s, opts);
+}
+
+/**
+ * 起動して最初に受け取った一覧から、確認した時刻の種を作る。確認した時刻はウィジェットの中だけで覚えるので、再起動すると消える。
+ * 動いていない（処理中・対応待ちでない）セッションは、最後に動いた時刻に確認したものとみなし、そこから猶予を数える。
+ * 使っている最中の起点が、再起動したとたんにワークツリーのカードへ移らないようにする。
+ * settledAt は変わらないので、main の自動アーカイブの結果は変えない
+ */
+export function startupConfirmedAt(sessions: SessionView[]): Map<string, number> {
+  const seed = new Map<string, number>();
+  for (const s of sessions) if (s.state !== 'busy' && s.state !== 'waiting') seed.set(s.id, s.lastActivityAt);
+  return seed;
+}
+
+/**
+ * 保留にしたのに動き出した（処理中・対応待ちになった）もの。印を外す（画面側が保存する）。
+ * カードは、中のどれかのセッションが動き出したら外す
+ */
+export function releasedHolds(sessions: SessionView[], holds: HoldOptions): { sessions: string[]; cards: string[] } {
+  const live = sessions.filter((s) => s.state === 'busy' || s.state === 'waiting');
+  const cards = new Set<string>();
+  for (const s of live) {
+    const key = cardKeyOf(s);
+    if (holds.heldCards[key]) cards.add(key);
+  }
+  return { sessions: live.filter((s) => holds.holds[s.id]).map((s) => s.id), cards: [...cards] };
 }
 
 /** 手でアーカイブしたのに動き出したセッションの ID。印を外して自動の決まりに戻す（画面側が保存する） */
@@ -428,26 +583,49 @@ export function revivedCards(sessions: SessionView[], opts: Pick<ArchiveOptions,
   return [...keys];
 }
 
-/** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする */
+/** ワークツリーのセッション：手の印がなければ、最後に動いたもの以外をアーカイブする（確認してから間もないものは除く） */
 function worktreeArchived(s: SessionView, newest: boolean, opts: ArchiveOptions): boolean {
-  if (isKept(s, opts)) return false;
+  // 保留したものは、どの決まりでもアーカイブしない
+  if (opts.holds[s.id] || isKept(s, opts)) return false;
   const mark = opts.marks[s.id];
   if (mark) return mark === 'archived';
-  return !newest;
+  return !newest && !recentlyConfirmed(s, opts);
 }
 
 /** main のセッション：手の印がなければ、落ち着いて（確認して）から決めた分がたったらアーカイブする */
 function mainArchived(s: SessionView, opts: ArchiveOptions): boolean {
-  if (isKept(s, opts)) return false;
+  if (opts.holds[s.id] || isKept(s, opts)) return false;
   const mark = opts.marks[s.id];
   if (mark) return mark === 'archived';
   if (!opts.mainMinutes) return false;
   return opts.now - settledAt(s, opts) >= opts.mainMinutes * 60_000;
 }
 
-/** 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。動いている・手で戻したものは main に残す */
+/**
+ * 起点（main で始め、ワークツリーのセッションを作ったもの）をワークツリーのカードへ移すか。
+ * 動いている・手で戻したものは main に残す。手の印がなく確認してから間もないものも、しばらく main に残す
+ */
 function originMoves(s: SessionView, opts: ArchiveOptions): boolean {
-  return !isKept(s, opts) && opts.marks[s.id] !== 'shown';
+  // 保留の起点は main に出しておく
+  if (opts.holds[s.id] || isKept(s, opts)) return false;
+  const mark = opts.marks[s.id];
+  if (mark) return mark !== 'shown';
+  return !recentlyConfirmed(s, opts);
+}
+
+/** 起点の行き先（main のカードの一覧に出す）。dest は移す先のカードのセッション */
+function destPlace(dest: SessionView): FlyPlace {
+  const wt = dest.worktree!;
+  return { icon: 'corner-down-right', label: wt.label, tip: ja.flyout.continuedIn(wt.branch) };
+}
+
+/** 起点の出どころ（ワークツリーのカードの一覧に出す） */
+function sourcePlace(origin: SessionView): FlyPlace {
+  return {
+    icon: 'house',
+    label: origin.mainBranch ?? ja.widget.originFolder,
+    tip: ja.flyout.startedIn(origin.mainBranch ?? ja.tooltip.unknownBranch),
+  };
 }
 
 function byCreatedDesc(a: SessionView, b: SessionView): number {
@@ -455,7 +633,7 @@ function byCreatedDesc(a: SessionView, b: SessionView): number {
 }
 
 /** 新しいものが上のタイムライン。上の行が下の行から spawnedFrom で作られていれば実線 */
-function timelineOf(items: { session: SessionView; archived: boolean; origin: boolean }[]): TimelineItem[] {
+function timelineOf(items: Omit<TimelineItem, 'link'>[]): TimelineItem[] {
   const sorted = [...items].sort((a, b) => byCreatedDesc(a.session, b.session));
   return sorted.map((item, i): TimelineItem => {
     const below = sorted[i + 1];
@@ -463,19 +641,23 @@ function timelineOf(items: { session: SessionView; archived: boolean; origin: bo
   });
 }
 
-function rankOf(list: SessionView[]): { rank: number; latest: number } {
+function rankOfList(list: SessionView[], holds: HoldOptions): { rank: number; latest: number } {
   return {
-    rank: Math.min(3, ...list.map((s) => RANK[s.state])),
+    rank: Math.min(3, ...list.map((s) => rankOf(s, holds))),
     latest: Math.max(0, ...list.map((s) => s.lastActivityAt)),
   };
 }
 
-/** リポジトリの見出しのバッジ。いちばん急ぐ状態の件数だけを出す */
-export function cardBadge(sessions: SessionView[]): { state: '' | 'waiting' | 'busy'; text: string } {
+/**
+ * リポジトリの見出しのバッジ。いちばん急ぐ状態の件数だけを出す。
+ * 対応待ち・処理中がないときだけ、保留の件数（保留の行と保留のカード。held）を出す
+ */
+export function cardBadge(sessions: SessionView[], held = 0): { state: '' | 'waiting' | 'busy' | 'held'; text: string } {
   const waiting = sessions.filter((s) => s.state === 'waiting').length;
   const busy = sessions.filter((s) => s.state === 'busy').length;
-  if (waiting) return { state: 'waiting', text: `要対応 ${waiting}` };
-  if (busy) return { state: 'busy', text: `処理中 ${busy}` };
+  if (waiting) return { state: 'waiting', text: ja.widget.badgeWaiting(waiting) };
+  if (busy) return { state: 'busy', text: ja.widget.badgeBusy(busy) };
+  if (held) return { state: 'held', text: ja.widget.badgeHeld(held) };
   return { state: '', text: '' };
 }
 
@@ -491,10 +673,13 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
   const byId = new Map(sessions.map((s) => [s.id, s]));
   // 起点 → 移す先のカード（そのセッションから作られた、いちばん古いワークツリーのセッションのカード）
   const originTo = new Map<string, string>();
+  // 起点 → 移す先のカードのセッション（行き先の名前に使う）
+  const originDest = new Map<string, SessionView>();
   for (const s of [...sessions].sort((a, b) => a.createdAt - b.createdAt)) {
     const parent = s.spawnedFrom ? byId.get(s.spawnedFrom) : undefined;
     if (!s.worktree || !parent || parent.worktree || parent.repoKey !== s.repoKey || originTo.has(parent.id)) continue;
     originTo.set(parent.id, cardKeyOf(s));
+    originDest.set(parent.id, s);
   }
 
   const repos = new Map<string, { name: string; groups: Map<string, SessionView[]>; all: SessionView[] }>();
@@ -511,7 +696,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
     else repo.groups.set(key, [s]);
   }
 
-  const order = compareSessions(opts.sort.session);
+  const order = compareSessions(opts.sort.session, opts);
   const result: RepoView[] = [];
   for (const [repoKey, repo] of repos) {
     const cards: WorktreeCard[] = [];
@@ -529,7 +714,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       const first = own[0]!;
       const isMain = !first.worktree;
       const changes = own.find((s) => s.changes)?.changes;
-      const { rank, latest } = rankOf(own);
+      const { rank, latest } = rankOfList(own, opts);
       let shown: SessionView[];
       let archived: SessionView[];
       let timeline: TimelineItem[];
@@ -541,16 +726,16 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         archived = stay.filter((s) => mainArchived(s, opts)).sort(byCreatedDesc);
         timeline = [
           ...archived.map((session) => ({ session, archived: true, origin: false })),
-          ...origins.map((session) => ({ session, archived: true, origin: true })),
+          ...origins.map((session) => ({ session, archived: true, origin: true, place: destPlace(originDest.get(session.id)!) })),
         ].sort((a, b) => byCreatedDesc(a.session, b.session));
       } else {
         const newest = own.reduce((a, b) => (b.lastActivityAt > a.lastActivityAt ? b : a));
         const flags = own.map((s) => ({ session: s, archived: worktreeArchived(s, s === newest, opts), origin: false }));
-        const origins = (moved.get(key) ?? []).map((s) => ({ session: s, archived: true, origin: true }));
+        const origins = (moved.get(key) ?? []).map((s) => ({ session: s, archived: true, origin: true, place: sourcePlace(s) }));
         // まだ main に残している起点も、一覧の一番下に出す
         const kept = repo.all
           .filter((s) => originTo.get(s.id) === key && !movedIds.has(s.id))
-          .map((s) => ({ session: s, archived: false, origin: true }));
+          .map((s) => ({ session: s, archived: false, origin: true, place: sourcePlace(s) }));
         shown = flags.filter((f) => !f.archived).map((f) => f.session);
         archived = [...flags.filter((f) => f.archived), ...origins].map((f) => f.session).sort(byCreatedDesc);
         timeline = timelineOf([...flags, ...origins, ...kept]);
@@ -558,11 +743,13 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       const merged = !isMain && !!(changes?.merged || changes?.gone);
       const anyLive = own.some((s) => isKept(s, opts));
       const mark = opts.cardMarks[key];
-      const hidden = !isMain && !anyLive && (mark ? mark === 'archived' : merged);
+      const held = isMain ? undefined : opts.heldCards[key];
+      // マージ済みで自動で隠すのは、確認してから間もないものがなくなってから。保留のカードは隠さない
+      const hidden = !isMain && !anyLive && !held && (mark ? mark === 'archived' : merged && !own.some((s) => recentlyConfirmed(s, opts)));
       cards.push({
         key,
         isMain,
-        label: isMain ? first.mainBranch ?? '元のフォルダ' : first.worktree!.label,
+        label: isMain ? first.mainBranch ?? ja.widget.originFolder : first.worktree!.label,
         tooltip: cardTooltip(first),
         changes,
         sessions: shown.sort(order),
@@ -570,19 +757,23 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         timeline,
         stackCount: timeline.filter((t) => !shown.includes(t.session)).length,
         hidden,
+        ...(held && { held }),
         merged,
         rank,
         latest,
       });
     }
     cards.sort(compareItems<WorktreeCard>(opts.sort.worktree, (c) => c.label, (c) => c.isMain));
+    const shownCards = cards.filter((c) => !c.hidden);
+    // 保留の件数：保留のカードと、保留のカードの外にある保留の行
+    const heldCount = shownCards.reduce((n, c) => n + (c.held ? 1 : c.sessions.filter((s) => isHeld(s, opts)).length), 0);
     result.push({
       key: repoKey,
       name: repo.name,
-      cards: cards.filter((c) => !c.hidden),
+      cards: shownCards,
       hiddenCards: cards.filter((c) => c.hidden),
-      badge: cardBadge(repo.all),
-      ...rankOf(repo.all),
+      badge: cardBadge(repo.all, heldCount),
+      ...rankOfList(repo.all, opts),
     });
   }
   return result.sort(compareItems<RepoView>(opts.sort.project, (r) => r.name));
@@ -590,7 +781,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
 
 /** カードの見出しのツールチップ。ブランチ名の全体と作業フォルダ */
 function cardTooltip(s: SessionView): string {
-  const lines = [s.worktree ? `ワークツリー：${s.worktree.branch}` : `元のフォルダ：${s.mainBranch ?? '(ブランチ不明)'}`];
+  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(s.mainBranch ?? ja.tooltip.unknownBranch)];
   if (s.workDir) lines.push(s.workDir);
   return lines.join('\n');
 }
@@ -602,8 +793,8 @@ export function displayOrder(sessions: SessionView[], opts: ArchiveOptions = NO_
 
 /**
  * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。アーカイブしたものは選ばない
- * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの
- * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）
+ * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの（保留の行でも）
+ * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）。保留の行（保留のカードの行も）は飛ばす
  */
 export function nextCycleTarget(
   sessions: SessionView[],
@@ -611,19 +802,27 @@ export function nextCycleTarget(
   currentId: string | undefined,
   opts: ArchiveOptions = NO_ARCHIVE,
 ): string | undefined {
-  const ids = displayOrder(sessions, { ...opts, attention }).map((s) => s.id);
-  const flagged = ids.find((id) => id !== currentId && attention.has(id));
+  const shown = displayOrder(sessions, { ...opts, attention });
+  const flagged = shown.find((s) => s.id !== currentId && attention.has(s.id))?.id;
   if (flagged) return flagged;
+  // 保留の行は巡回から外す。今開いているものは保留でも残し、その次から探す
+  const ids = shown.filter((s) => !isHeld(s, opts) || s.id === currentId).map((s) => s.id);
   // 今開いているものの次から探す。一覧にない（アーカイブしたなど）ときは indexOf が -1 なので先頭から
   const at = currentId ? ids.indexOf(currentId) : -1;
   const next = ids[(at + 1) % ids.length];
   return next === currentId ? undefined : next;
 }
 
+/** ショートカットで何をするか。raise が true なら、開き直さずに Claude のウィンドウを前に出すだけでよい（id はもう開いている） */
+export interface ShortcutAction {
+  id: string;
+  raise: boolean;
+}
+
 /**
- * ショートカットで開くセッションの ID
+ * ショートカットで開くセッション
  * - 今開いているもののほかに未確認（左端の帯）の行があれば、前面かどうかに関係なく、表示順でいちばん上のもの
- * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（開き直して前面に出す）
+ * - なければ、Claude のウィンドウが前面にないときは今開いているセッション（前に出すだけ。raise: true）
  * - 前面にあるか、今開いているセッションが一覧にない（アーカイブしたなど）ときは nextCycleTarget
  */
 export function shortcutTarget(
@@ -632,11 +831,12 @@ export function shortcutTarget(
   currentId: string | undefined,
   claudeInFront: boolean,
   opts: ArchiveOptions = NO_ARCHIVE,
-): string | undefined {
+): ShortcutAction | undefined {
   const ids = displayOrder(sessions, { ...opts, attention }).map((s) => s.id);
   // 未確認は処理中より急ぐので、前面になくても今のセッションより先に開く
   const flagged = ids.find((id) => id !== currentId && attention.has(id));
-  if (flagged) return flagged;
-  if (!claudeInFront && currentId && ids.includes(currentId)) return currentId;
-  return nextCycleTarget(sessions, attention, currentId, opts);
+  if (flagged) return { id: flagged, raise: false };
+  if (!claudeInFront && currentId && ids.includes(currentId)) return { id: currentId, raise: true };
+  const next = nextCycleTarget(sessions, attention, currentId, opts);
+  return next ? { id: next, raise: false } : undefined;
 }

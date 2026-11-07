@@ -54,6 +54,17 @@ claude://claude.ai/epitaxy/<local_のセッションID>
 - 同じフォルダを新規作成の画面で手で選んで送信すると、そのフォルダとブランチのまま動きました。scratch になるのは、リンクで渡したときだけです。
 - こうして始めたセッションは、アプリからはワークツリーとして扱われません。`local_*.json` の `cwd` / `originCwd` はワークツリーのフォルダになり、`worktreeName` / `worktreePath` / `branch` は空です。`gitAnchors` は 2 つになります（下の [data-sources.md](data-sources.md) を参照）。
 
+### リンクを開くのにかかる時間
+- `shell.openExternal`（Electron）でリンクを開くと、MSIX 版の `claude.exe` がもう 1 つ起動し、動いている本体に URL を渡してから終わります。ここまでで約 260 ms かかりました。そのあとで本体がセッションを切り替える時間は、外からは縮められません。
+- 前面のウィンドウを調べるのは、常駐させた PowerShell なら 1 回 5 ms 前後です。
+
+### ウィンドウを前に出す
+すでに開いているセッションを前面に出すだけなら、リンクを使わずに Claude のウィンドウを直接前に出すほうが速くなります（約 50 ms）。ウィジェットのショートカットはこの方法を使い、失敗したときだけリンクで開きます。
+- `claude` プロセスの `MainWindowHandle` を取り、最小化されていれば `ShowWindow(SW_RESTORE)`、そのあと `SetForegroundWindow` を呼びます。
+- 前面にないプロセスから呼ぶと、`SetForegroundWindow` は Windows に断られて false を返します（`AttachThreadInput` で前面のスレッドにつないでも同じでした）。
+- 割り当てのない仮想キー（`0x88`）を `keybd_event` で押して離したことにしてから呼び直すと、前に出せました。どのアプリもこのキーを使わないので、前面のアプリには何も起きません。
+- 前に出したあとで前面のプロセスが `claude` になったかを確かめ、なっていなければリンクで開きます。
+
 ## UIA（Windows UI Automation）
 `System.Windows.Automation` で、Claude のメインウィンドウ（`claude` プロセスの `MainWindowHandle`）から読み取れます。試したときの要素の数は、全部で 368 個でした。
 

@@ -1,19 +1,20 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, Notification, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { foregroundProcessName, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
-import { readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
-import { tipBounds } from './tip-place';
+import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
-import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, type ArchiveMark, type Settings, type WindowBounds } from '../shared/settings';
+import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { ja } from '../shared/strings/ja';
 import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
@@ -43,7 +44,7 @@ let settingsWin: BrowserWindow | undefined;
 let tipWin: BrowserWindow | undefined;
 /** めくれと一覧のウィンドウ（flyout.ts） */
 let flyout: Flyout | undefined;
-/** 今出そうとしているツールチップの基準の要素。消したら undefined にし、遅れて届いた大きさは捨てる */
+/** 今出そうとしているツールチップの基準の要素（ウィジェットの中の座標、CSS px）。消したら undefined にし、遅れて届いた大きさは捨てる */
 let tipAnchor: TipRect | undefined;
 let tipHideTimer: NodeJS.Timeout | undefined;
 /** 変数に持っておかないと、ガベージコレクションでトレイから消える */
@@ -51,8 +52,12 @@ let tray: Tray | undefined;
 /** ドラッグ中の幅。離すまでは保存しない */
 let dragWidth: number | undefined;
 let lastSent = '';
+/** 最後にかけた表示の拡大率。変わったときだけ、出ているツールチップとめくれを消す（置き場所がずれるため） */
+let appliedZoom = 1;
 /** タスクバーの点滅を止めるタイマー */
 let flashTimer: NodeJS.Timeout | undefined;
+/** 本当に終わるところ（トレイの「終了」、OS のシャットダウン）。立っていないときは、ウィジェットを閉じずに隠す */
+let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
 const toasts = new Set<Notification>();
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
@@ -101,7 +106,7 @@ if (WORKTREE) useWorktreeUserData(WORKTREE);
 else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
-const APP_LABEL = WORKTREE ? `Bantus（ワークツリー：${WORKTREE}）` : 'Bantus';
+const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
 
 /**
  * main に入った新しいコードへ自動で切り替えるか。main のチェックアウトから npm start したときだけ。
@@ -149,16 +154,60 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards } = s;
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, tooltipDelayMs } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards,
-    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, tooltipDelayMs,
+    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs,
   };
 }
 
+/**
+ * テーマをすべてのウィンドウに当てる。画面の CSS は prefers-color-scheme のままで、themeSource を変えると
+ * 開いているウィンドウ（ウィジェット・設定・一覧・ツールチップ）の見た目がすぐ切り替わる
+ */
+function applyTheme(s: Settings) {
+  if (nativeTheme.themeSource !== s.theme) nativeTheme.themeSource = s.theme;
+}
+
+/** 一覧（めくれ）の状態の色。ウィジェットの色は layout で届く */
+function sendFlyoutColors() {
+  const w = flyout?.window();
+  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', getSettings().statusColors);
+}
+
+/** 表示の拡大率（1 で等倍） */
+function zoomFactor(): number {
+  return getSettings().zoom / 100;
+}
+
+/**
+ * ウィジェット・ツールチップ・めくれに表示の拡大率をかける。設定ウィンドウにはかけない。
+ * Electron では拡大率はウィンドウ（webContents）ごとで、同じ file:// でもほかのウィンドウには移らない
+ */
+function applyZoom() {
+  const zoom = zoomFactor();
+  const changed = zoom !== appliedZoom;
+  appliedZoom = zoom;
+  for (const w of [win, tipWin, flyout?.window()]) {
+    if (w && !w.isDestroyed()) w.webContents.setZoomFactor(zoom);
+  }
+  if (changed) {
+    hideTip();
+    flyout?.hide();
+  }
+}
+
+/** 読み込むたびに（読み込み直しでも）拡大率をかけ直す */
+function keepZoom(w: BrowserWindow) {
+  w.webContents.on('did-finish-load', () => w.webContents.setZoomFactor(zoomFactor()));
+}
+
 function applySettings(s: Settings) {
+  applyTheme(s);
+  sendFlyoutColors();
   if (!win || win.isDestroyed()) return;
+  applyZoom();
   win.setBounds(sidebarBounds());
   // 固定を外すと、ほかのウィンドウをクリックしたときにその後ろへ回る
   win.setAlwaysOnTop(s.pinned);
@@ -171,8 +220,8 @@ function displayOptions(): DisplayOption[] {
   const primaryId = screen.getPrimaryDisplay().id;
   const others = screen.getAllDisplays().filter((d) => d.id !== primaryId);
   return [
-    { id: 'primary', label: 'メインのモニター' },
-    ...others.map((d, i) => ({ id: String(d.id), label: `モニター ${i + 2}（${d.size.width}×${d.size.height}）` })),
+    { id: 'primary', label: ja.monitor.primary },
+    ...others.map((d, i) => ({ id: String(d.id), label: ja.monitor.other(i + 2, d.size.width, d.size.height) })),
   ];
 }
 
@@ -184,7 +233,8 @@ function createWidget(): BrowserWindow {
     frame: false,
     resizable: false,
     movable: false,
-    minimizable: false,
+    // タスクバーのボタンのクリックで、最小化と元に戻すを切り替える
+    minimizable: true,
     maximizable: false,
     alwaysOnTop: getSettings().pinned,
     show: false,
@@ -195,6 +245,7 @@ function createWidget(): BrowserWindow {
     // 知らせる音は、クリックなどの操作なしに鳴らす
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
   });
+  keepZoom(w);
   w.loadFile(join(WEB, 'index.html'));
   w.once('ready-to-show', () => {
     applySettings(getSettings());
@@ -202,6 +253,35 @@ function createWidget(): BrowserWindow {
     sendSessions(true);
     if (process.env.WIDGET_SCREENSHOT) void captureAndQuit(w, process.env.WIDGET_SCREENSHOT);
   });
+  // タスクバーなどから閉じても、終わらずにトレイへ隠れる。本当に閉じるのは終了するときだけ
+  // Windows のシャットダウンやサインアウトでは before-quit が来ないので、ここで目印を立てる（止めるとシャットダウンを妨げる）
+  w.on('session-end', () => {
+    quitting = true;
+  });
+  w.on('close', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    w.hide();
+  });
+  // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
+  w.on('move', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  w.on('resize', () => {
+    hideTip();
+    flyout?.hide();
+  });
+  // 隠したときと最小化したときは、ツールチップとめくれも隠す
+  const hidden = () => {
+    hideTip();
+    flyout?.setWidgetVisible(false);
+  };
+  w.on('hide', hidden);
+  w.on('minimize', hidden);
+  // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
+  w.on('show', () => flyout?.setWidgetVisible(true));
+  w.on('restore', () => flyout?.setWidgetVisible(true));
   return w;
 }
 
@@ -230,15 +310,19 @@ function createTipWindow(): BrowserWindow {
   w.setIgnoreMouseEvents(true);
   // 固定したウィジェットより前に出す
   w.setAlwaysOnTop(true, 'pop-up-menu');
+  keepZoom(w);
   w.loadFile(join(WEB, 'tip.html'));
   return w;
 }
 
-/** ツールチップの中身の大きさが届いたら、置いて見せる */
+/** ツールチップの中身の大きさ（CSS px）が届いたら、置いて見せる */
 function placeTip(width: number, height: number) {
   if (!tipAnchor || !win || win.isDestroyed() || !tipWin || tipWin.isDestroyed()) return;
   const s = getSettings();
-  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, tipAnchor, { width, height }));
+  // 画面から届く大きさと位置は CSS px なので、拡大率を掛けて画面の座標にする
+  const zoom = zoomFactor();
+  const size = { width: width * zoom, height: height * zoom };
+  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, scaleRect(tipAnchor, zoom), size, zoom));
   if (!tipWin.isVisible()) tipWin.showInactive();
   tipWin.webContents.send('tip:visible', true);
 }
@@ -325,7 +409,7 @@ function openSettingsWindow() {
     ...SETTINGS_SIZE,
     minWidth: SETTINGS_MIN.width,
     minHeight: SETTINGS_MIN.height,
-    title: `${APP_LABEL} — 設定`,
+    title: ja.window.settings(APP_LABEL),
     icon: ICON,
     autoHideMenuBar: true,
     show: false,
@@ -350,11 +434,17 @@ function openSettingsWindow() {
   w.on('closed', () => (settingsWin = undefined));
 }
 
-/** ウィジェットを前に出す（固定を外して後ろに回ったときや、隠れたときに使う） */
+/** ウィジェットを前に出す（固定を外して後ろに回ったとき、最小化したとき、閉じてトレイに隠れたときに使う） */
 function showWidget() {
-  if (!win || win.isDestroyed()) return;
-  win.show();
+  // ふつうは閉じても隠れるだけだが、万一なくなっていたら作り直す（表示は ready-to-show で行う）
+  if (!win || win.isDestroyed()) {
+    win = createWidget();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
   win.moveTop();
+  win.focus();
 }
 
 /** タスクトレイのアイコン。クリックでウィジェットを前に出し、右クリックで表示、設定、終了 */
@@ -363,10 +453,10 @@ function createTray(): Tray {
   t.setToolTip(APP_LABEL);
   t.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '表示', click: () => showWidget() },
-      { label: '設定', click: () => openSettingsWindow() },
+      { label: ja.tray.show, click: () => showWidget() },
+      { label: ja.tray.settings, click: () => openSettingsWindow() },
       { type: 'separator' },
-      { label: '終了', click: () => app.quit() },
+      { label: ja.tray.quit, click: () => app.quit() },
     ]),
   );
   t.on('click', () => showWidget());
@@ -405,6 +495,16 @@ function openSession(id: unknown) {
   if (typeof id === 'string' && SESSION_ID.test(id)) {
     shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
   }
+}
+
+/**
+ * もう開いているセッションの Claude のウィンドウを前に出す。
+ * リンクだと 2 つ目の claude.exe が起動して URL を渡すまでに約 260 ms かかるので、直接前に出す。
+ * 前に出せなかったとき（Windows に断られた、PowerShell が使えない）は、今までどおりリンクで開く
+ */
+async function raiseSession(id: unknown) {
+  if (typeof id !== 'string' || !SESSION_ID.test(id)) return;
+  if (!(await raiseClaudeWindow())) openSession(id);
 }
 
 function isToastRequest(v: unknown): v is ToastRequest {
@@ -467,19 +567,26 @@ function sendSessions(force = false) {
   if (!force && json === lastSent) return;
   lastSent = json;
   win.webContents.send('sessions', sessions);
-  // 一覧から消えた（デスクトップでアーカイブや削除された）セッションとカードは、アーカイブの印からも外す。読めずに空のときは外さない
+  // 一覧から消えた（デスクトップでアーカイブや削除された）セッションとカードは、アーカイブと保留の印からも外す。読めずに空のときは外さない
   if (sessions.length) {
-    const { archive, archivedCards } = getSettings();
+    const { archive, archivedCards, holds, heldCards } = getSettings();
     const ids = new Set(sessions.map((s) => s.id));
     const cardKeys = new Set(sessions.map(cardKeyOf));
+    const patch: Partial<Settings> = {};
     const keptSessions = pruneMarks(archive, ids);
+    if (keptSessions) patch.archive = keptSessions;
     const keptCards = pruneMarks(archivedCards, cardKeys);
-    if (keptSessions || keptCards) updateSettings({ ...(keptSessions && { archive: keptSessions }), ...(keptCards && { archivedCards: keptCards }) });
+    if (keptCards) patch.archivedCards = keptCards;
+    const keptHolds = pruneMarks(holds, ids);
+    if (keptHolds) patch.holds = keptHolds;
+    const keptHeldCards = pruneMarks(heldCards, cardKeys);
+    if (keptHeldCards) patch.heldCards = keptHeldCards;
+    if (Object.keys(patch).length) updateSettings(patch);
   }
 }
 
 /** 今ない目印の印を外す。外すものがなければ undefined */
-function pruneMarks(marks: Record<string, ArchiveMark>, keys: ReadonlySet<string>): Record<string, ArchiveMark> | undefined {
+function pruneMarks<T>(marks: Record<string, T>, keys: ReadonlySet<string>): Record<string, T> | undefined {
   const entries = Object.entries(marks);
   const kept = entries.filter(([k]) => keys.has(k));
   return kept.length === entries.length ? undefined : Object.fromEntries(kept);
@@ -494,9 +601,26 @@ function setMark(marks: Record<string, ArchiveMark>, key: string, mark: unknown)
   return next;
 }
 
+/** 保留の印を付けるか外す（null で外す）。印の形が合わなければ undefined */
+function setHoldMark(marks: Record<string, HoldMark>, key: string, mark: unknown): Record<string, HoldMark> | undefined {
+  const hold = mark === null ? null : normalizeHold(mark);
+  if (hold === undefined) return undefined;
+  const next = { ...marks };
+  if (hold === null) delete next[key];
+  else next[key] = hold;
+  return next;
+}
+
 // ---- 起動 ----
 
 app.whenReady().then(() => {
+  // 見本データに書いた保留を、見本データ用の設定に入れる（設定にもうある印はそのまま）
+  if (process.env.WIDGET_FIXTURE) {
+    const seed = readFixtureHolds(process.env.WIDGET_FIXTURE);
+    const { holds, heldCards } = getSettings();
+    updateSettings({ holds: { ...seed.holds, ...holds }, heldCards: { ...seed.heldCards, ...heldCards } });
+  }
+  applyTheme(getSettings());
   win = createWidget();
   tipWin = createTipWindow();
   flyout = createFlyout({
@@ -505,6 +629,7 @@ app.whenReady().then(() => {
     widget: () => win,
     edge: () => getSettings().edge,
     area: () => targetDisplay(getSettings()).workArea,
+    zoom: zoomFactor,
     onAction: (action) => win?.webContents.send('fly-action', action),
     onHover: (key) => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
@@ -513,6 +638,9 @@ app.whenReady().then(() => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
     },
   });
+  keepZoom(flyout.window());
+  flyout.window().webContents.on('did-finish-load', sendFlyoutColors);
+  applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
   const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
@@ -531,6 +659,7 @@ app.whenReady().then(() => {
   }
 
   ipcMain.on('open-session', (_e, id: unknown) => openSession(id));
+  ipcMain.on('raise-session', (_e, id: unknown) => void raiseSession(id));
   ipcMain.on('resize-start', () => {
     dragWidth = getSettings().width;
   });
@@ -563,6 +692,16 @@ app.whenReady().then(() => {
     const archivedCards = setMark(getSettings().archivedCards, key, mark);
     if (archivedCards) updateSettings({ archivedCards });
   });
+  ipcMain.on('set-hold', (_e, id: unknown, mark: unknown) => {
+    if (typeof id !== 'string' || !SESSION_KEY_ID.test(id)) return;
+    const holds = setHoldMark(getSettings().holds, id, mark);
+    if (holds) updateSettings({ holds });
+  });
+  ipcMain.on('set-card-hold', (_e, key: unknown, mark: unknown) => {
+    if (!isCardKey(key)) return;
+    const heldCards = setHoldMark(getSettings().heldCards, key, mark);
+    if (heldCards) updateSettings({ heldCards });
+  });
   ipcMain.on('fly-show', (e, request: unknown) => {
     if (e.sender === win?.webContents && isFlyRequest(request)) flyout?.show(request);
   });
@@ -592,22 +731,8 @@ app.whenReady().then(() => {
   ipcMain.on('tip:size', (_e, width: unknown, height: unknown) => {
     if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
   });
-  // ウィジェットが動いたり大きさが変わったりしたら、置き場所がずれるので消す
-  win.on('move', () => {
-    hideTip();
-    flyout?.hide();
-  });
-  win.on('resize', () => {
-    hideTip();
-    flyout?.hide();
-  });
-  win.on('hide', () => {
-    hideTip();
-    flyout?.setWidgetVisible(false);
-  });
-  // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
-  win.on('show', () => flyout?.setWidgetVisible(true));
-  if (win.isVisible()) flyout.setWidgetVisible(true);
+  // ウィジェットのイベント（隠す・最小化など）は createWidget で登録する。めくれより先に出ていたときだけ、ここで知らせる
+  if (win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));
@@ -644,7 +769,19 @@ app.whenReady().then(() => {
   });
 });
 
+// 終わるときだけ、ウィジェットを本当に閉じる（ふつうに閉じたときはトレイへ隠れる）
+app.on('before-quit', () => {
+  quitting = true;
+});
+
 app.on('window-all-closed', () => app.quit());
+
+/**
+ * メインプロセスで拾われなかった例外は、ダイアログにせず記録だけにする。
+ * Electron の既定ではダイアログが出て、タイマーの中の例外だと閉じてもすぐ同じものが出続ける
+ */
+process.on('uncaughtException', (e) => console.error('拾われなかった例外：', e));
+process.on('unhandledRejection', (e) => console.error('拾われなかった Promise の失敗：', e));
 
 // 二重起動を防ぐ
 if (!app.requestSingleInstanceLock()) {

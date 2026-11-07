@@ -1,34 +1,63 @@
-// 前面にあるウィンドウのプロセス名を調べる（docs/research/deep-link-and-uia.md）。
-// Node から user32.dll を直接呼べないので、GetForegroundWindow を呼ぶ PowerShell を 1 つ動かし続け、1 行送るたびに 1 行で答えさせる。
+// 前面にあるウィンドウのプロセス名を調べる。Claude のウィンドウを前に出す（docs/research/deep-link-and-uia.md）。
+// Node から user32.dll を直接呼べないので、PowerShell を 1 つ動かし続け、1 行（命令）送るたびに 1 行で答えさせる。
 // 起動と Add-Type に 1〜2 秒かかるので、起動したら一度だけ作っておく。
+//
+// 命令
+// - fg：前面のウィンドウのプロセス名を答える（わからなければ空行）
+// - raise：Claude のメインウィンドウを前に出し、前に出せたら 1、出せなかったら 0 を答える
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
+// 前面にないプロセスの SetForegroundWindow は Windows に断られる（タスクバーが点滅するだけ）。
+// 断られたら、どこにも割り当てのない仮想キー（0x88）を押して離したことにしてから、もう一度呼ぶ。
+// 入力があったことで前面の切り替えの制限が外れる。0x88 はどのアプリも使わないので、前面のアプリには何も起きない
 const SCRIPT = `
 Add-Type -Namespace Bantus -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 '@
-while ($null -ne [Console]::In.ReadLine()) {
+function Get-FgName {
   $id = [uint32]0
   [void][Bantus.Win]::GetWindowThreadProcessId([Bantus.Win]::GetForegroundWindow(), [ref]$id)
   $p = Get-Process -Id $id -ErrorAction SilentlyContinue
-  [Console]::Out.WriteLine($(if ($p) { $p.ProcessName } else { '' }))
+  if ($p) { $p.ProcessName } else { '' }
+}
+function Invoke-Raise {
+  $p = Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+  if (-not $p) { return '0' }
+  $h = $p.MainWindowHandle
+  if ([Bantus.Win]::IsIconic($h)) { [void][Bantus.Win]::ShowWindow($h, 9) }
+  $ok = [Bantus.Win]::SetForegroundWindow($h)
+  if (-not $ok) {
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 0, [UIntPtr]::Zero)
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 2, [UIntPtr]::Zero)
+    $ok = [Bantus.Win]::SetForegroundWindow($h)
+  }
+  if ($ok -and (Get-FgName) -eq 'claude') { '1' } else { '0' }
+}
+while ($null -ne ($line = [Console]::In.ReadLine())) {
+  $answer = if ($line.Trim() -eq 'raise') { Invoke-Raise } else { Get-FgName }
+  [Console]::Out.WriteLine($answer)
   [Console]::Out.Flush()
 }
 `;
 
-type Waiter = { resolve: (name: string | undefined) => void; done: boolean };
+type Command = 'fg' | 'raise';
+type Waiter = { resolve: (line: string | undefined) => void; done: boolean };
 
 let child: ChildProcessWithoutNullStreams | undefined;
 let buffer = '';
 /** 答えは送った順に返ってくる。時間切れになったものも、答えが来るまで列に残す（順番をずらさないため） */
 const waiting: Waiter[] = [];
 
-function settle(w: Waiter | undefined, name: string | undefined) {
+function settle(w: Waiter | undefined, line: string | undefined) {
   if (!w || w.done) return;
   w.done = true;
-  w.resolve(name);
+  w.resolve(line);
 }
 
 function ensureChild(): ChildProcessWithoutNullStreams | undefined {
@@ -46,7 +75,7 @@ function ensureChild(): ChildProcessWithoutNullStreams | undefined {
     while ((at = buffer.indexOf('\n')) >= 0) {
       const line = buffer.slice(0, at).trim();
       buffer = buffer.slice(at + 1);
-      settle(waiting.shift(), line || undefined);
+      settle(waiting.shift(), line);
     }
   });
   const reset = () => {
@@ -62,6 +91,18 @@ function ensureChild(): ChildProcessWithoutNullStreams | undefined {
   return p;
 }
 
+/** 命令を 1 行送り、答えの 1 行を返す。PowerShell が使えないときや時間切れは undefined */
+function ask(command: Command, timeoutMs: number): Promise<string | undefined> {
+  const p = ensureChild();
+  if (!p) return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const w: Waiter = { resolve, done: false };
+    waiting.push(w);
+    setTimeout(() => settle(w, undefined), timeoutMs);
+    p.stdin.write(`${command}\n`);
+  });
+}
+
 /** 先に PowerShell を起動しておく（最初の問い合わせを待たせない） */
 export function startForegroundProbe() {
   ensureChild();
@@ -75,13 +116,14 @@ export function stopForegroundProbe() {
 }
 
 /** 前面のウィンドウのプロセス名（例：claude）。わからないときや時間切れは undefined */
-export function foregroundProcessName(timeoutMs = 1000): Promise<string | undefined> {
-  const p = ensureChild();
-  if (!p) return Promise.resolve(undefined);
-  return new Promise((resolve) => {
-    const w: Waiter = { resolve, done: false };
-    waiting.push(w);
-    setTimeout(() => settle(w, undefined), timeoutMs);
-    p.stdin.write('\n');
-  });
+export async function foregroundProcessName(timeoutMs = 1000): Promise<string | undefined> {
+  return (await ask('fg', timeoutMs)) || undefined;
+}
+
+/**
+ * Claude のメインウィンドウを前に出す（最小化されていれば元に戻す）。
+ * 前に出して、前面のプロセスが claude になったときだけ true。断られたとき、PowerShell が使えないとき、時間切れは false
+ */
+export async function raiseClaudeWindow(timeoutMs = 1000): Promise<boolean> {
+  return (await ask('raise', timeoutMs)) === '1';
 }

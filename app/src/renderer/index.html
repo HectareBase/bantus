@@ -11,12 +11,12 @@
     <img class="app-icon" src="icon.svg" alt="">
     <span class="app-name">Bantus</span>
     <span class="spacer"></span>
-    <button id="pin" class="icon-button" data-tip="最前面に固定中（クリックで外す）" aria-label="最前面に固定" aria-pressed="true" data-icon="pin"></button>
-    <button id="settings" class="icon-button" data-tip="設定" aria-label="設定" data-icon="settings"></button>
+    <button id="pin" class="icon-button" data-i18n-tip="widget.pinned" data-i18n-aria-label="widget.pinAria" aria-pressed="true" data-icon="pin"></button>
+    <button id="settings" class="icon-button" data-i18n-tip="widget.settings" data-i18n-aria-label="widget.settings" data-icon="settings"></button>
   </header>
 
   <!-- 内側の端。ドラッグで幅を変える -->
-  <div id="resize-handle" class="resize-handle" data-tip="ドラッグで幅を変える"></div>
+  <div id="resize-handle" class="resize-handle" data-i18n-tip="widget.resize"></div>
 
   <!-- リポジトリの見出しと、ワークツリーごとのカード。data-icon の要素には icon.ts が lucide のアイコンを入れる -->
   <main id="cards"></main>
@@ -43,10 +43,13 @@
       <div class="stack-hit"></div>
       <section class="card">
         <div class="card-header">
-          <span class="card-icon"></span>
+          <!-- ブランチのアイコン。押すとカードの保留を切り替える（docs/design/hold.md） -->
+          <span class="card-icon toggle"><span class="toggle-ic"><span class="now"></span><span class="alt"></span></span></span>
           <span class="card-label"></span>
           <span class="changes" tabindex="0" hidden></span>
-          <button class="act card-act" tabindex="-1" aria-label="カードをアーカイブ" data-tip="カードをアーカイブ" data-icon="archive"></button>
+          <button class="act card-act" tabindex="-1" data-i18n-aria-label="widget.archiveCard" data-i18n-tip="widget.archiveCard" data-icon="archive"></button>
+          <!-- 保留の間だけ出す 2 段目：「保留」の文字とメモの枠 -->
+          <div class="card-hold" hidden><span class="state-pill" data-i18n="state.held"></span><span class="memo"><span class="memo-pen" data-icon="pencil"></span><span class="memo-text"></span><textarea rows="1" spellcheck="false" data-i18n-aria-label="widget.holdNoteAria"></textarea></span></div>
         </div>
         <ul class="rows"></ul>
       </section>
@@ -55,12 +58,13 @@
 
   <template id="row-template">
     <li class="row" tabindex="0">
-      <span class="status"></span>
+      <!-- 状態の印。待機・停止中の行では、押すと保留を切り替える（docs/design/hold.md） -->
+      <span class="status toggle"><span class="toggle-ic"><span class="now"></span><span class="alt"></span></span></span>
       <span class="text">
         <span class="title"></span>
-        <span class="meta"><span class="when"></span></span>
+        <span class="meta"><span class="state-pill"></span><span class="when"></span><span class="ctx" hidden><span class="ctx-bar"><span class="ctx-fill"></span></span><span class="ctx-num"></span></span><span class="memo" hidden><span class="memo-pen" data-icon="pencil"></span><span class="memo-text"></span><textarea rows="1" spellcheck="false" data-i18n-aria-label="widget.holdNoteAria"></textarea></span></span>
       </span>
-      <button class="act" tabindex="-1" aria-label="アーカイブ" data-icon="archive"></button>
+      <button class="act" tabindex="-1" data-i18n-aria-label="widget.archive" data-icon="archive"></button>
     </li>
   </template>
 

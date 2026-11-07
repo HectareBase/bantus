@@ -118,6 +118,13 @@ describe('readSessions（偽のデータフォルダ）', () => {
     writeJson(join(fixLogin, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'fix-login')}\n`);
     writeJson(join(repo, '.git', 'worktrees', 'fix-login', 'HEAD'), 'ref: refs/heads/claude/fix-login-1a2b3c\n');
     local(12, { title: 'shared worktree', cwd: fixLogin, originCwd: fixLogin, gitAnchors: [anchor], createdAt: 50, spawnedFrom: { sessionId: localId(2) } });
+    // リポジトリの外のワークツリーで始めたが、gitAnchors がなく cwd（ここではサブフォルダ）だけを持つ。.git ファイルから上へたどって元のリポジトリを探す
+    const bare = join(tmp.path, 'Repo-bare');
+    const bareGitDir = join(repo, '.git', 'worktrees', 'Repo-bare');
+    writeJson(join(bare, '.git'), `gitdir: ${bareGitDir}\n`);
+    writeJson(join(bareGitDir, 'HEAD'), 'ref: refs/heads/feature/bare\n');
+    writeJson(join(bareGitDir, 'commondir'), '../..\n');
+    local(13, { title: 'outside worktree without anchors', cwd: join(bare, 'app'), createdAt: 60 });
     writeJson(join(dir, 'local_broken.json'), '{');
     writeJson(join(dir, 'other.json'), { sessionId: 'x', title: 'not a session file' });
 
@@ -127,13 +134,13 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('アーカイブ済み、サイドチャット、壊れたファイル、local_ 以外は読まない', () => {
     assert.deepEqual(sessions.map((s) => s.title).sort(), [
-      '(無題)', 'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'shared worktree', 'spawned', 'waiting', 'worktree',
+      'dead', 'entered worktree', 'no git', 'other repo', 'outside worktree', 'outside worktree without anchors', 'shared worktree', 'spawned', 'waiting', 'worktree', '（無題）',
     ]);
   });
 
   it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
     assert.deepEqual(sessions.map((s) => s.state), [
-      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped',
+      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped',
     ]);
   });
 
@@ -154,7 +161,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
 
   it('PID のファイル名でないものや、終わったプロセスは停止中', () => {
     assert.equal(byTitle('dead')?.state, 'stopped');
-    assert.equal(byTitle('(無題)')?.state, 'stopped');
+    assert.equal(byTitle('（無題）')?.state, 'stopped');
   });
 
   it('ワークツリーも元のリポジトリのカードに入り、ブランチ名を短くする', () => {
@@ -175,6 +182,18 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(wt.worktree?.branch, 'feature/ext');
     assert.equal(wt.worktree?.label, 'feature/ext');
     assert.notEqual(wt.worktree?.key, byTitle('worktree')?.worktree?.key);
+  });
+
+  it('gitAnchors がなく cwd だけを持つ外のワークツリーも、.git ファイルから元のリポジトリを探してそのカードに入れる', () => {
+    const main = byTitle('waiting')!;
+    const wt = byTitle('outside worktree without anchors')!;
+    assert.equal(wt.repoKey, main.repoKey);
+    assert.equal(wt.repoName, 'Repo');
+    assert.equal(wt.mainBranch, 'main');
+    assert.equal(wt.worktree?.branch, 'feature/bare');
+    assert.equal(wt.worktree?.key, join(tmp.path, 'Repo-bare').toLowerCase());
+    assert.equal(wt.baseBranch, 'main');
+    assert.equal(wt.workDir, join(tmp.path, 'Repo-bare'));
   });
 
   it('途中でワークツリーに入ったセッションは、CLI の今の作業フォルダからワークツリーを見つける', () => {
@@ -217,7 +236,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
     const plain = byTitle('no git')!;
     assert.equal(plain.repoName, 'plain');
     assert.equal(plain.mainBranch, undefined);
-    assert.equal(byTitle('(無題)')?.repoKey, plain.repoKey);
+    assert.equal(byTitle('（無題）')?.repoKey, plain.repoKey);
   });
 
   it('git status を調べるフォルダ：ワークツリーはその場所、メインはリポジトリ、git でなければなし', () => {
@@ -232,7 +251,7 @@ describe('readSessions（偽のデータフォルダ）', () => {
     assert.equal(byTitle('dead')?.seq, 3);
     assert.equal(byTitle('worktree')?.seq, 1);
     assert.equal(byTitle('outside worktree')?.seq, 1);
-    assert.deepEqual(['no git', '(無題)', 'spawned'].map((t) => byTitle(t)?.seq), [1, 2, 3]);
+    assert.deepEqual(['no git', '（無題）', 'spawned'].map((t) => byTitle(t)?.seq), [1, 2, 3]);
   });
 
   it('最後のターンのまとめを読む', () => {

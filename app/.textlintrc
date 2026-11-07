@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "preset-ja-technical-writing": {
+      "ja-no-mixed-period": false
+    },
+    "ja-space-between-half-and-full-width": {
+      "space": "always"
+    },
+    "prh": {
+      "rulePaths": ["./text/terms.yml"]
+    }
+  }
+}

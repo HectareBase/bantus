@@ -1,5 +1,9 @@
 // 設定項目の定義。項目やカテゴリを足すときは、ここに足すだけで設定画面にも出る。
 
+import { ja } from './strings/ja.js';
+
+const T = ja.settings;
+
 export interface Settings {
   /** ウィジェットを置く画面の端 */
   edge: 'left' | 'right';
@@ -13,6 +17,15 @@ export interface Settings {
   cardOpacity: number;
   /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
   headerShade: number;
+  /**
+   * ウィジェット・ツールチップ・めくれの表示の拡大率（%）。Windows のディスプレイの拡大とは別に、その上からかける。
+   * 設定ウィンドウにはかけない。幅（width）は画面の座標のままなので、拡大すると中身が窮屈になる
+   */
+  zoom: number;
+  /** テーマ。system は Windows に従う。メインプロセスが nativeTheme.themeSource に当て、すべてのウィンドウにすぐ反映する */
+  theme: Theme;
+  /** 状態ごとのアイコンの色（#rrggbb）。ライトとダークで同じ色を使う。対応待ちは理由にかかわらず 1 色 */
+  statusColors: StatusColors;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
   /** main（元のフォルダ）のセッションを、落ち着いてから自動でアーカイブするまでの分。0 ならしない */
@@ -23,8 +36,14 @@ export interface Settings {
   worktreeOrder: SortOrder;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
+  /** 行（セッション）の上下の余白（px）。小さくすると 1 画面に多くの行が入る */
+  rowPadding: number;
   /** 行の 2 行目に、最後に動きがあった時刻（「◯分前」）を出す */
   showUpdated: boolean;
+  /** 行の 2 行目に、状態を文字で出す（「処理中」「許可待ち」など） */
+  showState: boolean;
+  /** 行の 2 行目に、コンテキストの使用率（「12%」）を出す */
+  showContext: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
   /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
@@ -52,15 +71,55 @@ export interface Settings {
   archive: Record<string, ArchiveMark>;
   /** カード（ワークツリー）を手でアーカイブした／戻したもの（カードの目印 → 印）。設定画面には出さない */
   archivedCards: Record<string, ArchiveMark>;
+  /** 保留の印（セッションの ID → 印）。設定画面には出さず、行の状態のアイコンで切り替える（docs/design/hold.md） */
+  holds: Record<string, HoldMark>;
+  /** 保留にしたカード（カードの目印 → 印）。設定画面には出さず、カードの見出しのアイコンで切り替える */
+  heldCards: Record<string, HoldMark>;
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
 
-/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 停止中、同じなら recent */
+/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 保留 → 停止中、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
+
+/** テーマ。system は Windows の設定に従う */
+export type Theme = 'system' | 'light' | 'dark';
+
+/** 色を設定できる状態。held は保留（Bantus の中だけの印で、セッションの状態ではない） */
+export type ColorState = 'busy' | 'waiting' | 'idle' | 'stopped' | 'held';
+export type StatusColors = Record<ColorState, string>;
+
+/** 設定画面に並べる順 */
+export const COLOR_STATES: ColorState[] = ['busy', 'waiting', 'idle', 'held', 'stopped'];
+
+/** 既定の色。両方のテーマで見える、中くらいの明るさ */
+export const DEFAULT_STATUS_COLORS: StatusColors = { busy: '#3b8eea', waiting: '#e6a100', idle: '#4caf50', stopped: '#8b8b8b', held: '#e05aa8' };
+
+/** 色の候補 */
+export const COLOR_SWATCHES = ['#3b8eea', '#4caf50', '#e6a100', '#e5534b', '#a371f7', '#e05aa8', '#26a69a', '#f0883e', '#8b8b8b'];
+
+/** #rrggbb（大文字も受け付け、小文字にそろえる）なら返す。そうでなければ undefined */
+export function normalizeColor(v: unknown): string | undefined {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : undefined;
+}
 
 /** 手で決めたアーカイブ。archived は手でアーカイブした、shown は手で戻した（自動ではアーカイブしない） */
 export type ArchiveMark = 'archived' | 'shown';
+
+/** 保留の印。note は理由のメモ（空でもよい）、since は保留にした時刻（Unix ミリ秒） */
+export interface HoldMark {
+  note: string;
+  since: number;
+}
+
+/** メモの長さの上限 */
+export const HOLD_NOTE_MAX = 200;
+
+/** メモを保存する形にそろえる。改行や制御文字は空白にし、空白を詰め、前後の空白を除いて上限で切る */
+export function normalizeNote(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
+}
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -79,12 +138,18 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
+  zoom: 100,
+  theme: 'system',
+  statusColors: DEFAULT_STATUS_COLORS,
   pinned: true,
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
   sessionOrder: 'fixed',
+  rowPadding: 4,
   showUpdated: true,
+  showState: true,
+  showContext: true,
   openAtLogin: false,
   notifyWaiting: true,
   notifyDone: false,
@@ -97,6 +162,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tooltipDelayMs: 400,
   archive: {},
   archivedCards: {},
+  holds: {},
+  heldCards: {},
 };
 
 /** ドラッグで変えられる幅の範囲（px） */
@@ -106,7 +173,7 @@ export const WIDTH_MAX = 480;
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
 export const TOOLTIP_OFF_MS = 2000;
 
-export type CategoryId = 'general' | 'cards' | 'notify' | 'about';
+export type CategoryId = 'general' | 'look' | 'cards' | 'notify' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -117,10 +184,11 @@ export interface Category {
 
 /** 左の一覧の並び。中身のないカテゴリは画面に出さない */
 export const CATEGORIES: Category[] = [
-  { id: 'general', label: '全体', icon: 'app-window' },
-  { id: 'cards', label: 'カードの表示', icon: 'list' },
-  { id: 'notify', label: '通知', icon: 'bell' },
-  { id: 'about', label: '情報', icon: 'info' },
+  { id: 'general', label: T.categories.general, icon: 'app-window' },
+  { id: 'look', label: T.categories.look, icon: 'palette' },
+  { id: 'cards', label: T.categories.cards, icon: 'list' },
+  { id: 'notify', label: T.categories.notify, icon: 'bell' },
+  { id: 'about', label: T.categories.about, icon: 'info' },
 ];
 
 interface Base<K extends keyof Settings> {
@@ -144,7 +212,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'openAtLogin'
+      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -153,125 +221,151 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'soundVolume' | 'tooltipDelayMs'> & {
-      type: 'slider'; min: number; max: number; step: number; unit: string;
-      /** 値の見せ方。なければ値に unit を付ける */
-      format?: (value: number) => string;
-    });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
+  | (Base<'statusColors'> & { type: 'status-colors' });
 
 const SHOW_OPTIONS = [
-  { value: true, label: '表示' },
-  { value: false, label: '非表示' },
+  { value: true, label: T.options.show },
+  { value: false, label: T.options.hide },
 ];
 
 const NOTIFY_OPTIONS = [
-  { value: true, label: '知らせる' },
-  { value: false, label: '知らせない' },
+  { value: true, label: T.options.notify },
+  { value: false, label: T.options.noNotify },
 ];
 
 const ORDER_OPTIONS = [
-  { value: 'fixed', label: '固定' },
-  { value: 'recent', label: '更新日時' },
-  { value: 'priority', label: '優先度' },
+  { value: 'fixed', label: T.options.orderFixed },
+  { value: 'recent', label: T.options.orderRecent },
+  { value: 'priority', label: T.options.orderPriority },
 ];
 
 export const SETTING_DEFS: SettingDef[] = [
   {
-    key: 'edge', category: 'general', group: '位置', type: 'segmented',
-    label: '画面の端', description: 'ウィジェットを置く側',
-    options: [{ value: 'left', label: '左' }, { value: 'right', label: '右' }],
+    key: 'edge', category: 'general', group: T.groups.position, type: 'segmented',
+    ...T.items.edge,
+    options: [{ value: 'left', label: T.options.left }, { value: 'right', label: T.options.right }],
   },
-  { key: 'display', category: 'general', group: '位置', type: 'display', label: 'モニター' },
+  { key: 'display', category: 'general', group: T.groups.position, type: 'display', ...T.items.display },
   {
-    key: 'backgroundOpacity', category: 'general', group: '見た目', type: 'slider',
-    label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ',
+    key: 'tooltipDelayMs', category: 'general', group: T.groups.tooltip, type: 'slider',
+    ...T.items.tooltipDelayMs,
+    min: 0, max: TOOLTIP_OFF_MS, step: 100, unit: '',
+    format: (v) => (v >= TOOLTIP_OFF_MS ? T.tooltipDelay.off : T.tooltipDelay.seconds(v / 1000)),
+  },
+  {
+    key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'segmented', packagedOnly: true,
+    ...T.items.openAtLogin,
+    options: [{ value: true, label: T.options.open }, { value: false, label: T.options.noOpen }],
+  },
+  {
+    key: 'theme', category: 'look', group: T.groups.brightness, type: 'segmented',
+    ...T.items.theme,
+    options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
+  },
+  {
+    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.backgroundOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'general', group: '見た目', type: 'slider',
-    label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる',
+    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.cardOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
-    label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
+    key: 'headerShade', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.headerShade,
     min: 0, max: 20, step: 1, unit: '%',
   },
   {
-    key: 'tooltipDelayMs', category: 'general', group: 'ツールチップ', type: 'slider',
-    label: '表示までの時間', description: 'ポインタを載せてから出るまで。右端にすると出さない',
-    min: 0, max: TOOLTIP_OFF_MS, step: 100, unit: '秒',
-    format: (v) => (v >= TOOLTIP_OFF_MS ? '表示しない' : `${(v / 1000).toFixed(1)} 秒`),
+    key: 'zoom', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.zoom,
+    min: 80, max: 150, step: 5, unit: '%',
   },
   {
-    key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,
-    label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える',
-    options: [{ value: true, label: '開く' }, { value: false, label: '開かない' }],
+    key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',
+    ...T.items.statusColors,
   },
   {
-    key: 'mainArchiveMinutes', category: 'cards', group: 'アーカイブ', type: 'segmented',
-    label: 'main を自動でアーカイブ',
-    description: '元のフォルダのセッションを、落ち着いてから（確認してから）この時間で隠す。ワークツリーは最後に動いたもの以外をすぐに隠す。Bantus の中だけで、デスクトップのアーカイブには触れない',
-    options: [{ value: 10, label: '10 分' }, { value: 30, label: '30 分' }, { value: 60, label: '1 時間' }, { value: 0, label: 'しない' }],
+    key: 'mainArchiveMinutes', category: 'cards', group: T.groups.archive, type: 'segmented',
+    ...T.items.mainArchiveMinutes,
+    options: [{ value: 10, label: T.options.minutes(10) }, { value: 30, label: T.options.minutes(30) }, { value: 60, label: T.options.hours(1) }, { value: 0, label: T.options.never }],
   },
   {
-    key: 'projectOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'プロジェクト', description: 'カードの並び。固定は名前順',
+    key: 'projectOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.projectOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'worktreeOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。固定は元のフォルダを先頭に、あとは名前順',
+    key: 'worktreeOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.worktreeOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'sessionOrder', category: 'cards', group: '並び順', type: 'segmented',
-    label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上',
+    key: 'sessionOrder', category: 'cards', group: T.groups.order, type: 'segmented',
+    ...T.items.sessionOrder,
     options: ORDER_OPTIONS,
   },
   {
-    key: 'showUpdated', category: 'cards', group: '行に出すもの', type: 'segmented',
-    label: '更新日時', description: '2 行目の「◯分前」',
+    key: 'rowPadding', category: 'cards', group: T.groups.rowSize, type: 'slider',
+    ...T.items.rowPadding,
+    min: 0, max: 12, step: 1, unit: 'px',
+  },
+  {
+    key: 'showUpdated', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showUpdated,
     options: SHOW_OPTIONS,
   },
   {
-    key: 'notifyWaiting', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '対応待ちになったとき', description: '許可や回答を待っているとき',
+    key: 'showState', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showState,
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'showContext', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    ...T.items.showContext,
+    options: SHOW_OPTIONS,
+  },
+  {
+    key: 'notifyWaiting', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.notifyWaiting,
     options: NOTIFY_OPTIONS,
   },
   {
-    key: 'notifyDone', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある',
+    key: 'notifyDone', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.notifyDone,
     options: NOTIFY_OPTIONS,
   },
   {
-    key: 'muteWhenOpen', category: 'notify', group: '知らせるとき', type: 'segmented',
-    label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき',
-    options: [{ value: false, label: '知らせる' }, { value: true, label: '知らせない' }],
+    key: 'muteWhenOpen', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    ...T.items.muteWhenOpen,
+    options: [{ value: false, label: T.options.notify }, { value: true, label: T.options.noNotify }],
   },
   {
-    key: 'sound', category: 'notify', group: '音', type: 'segmented',
-    label: '音を鳴らす', description: '何件かが一度に変わっても 1 回だけ鳴らし、続けて鳴るときは数秒あける',
-    options: [{ value: true, label: '鳴らす' }, { value: false, label: '鳴らさない' }],
+    key: 'sound', category: 'notify', group: T.groups.sound, type: 'segmented',
+    ...T.items.sound,
+    options: [{ value: true, label: T.options.ring }, { value: false, label: T.options.noRing }],
   },
   {
-    key: 'soundType', category: 'notify', group: '音', type: 'segmented', preview: 'sound',
-    label: '音の種類', description: '対応待ちは高め、完了は低めの音になる',
-    options: [{ value: 'chime', label: 'チャイム' }, { value: 'bell', label: 'ベル' }, { value: 'pop', label: 'ポン' }],
+    key: 'soundType', category: 'notify', group: T.groups.sound, type: 'segmented', preview: 'sound',
+    ...T.items.soundType,
+    options: [{ value: 'chime', label: T.options.soundChime }, { value: 'bell', label: T.options.soundBell }, { value: 'pop', label: T.options.soundPop }],
   },
   {
-    key: 'soundVolume', category: 'notify', group: '音', type: 'slider',
-    label: '音量', min: 0, max: 100, step: 5, unit: '%',
+    key: 'soundVolume', category: 'notify', group: T.groups.sound, type: 'slider',
+    ...T.items.soundVolume, min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'toast', category: 'notify', group: 'Windows の通知', type: 'segmented',
-    label: 'トースト通知', description: 'クリックするとそのセッションを開く。通知そのものの音は出さず、上の「音」に従う',
-    options: [{ value: true, label: '出す' }, { value: false, label: '出さない' }],
+    key: 'toast', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    ...T.items.toast,
+    options: [{ value: true, label: T.options.showToast }, { value: false, label: T.options.noToast }],
   },
   {
-    key: 'flash', category: 'notify', group: 'Windows の通知', type: 'segmented',
-    label: 'タスクバーの点滅', description: '3 秒ほどで止まり、オレンジのままにはしない。ウィジェットが前面にあるときは点滅させない',
-    options: [{ value: true, label: '点滅させる' }, { value: false, label: '点滅させない' }],
+    key: 'flash', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    ...T.items.flash,
+    options: [{ value: true, label: T.options.flash }, { value: false, label: T.options.noFlash }],
   },
 ];
 
@@ -291,6 +385,9 @@ export function normalizeSettings(input: unknown): Settings {
       case 'slider':
         if (typeof v === 'number' && Number.isFinite(v)) out[def.key] = Math.min(def.max, Math.max(def.min, Math.round(v)));
         break;
+      case 'status-colors':
+        out.statusColors = normalizeStatusColors(v);
+        break;
     }
   }
   // 設定画面に出さない項目
@@ -299,6 +396,8 @@ export function normalizeSettings(input: unknown): Settings {
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
   out.archive = normalizeMarks(src.archive, (id) => SESSION_KEY_ID.test(id));
   out.archivedCards = normalizeMarks(src.archivedCards, isCardKey);
+  out.holds = normalizeHolds(src.holds, (id) => SESSION_KEY_ID.test(id));
+  out.heldCards = normalizeHolds(src.heldCards, isCardKey);
   // 前の版の「常に表示」の星は、手で戻したものとして引き継ぐ
   if (Array.isArray(src.alwaysShow)) {
     for (const id of src.alwaysShow) {
@@ -310,12 +409,39 @@ export function normalizeSettings(input: unknown): Settings {
   return out;
 }
 
+/** 状態ごとの色。知らない状態は捨て、色でない値や欠けた状態は既定の色にする */
+function normalizeStatusColors(input: unknown): StatusColors {
+  const src = (input && typeof input === 'object' && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
+  const out = { ...DEFAULT_STATUS_COLORS };
+  for (const state of COLOR_STATES) out[state] = normalizeColor(src[state]) ?? DEFAULT_STATUS_COLORS[state];
+  return out;
+}
+
 /** 印の表から、目印と値が正しいものだけを残す */
 function normalizeMarks(input: unknown, validKey: (key: string) => boolean): Record<string, ArchiveMark> {
   const out: Record<string, ArchiveMark> = {};
   if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
   for (const [key, mark] of Object.entries(input)) {
     if ((mark === 'archived' || mark === 'shown') && validKey(key)) out[key] = mark;
+  }
+  return out;
+}
+
+/** 保留の印を 1 つそろえる。合わなければ undefined */
+export function normalizeHold(input: unknown): HoldMark | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const { note, since } = input as Record<string, unknown>;
+  if (typeof note !== 'string' || typeof since !== 'number' || !Number.isFinite(since)) return undefined;
+  return { note: normalizeNote(note), since };
+}
+
+/** 保留の表から、目印と値が正しいものだけを残す */
+function normalizeHolds(input: unknown, validKey: (key: string) => boolean): Record<string, HoldMark> {
+  const out: Record<string, HoldMark> = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  for (const [key, value] of Object.entries(input)) {
+    const mark = normalizeHold(value);
+    if (mark && validKey(key)) out[key] = mark;
   }
   return out;
 }

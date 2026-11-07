@@ -1,9 +1,13 @@
 // Claude デスクトップのセッション一覧と状態を読む。データは読むだけで、書き換えない。
 // 読み取り元と項目は docs/research/data-sources.md、状態の判定は docs/research/session-status.md。
 
-import { readFileSync, readdirSync, watch, type FSWatcher } from 'node:fs';
+import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
+import { cardKeyOf } from '../shared/card-key';
+import { createContextReader } from './context-usage';
+import type { HoldMark } from '../shared/settings';
+import { ja } from '../shared/strings/ja';
 import type { SessionState, SessionView } from '../shared/types';
 
 /** 読み取るフォルダ。テストでは偽のフォルダを渡す */
@@ -12,12 +16,15 @@ export interface DataPaths {
   runningDir: string;
   /** デスクトップのデータ（`%LOCALAPPDATA%\Claude-Data`） */
   dataBase: string;
+  /** 会話の記録（`~/.claude/projects`）。省くとコンテキストの使用量を読まない */
+  projectsDir?: string;
 }
 
 export function defaultPaths(): DataPaths {
   return {
     runningDir: join(homedir(), '.claude', 'sessions'),
     dataBase: join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Claude-Data'),
+    projectsDir: join(homedir(), '.claude', 'projects'),
   };
 }
 
@@ -149,6 +156,39 @@ function findWorktreeRoot(folder: string, commonDir: string): string | undefined
   }
 }
 
+/** gitAnchors の 1 つ目と同じ形（gitRoot は作業フォルダの一番上、commonDir は元のリポジトリの .git） */
+interface GitAnchor {
+  gitRoot: string;
+  commonDir: string;
+}
+
+/**
+ * gitAnchors を持たないセッションのために、folder から上へ `.git` を探す。読むだけで、何も書き込まない。
+ * `.git` がフォルダならそのリポジトリ、ファイル（`gitdir: <場所>`）ならワークツリーで、その gitdir の `commondir`
+ * （なければ `<gitdir>/../..`）を commonDir とする。git の外なら undefined
+ */
+function findGitAnchor(folder: string): GitAnchor | undefined {
+  for (let dir = resolve(folder); ; dir = dirname(dir)) {
+    const dotGit = join(dir, '.git');
+    try {
+      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, commonDir: dotGit };
+      const m = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, 'utf8'));
+      if (!m?.[1]) return undefined;
+      const gitDir = resolve(dir, m[1].trim());
+      let commonDir: string;
+      try {
+        commonDir = resolve(gitDir, readFileSync(join(gitDir, 'commondir'), 'utf8').trim());
+      } catch {
+        commonDir = resolve(gitDir, '..', '..');
+      }
+      return { gitRoot: dir, commonDir };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
+    }
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+
 export const folderKey =(path: string) => path.replace(/[\\/]+$/, '').toLowerCase();
 
 /** `claude/xenodochial-golick-8c38f8` → `xenodochial-golick` */
@@ -195,7 +235,7 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
   const items = readJson(path);
   if (!Array.isArray(items)) return [];
   const step = cycle ? Math.floor(now / cycle) : 0;
-  const views: SessionView[] = items.map(({ minutesAgo, ...s }, i) => ({
+  const views: SessionView[] = items.map(({ minutesAgo, hold: _hold, holdCard: _holdCard, ...s }, i) => ({
     ...s,
     // 前の形の見本データ（遅れとマージ済みがない）も読めるようにする
     ...(s.changes && { changes: { behind: 0, merged: false, ...s.changes } }),
@@ -212,9 +252,45 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
   }));
 }
 
+/**
+ * 見本データの保留の印。項目の hold（そのセッション）と holdCard（そのセッションのカード）に
+ * `{ "note": "メモ", "minutesAgo": 保留にしてからの分 }` を書く。ウィジェットの設定に入れて見せる（docs/design/hold.md）
+ */
+export function readFixtureHolds(path: string, now = Date.now()): { holds: Record<string, HoldMark>; heldCards: Record<string, HoldMark> } {
+  const holds: Record<string, HoldMark> = {};
+  const heldCards: Record<string, HoldMark> = {};
+  const items = readJson(path);
+  if (!Array.isArray(items)) return { holds, heldCards };
+  const mark = (v: unknown): HoldMark | undefined => {
+    if (!v || typeof v !== 'object') return undefined;
+    const { note, minutesAgo } = v as Record<string, unknown>;
+    return { note: typeof note === 'string' ? note : '', since: now - (Number(minutesAgo) || 0) * 60_000 };
+  };
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string') continue;
+    const own = mark(item.hold);
+    if (own) holds[item.id] = own;
+    const card = mark(item.holdCard);
+    if (card) heldCards[cardKeyOf(item as SessionView)] = card;
+  }
+  return { holds, heldCards };
+}
+
+/** 会話の記録のフォルダごとの読み手（読んだ結果を呼び出しの間で使い回す） */
+const contextReaders = new Map<string, ReturnType<typeof createContextReader>>();
+
+function contextReaderFor(projectsDir: string) {
+  let reader = contextReaders.get(projectsDir);
+  if (!reader) contextReaders.set(projectsDir, (reader = createContextReader(projectsDir)));
+  return reader;
+}
+
 export function readSessions(paths = defaultPaths()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
+  const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
+  /** 使用量を読んだ CLI のセッション ID（使い回しの表から消えたものを外す） */
+  const cliIds = new Set<string>();
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
   // 通し番号を数えるためのもの。アーカイブ済みも入れる
@@ -229,6 +305,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
     const k = `${folderKey(folder)}|${folderKey(commonDir)}`;
     if (!roots.has(k)) roots.set(k, findWorktreeRoot(folder, commonDir));
     return roots.get(k);
+  };
+  /** gitAnchors のないセッションの作業フォルダから探した git の情報（同じフォルダを何度も探さない） */
+  const found = new Map<string, GitAnchor | undefined>();
+  const gitAnchorOf = (folder: string) => {
+    const k = folderKey(folder);
+    if (!found.has(k)) found.set(k, findGitAnchor(folder));
+    return found.get(k);
   };
   /** アプリが作ったワークツリーのフォルダ → そのセッションのワークツリー（同じフォルダで始めたセッションを同じカードにまとめる） */
   const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
@@ -249,7 +332,13 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const r = running.get(d.cliSessionId);
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
-      const anchor = Array.isArray(d.gitAnchors) ? d.gitAnchors[0] : undefined;
+      // リポジトリの外のワークツリー（git worktree add）で始めたセッションには gitAnchors がないことがあるので、作業フォルダから探す
+      const startDir: string = d.originCwd || d.cwd || '';
+      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors)
+        ? d.gitAnchors[0]
+        : startDir
+          ? gitAnchorOf(startDir)
+          : undefined;
       // アプリが作ったワークツリーでは gitRoot が元のリポジトリを指す。リポジトリの外のワークツリー（git worktree add）では
       // gitRoot がワークツリーのフォルダになるので、commonDir（元のリポジトリの .git）の親を元のリポジトリとする
       const commonDir: string | undefined = anchor?.commonDir;
@@ -268,10 +357,10 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const view: SessionView = {
         id: d.sessionId,
-        title: d.title || '(無題)',
+        title: d.title || ja.session.untitled,
         // git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
         repoKey: folderKey(root),
-        repoName: root ? basename(root) : '(フォルダなし)',
+        repoName: root ? basename(root) : ja.session.noFolder,
         mainBranch: commonDir ? readHeadBranch(commonDir, heads) : undefined,
         worktree: d.worktreeName
           ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
@@ -299,7 +388,15 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       if (typeof d.spawnedFrom?.sessionId === 'string') view.spawnedFrom = d.spawnedFrom.sessionId;
       if (typeof d.turnWrapUp?.description === 'string' && d.turnWrapUp.description) view.summary = d.turnWrapUp.description;
       numbered.push(view);
-      if (!archived) views.push(view);
+      if (archived) continue;
+      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない
+      if (contextReader && typeof d.cliSessionId === 'string' && d.cliSessionId) {
+        cliIds.add(d.cliSessionId);
+        const folders = [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
+        const context = contextReader.read(d.cliSessionId, folders, typeof d.model === 'string' ? d.model : undefined);
+        if (context) view.context = context;
+      }
+      views.push(view);
     }
   }
   // フォルダから見つけたワークツリーが、アプリが作ったワークツリーと同じフォルダなら、同じ目印（名前）にそろえて 1 枚のカードにまとめる
@@ -311,6 +408,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
     else delete view.baseBranch;
   }
   assignSeq(numbered);
+  contextReader?.prune(cliIds);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
   for (const view of views) {
     const at = focusedAt.get(view.id);

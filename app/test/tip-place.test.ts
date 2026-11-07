@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FLY_GAP, FLY_LIST_WIDTH, FLY_SHADOW, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, tipBounds } from '../src/main/tip-place';
+import { FLY_GAP, FLY_LIST_WIDTH, FLY_SHADOW, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, scaleRect, tipBounds } from '../src/main/tip-place';
 
 const area = { x: 0, y: 0, width: 1920, height: 1040 };
 const size = { width: 200, height: 40 };
@@ -33,6 +33,25 @@ describe('tipBounds', () => {
     const b = tipBounds('left', widget, second, { x: 0, y: -50, width: 52, height: 40 }, size);
     assert.equal(b.x + TIP_MARGIN, -1280 + 400 + TIP_GAP);
     assert.equal(b.y + TIP_MARGIN, 0);
+  });
+});
+
+describe('表示の拡大率', () => {
+  it('scaleRect は位置と大きさに掛け、ほかの値は残す', () =>
+    assert.deepEqual(scaleRect({ key: 'a', x: 10, y: 20, width: 30, height: 40 }, 1.5), { key: 'a', x: 15, y: 30, width: 45, height: 60 }));
+  it('tipBounds は影の余白とすき間も拡大する', () => {
+    const widget = { x: 1520, y: 0, width: 400, height: 1040 };
+    const b = tipBounds('right', widget, area, { x: 15, y: 150, width: 570, height: 66 }, { width: 300, height: 60 }, 1.5);
+    assert.equal(b.width, 300 + TIP_MARGIN * 3);
+    assert.equal(b.x + b.width - TIP_MARGIN * 1.5, widget.x - TIP_GAP * 1.5);
+    assert.equal(b.y + TIP_MARGIN * 1.5, 150);
+  });
+  it('flyoutBounds は一覧の幅とすき間も拡大する', () => {
+    const widget = { x: 1656, y: 0, width: 264, height: 1040 };
+    const { bounds, inset } = flyoutBounds('right', widget, area, { x: 20, y: 120, width: 242, height: 80 }, 1.25);
+    assert.equal(inset, Math.round(20 + FLY_GAP * 1.25));
+    assert.equal(bounds.width, inset + Math.ceil((FLY_LIST_WIDTH + FLY_SHADOW) * 1.25));
+    assert.equal(bounds.x + bounds.width, 1656 + 20);
   });
 });
 

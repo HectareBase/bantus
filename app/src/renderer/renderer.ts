@@ -3,7 +3,7 @@
 // （docs/design/worktree-cards.md）。
 // 行・カード・見出しの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
-import type { ArchiveMark } from '../shared/settings';
+import type { ArchiveMark, HoldMark } from '../shared/settings';
 import type { FlyAction, FlyContent, FlyItem, GitChanges, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
@@ -14,8 +14,14 @@ import {
   buildRepos,
   changeItems,
   changesTooltip,
+  contextLabel,
+  contextLevel,
+  contextPercent,
   formatAgo,
   hasAlertOutput,
+  holdTooltip,
+  isHeld,
+  releasedHolds,
   mergeAlerts,
   newlyFlagged,
   nextAttention,
@@ -23,9 +29,12 @@ import {
   pickAlerts,
   revivedCards,
   revivedSessions,
+  startupConfirmedAt,
+  canToggleArchive,
   isLive,
   shortcutTarget,
   resolveFocus,
+  stateLabel,
   statusIconName,
   tooltip,
   type Alert,
@@ -37,22 +46,36 @@ import {
   type WorktreeCard,
 } from './model.js';
 import { flapRect } from '../shared/flap.js';
-import { flip } from './flip.js';
+import { ja } from '../shared/strings/ja.js';
+import { enabled as motionEnabled, flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
+import { createMemo, type MemoBox } from './memo.js';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
+import { applyStatusColors } from './status-colors.js';
+import { fillStrings } from './strings.js';
 import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
 
 interface RowRefs {
   el: HTMLLIElement;
+  /** 状態の印の押す的。中に今の印（now）と、乗せたときの印（alt） */
   status: HTMLElement;
+  statusNow: HTMLElement;
+  statusAlt: HTMLElement;
+  memoEl: HTMLElement;
+  memo: MemoBox;
   title: HTMLElement;
   /** セッション名の文字。光の帯（.shine）と並べるので、.title の textContent ではなくこれを書き換える */
   titleText: Text;
   /** 処理中の間だけ .title に重ねる光の帯と、その中の明るい文字 */
   shine?: { el: HTMLElement; text: HTMLElement };
   when: HTMLElement;
+  /** コンテキストの使用率（docs/design/worktree-cards.md）。中に短いバー（ctxFill）と数字（ctxNum） */
+  ctx: HTMLElement;
+  ctxFill: HTMLElement;
+  ctxNum: HTMLElement;
+  pill: HTMLElement;
   act: HTMLElement;
   data?: SessionView;
 }
@@ -73,10 +96,15 @@ interface CardRefs {
   card: HTMLElement;
   stackHit: HTMLElement;
   header: HTMLElement;
+  /** ブランチのアイコンの押す的。中に今の印（now）と、乗せたときの印（alt） */
   icon: HTMLElement;
+  iconNow: HTMLElement;
+  iconAlt: HTMLElement;
   label: HTMLElement;
   changes: HTMLElement;
   act: HTMLElement;
+  hold: HTMLElement;
+  memo: MemoBox;
   rows: HTMLUListElement;
   data?: WorktreeCard;
 }
@@ -86,6 +114,7 @@ const rowTemplate = document.getElementById('row-template') as HTMLTemplateEleme
 const cardTemplate = document.getElementById('card-template') as HTMLTemplateElement;
 const repoTemplate = document.getElementById('repo-template') as HTMLTemplateElement;
 fillIcons(document);
+fillStrings(document);
 const tooltips = initTooltips();
 
 const rows = new Map<string, RowRefs>();
@@ -104,6 +133,15 @@ const revived = new Set<string>();
 let sort: SortOptions = PRIORITY_SORT;
 let marks: Record<string, ArchiveMark> = {};
 let cardMarks: Record<string, ArchiveMark> = {};
+/** 保留の印（docs/design/hold.md）。アーカイブの印と同じく、押したときにすぐ変え、保存された値が戻ってきたらそれに合わせる */
+let holds: Record<string, HoldMark> = {};
+let heldCards: Record<string, HoldMark> = {};
+/** 外した保留のメモ（`s:<ID>` か `c:<カードの目印>` → メモ）。もう一度保留にしたら戻す。保存はしない */
+const lastNotes = new Map<string, string>();
+/** メモを入力している枠の数（0 か 1）。入力の間は、行やカードを動かさない（動かすとフォーカスが外れて確定してしまう） */
+let editingMemos = 0;
+/** 描いたあとに入力の状態にするメモ（`s:<ID>` か `c:<カードの目印>`）。保留にした直後に使う */
+let pendingMemo: string | undefined;
 let mainMinutes = 10;
 /** 最後に受け取ったセッション一覧と、最後に描いたリポジトリ */
 let latest: SessionView[] = [];
@@ -152,7 +190,7 @@ function setAttention(refs: RowRefs, id: string, on: boolean) {
 }
 
 function archiveOptions(): ArchiveOptions {
-  return { marks, cardMarks, attention, confirmedAt, mainMinutes, revived, now: Date.now(), sort };
+  return { marks, cardMarks, holds, heldCards, attention, confirmedAt, mainMinutes, revived, now: Date.now(), sort };
 }
 
 /** セッションの印を変えて保存する（null で外して自動の決まりに戻す） */
@@ -168,6 +206,100 @@ function setCardMark(key: string, mark: ArchiveMark | null) {
   if (mark) cardMarks[key] = mark;
   else delete cardMarks[key];
   window.widget.setCardArchive(key, mark);
+}
+
+/** セッションの保留の印を変えて保存する（null で外す） */
+function setHold(id: string, mark: HoldMark | null) {
+  holds = { ...holds };
+  if (mark) holds[id] = mark;
+  else delete holds[id];
+  window.widget.setHold(id, mark);
+}
+
+function setCardHold(key: string, mark: HoldMark | null) {
+  heldCards = { ...heldCards };
+  if (mark) heldCards[key] = mark;
+  else delete heldCards[key];
+  window.widget.setCardHold(key, mark);
+}
+
+/** 処理中・対応待ち。保留にできない（動いているものは保留にしない） */
+function isRunning(s: SessionView): boolean {
+  return s.state === 'busy' || s.state === 'waiting';
+}
+
+/**
+ * 行の状態のアイコンを押した：保留にする・外す。処理中・対応待ちの行では何もしない。
+ * 保留にするときは、アーカイブの印を消し、前に外したメモを戻して、そのままメモの入力の状態にする
+ */
+function toggleHold(id: string) {
+  const s = latest.find((x) => x.id === id);
+  if (!s || isRunning(s)) return;
+  const current = holds[id];
+  if (current) {
+    lastNotes.set(`s:${id}`, current.note);
+    setHold(id, null);
+    // 外したとたんに自動の決まりで隠れないよう、確認したものとして猶予を置く
+    confirmedAt.set(id, Date.now());
+  } else {
+    if (marks[id]) setMark(id, null);
+    revived.delete(id);
+    setHold(id, { note: lastNotes.get(`s:${id}`) ?? '', since: Date.now() });
+    lastNotes.delete(`s:${id}`);
+    pendingMemo = `s:${id}`;
+  }
+  render(latest);
+}
+
+/** カードの見出しのアイコンを押した。元のフォルダのカードと、処理中・対応待ちのセッションがあるカードでは何もしない */
+function toggleCardHold(key: string) {
+  const card = cards.get(key)?.data;
+  if (!card || card.isMain || card.sessions.some(isRunning)) return;
+  const current = heldCards[key];
+  if (current) {
+    lastNotes.set(`c:${key}`, current.note);
+    setCardHold(key, null);
+    // マージ済みのカードが外したとたんに隠れないよう、一番新しいセッションを確認したものとして猶予を置く
+    const newest = [...card.sessions, ...card.archived].reduce<SessionView | undefined>((a, b) => (!a || b.lastActivityAt > a.lastActivityAt ? b : a), undefined);
+    if (newest) confirmedAt.set(newest.id, Date.now());
+  } else {
+    if (cardMarks[key]) setCardMark(key, null);
+    setCardHold(key, { note: lastNotes.get(`c:${key}`) ?? '', since: Date.now() });
+    lastNotes.delete(`c:${key}`);
+    pendingMemo = `c:${key}`;
+  }
+  render(latest);
+}
+
+/** メモを確定した。保留を外したあとなら何もしない */
+function commitNote(id: string, note: string) {
+  const current = holds[id];
+  if (current && current.note !== note) setHold(id, { ...current, note });
+}
+
+function commitCardNote(key: string, note: string) {
+  const current = heldCards[key];
+  if (current && current.note !== note) setCardHold(key, { ...current, note });
+}
+
+/** メモの入力を始めた・終えた。終えたら、入力の間に止めていた並べ替えを済ませる */
+function onMemoEditing(editing: boolean) {
+  editingMemos = Math.max(0, editingMemos + (editing ? 1 : -1));
+  if (!editing) render(latest);
+}
+
+/** 保留の行（カード）が動き出したら、印を外す。メモは覚えておき、落ち着いてしばらくは隠さない */
+function releaseHolds(sessions: SessionView[]) {
+  const released = releasedHolds(sessions, { holds, heldCards });
+  for (const id of released.sessions) {
+    lastNotes.set(`s:${id}`, holds[id]!.note);
+    revived.add(id);
+    setHold(id, null);
+  }
+  for (const key of released.cards) {
+    lastNotes.set(`c:${key}`, heldCards[key]!.note);
+    setCardHold(key, null);
+  }
 }
 
 /** 今アーカイブしているか（最後に描いたもので見る） */
@@ -190,6 +322,7 @@ function toggleArchive(id: string) {
   revived.delete(id);
   setMark(id, archive ? 'archived' : 'shown');
   render(latest);
+  if (archive) announceArchived(id);
 }
 
 function toggleCard(key: string) {
@@ -227,20 +360,25 @@ function applyFocus(): string | undefined {
  * なければ、前面にないときは今のセッションを前面に出し、前面なら表示順で次の行
  */
 function openNext(claudeInFront: boolean) {
-  const id = shortcutTarget(latest, attention, applyFocus(), claudeInFront, archiveOptions());
-  if (id) openRow(id);
+  const target = shortcutTarget(latest, attention, applyFocus(), claudeInFront, archiveOptions());
+  if (target) openRow(target.id, target.raise);
 }
 
-function openRow(id: string) {
+/** 行を開く。raise が true なら、リンクを使わずに Claude のウィンドウを前に出すだけにする（前に出せなければ main がリンクで開く） */
+function openRow(id: string, raise = false) {
+  // 開く（前に出す）のを先に頼む。帯の更新と描き直しはそのあと
+  if (raise) window.widget.raiseSession(id);
+  else window.widget.openSession(id);
   const refs = rows.get(id);
   if (refs) setAttention(refs, id, false);
   else clearAttention(id);
-  // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。反映されないまま時間が過ぎたら、ファイルの値に戻す
-  pendingFocus = { id, until: Date.now() + PENDING_FOCUS_MS };
+  // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。ファイルが追いつくか、本体で別のセッションを開くまで保つ。
+  // 本体で開けないまま安全のための期限が過ぎたら、ファイルの値に戻す（そのための描き直しを予約しておく）
+  const now = Date.now();
+  pendingFocus = { id, at: now, until: now + PENDING_FOCUS_MS };
   clearTimeout(pendingTimer);
   pendingTimer = window.setTimeout(() => render(latest), PENDING_FOCUS_MS);
   render(latest);
-  window.widget.openSession(id);
 }
 
 /**
@@ -321,6 +459,25 @@ function setShine(refs: RowRefs, s: SessionView) {
   if (refs.shine && refs.shine.text.textContent !== s.title) refs.shine.text.textContent = s.title;
 }
 
+/**
+ * 押して保留を切り替えるアイコン（行の状態の印、カードのブランチの印）。乗せたときの印（alt）は、保留なら circle-play、そうでなければ circle-pause。
+ * can が false（処理中・対応待ち）のときは押せず、乗せても変えない
+ */
+function setToggle(el: HTMLElement, alt: HTMLElement, held: boolean, can: boolean) {
+  setIcon(alt, held ? 'circle-play' : 'circle-pause');
+  el.toggleAttribute('data-can', can);
+  el.toggleAttribute('data-held', held);
+  if (can) {
+    el.dataset.tip = held ? ja.widget.holdOff : ja.widget.holdOn;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', el.dataset.tip);
+  } else {
+    delete el.dataset.tip;
+    el.removeAttribute('role');
+    el.removeAttribute('aria-label');
+  }
+}
+
 function getRow(s: SessionView): RowRefs {
   let refs = rows.get(s.id);
   if (!refs) {
@@ -328,16 +485,42 @@ function getRow(s: SessionView): RowRefs {
     const title = el.querySelector<HTMLElement>('.title')!;
     const titleText = document.createTextNode('');
     title.append(titleText);
+    const id = s.id;
+    const status = el.querySelector<HTMLElement>('.status')!;
+    const meta = el.querySelector<HTMLElement>('.meta')!;
+    const memoEl = el.querySelector<HTMLElement>('.memo')!;
     refs = {
       el,
-      status: el.querySelector('.status')!,
+      status,
+      statusNow: status.querySelector('.now')!,
+      statusAlt: status.querySelector('.alt')!,
+      memoEl,
+      memo: createMemo(memoEl, { bound: () => meta, onCommit: (note) => commitNote(id, note), onEditing: onMemoEditing }),
       title,
       titleText,
       when: el.querySelector('.when')!,
+      ctx: el.querySelector('.ctx')!,
+      ctxFill: el.querySelector('.ctx-fill')!,
+      ctxNum: el.querySelector('.ctx-num')!,
+      pill: el.querySelector('.state-pill')!,
       act: el.querySelector('.act')!,
     };
-    const id = s.id;
     el.addEventListener('click', () => openRow(id));
+    // ホイールクリックで、トグルと同じ処理を呼ぶ。mousedown で既定の動き（オートスクロール）を止める
+    el.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    el.addEventListener('auxclick', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      const state = rows.get(id)?.data?.state;
+      if (state && canToggleArchive(state, false)) toggleArchive(id);
+    });
+    // 状態のアイコンの押下は行へ伝えない（伝えるとセッションが開く）
+    status.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleHold(id);
+    });
     refs.act.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleArchive(id);
@@ -348,14 +531,31 @@ function getRow(s: SessionView): RowRefs {
     rows.set(s.id, refs);
   }
   const prev = refs.data;
-  setStatus(refs.status, statusIconName(s.state, s.waitingFor));
+  // 保留の行は、状態の印を circle-pause にし、2 行目を「保留」とメモの枠にする（処理中・対応待ちになったら外れる）
+  const hold = isRunning(s) ? undefined : holds[s.id];
+  if (hold) setIcon(refs.statusNow, 'circle-pause');
+  else setStatus(refs.statusNow, statusIconName(s.state, s.waitingFor));
+  setToggle(refs.status, refs.statusAlt, !!hold, !isRunning(s));
   if (prev?.state !== s.state) refs.el.dataset.state = s.state;
+  refs.el.toggleAttribute('data-held', !!hold);
   refs.el.toggleAttribute('data-attention', attention.has(s.id));
-  refs.act.dataset.tip = 'アーカイブ（Bantus の中だけ）';
+  refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
+  const label = hold ? ja.state.held : stateLabel(s.state, s.waitingFor);
+  if (refs.pill.textContent !== label) refs.pill.textContent = label;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
-  refs.el.dataset.tip = tooltip(s);
+  const ctx = contextLabel(s.context);
+  if (refs.ctxNum.textContent !== ctx) refs.ctxNum.textContent = ctx;
+  refs.ctx.hidden = !ctx;
+  refs.ctx.dataset.level = contextLevel(s.context);
+  // 割合がわからない（窓の大きさがわからないモデル）ときは、バーを出さずトークン数だけ
+  const pct = contextPercent(s.context);
+  refs.ctx.toggleAttribute('data-raw', pct === undefined);
+  refs.ctxFill.style.width = `${Math.min(100, pct ?? 0)}%`;
+  refs.memoEl.hidden = !hold && !refs.memo.editing;
+  if (hold) refs.memo.set(hold.note);
+  refs.el.dataset.tip = tooltip(s, hold);
   refs.data = s;
   return refs;
 }
@@ -392,10 +592,12 @@ function flyItem(t: TimelineItem): FlyItem {
     state: s.state,
     waitingFor: s.waitingFor,
     archived: t.archived,
+    held: !t.archived && !isRunning(s) && !!holds[s.id],
     origin: t.origin,
     focused: s.id === resolveFocus(latest, pendingFocus).id,
     link: t.link,
-    sub: t.origin ? ['main', ago].filter(Boolean).join(' · ') : ago,
+    place: t.place,
+    sub: ago,
     summary: s.summary,
   };
 }
@@ -431,11 +633,40 @@ function tabOf(refs: CardRefs) {
   return flapRect(edgeOf(), rectOf(refs.card));
 }
 
-function showCardFlyout(key: string, open: boolean) {
+function showCardFlyout(key: string, open: boolean, hold?: number) {
   const refs = cards.get(key);
   const card = refs?.data;
   if (!refs || !card || !card.stackCount) return;
-  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), content: cardContent(card), open });
+  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), header: rectOf(refs.header), content: cardContent(card), open, hold });
+}
+
+/** アーカイブしたことを知らせるめくれを、カーソルが離れていても出しておく長さ */
+const ANNOUNCE_HOLD_MS = 900;
+/** 行が消えてカードが縮む動き（flip.ts、0.22 秒）が終わってから、めくれを伸ばす */
+const ANNOUNCE_DELAY_MS = 240;
+let announceTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * セッションをアーカイブしたら、入った先のカードの重なりから、乗せたときと同じめくれを伸ばして見せる。
+ * 動きを減らす設定のときと、一覧を開いているとき（一覧の中でアーカイブした）は何もしない
+ */
+function announceArchived(id: string) {
+  clearTimeout(announceTimer);
+  if (!motionEnabled() || flyOpen) return;
+  announceTimer = setTimeout(() => {
+    if (flyOpen) return;
+    for (const [key, refs] of cards) {
+      const card = refs.data;
+      if (!card || !refs.el.isConnected || !card.timeline.some((t) => t.session.id === id && t.archived)) continue;
+      // カードが一覧の見えている所から外れていたら出さない（めくれがタイトルバーなどにかかるため）
+      const view = cardsEl.getBoundingClientRect();
+      const tab = tabOf(refs);
+      if (tab.y < view.top || tab.y + tab.height > view.bottom) return;
+      // すでにこのカードのめくれを出しているなら、そのままにする
+      if (flyKey !== key) showCardFlyout(key, false, ANNOUNCE_HOLD_MS);
+      return;
+    }
+  }, ANNOUNCE_DELAY_MS);
 }
 
 /**
@@ -512,28 +743,38 @@ function getRepo(repo: RepoView): RepoRefs {
   const n = repo.hiddenCards.length;
   refs.archived.hidden = n === 0;
   refs.archivedCount.textContent = String(n);
-  refs.archived.dataset.tip = `アーカイブした作業 ${n} 件（マージ済みなど）`;
+  refs.archived.dataset.tip = ja.widget.archivedCount(n);
   refs.archived.setAttribute('aria-label', refs.archived.dataset.tip);
   refs.data = repo;
   return refs;
 }
 
-function getCard(card: WorktreeCard): CardRefs {
+function getCard(card: WorktreeCard, sync = true): CardRefs {
   let refs = cards.get(card.key);
   if (!refs) {
     const el = clone<HTMLElement>(cardTemplate);
+    const key = card.key;
+    const icon = el.querySelector<HTMLElement>('.card-icon')!;
+    const hold = el.querySelector<HTMLElement>('.card-hold')!;
     refs = {
       el,
       card: el.querySelector('.card')!,
       stackHit: el.querySelector('.stack-hit')!,
       header: el.querySelector('.card-header')!,
-      icon: el.querySelector('.card-icon')!,
+      icon,
+      iconNow: icon.querySelector('.now')!,
+      iconAlt: icon.querySelector('.alt')!,
       label: el.querySelector('.card-label')!,
       changes: el.querySelector('.changes')!,
       act: el.querySelector('.card-act')!,
+      hold,
+      memo: createMemo(hold.querySelector('.memo')!, { bound: () => hold, onCommit: (note) => commitCardNote(key, note), onEditing: onMemoEditing }),
       rows: el.querySelector('.rows')!,
     };
-    const key = card.key;
+    icon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleCardHold(key);
+    });
     // 重なりの的に乗せたらめくれを出す。消すのはメインプロセス（カーソルが的とめくれのどちらからも外れたとき）。
     // 的の上で動いている間にめくれが消えていたら（一覧を閉じたあとなど）、出し直す
     refs.stackHit.addEventListener('pointerenter', () => showCardFlyout(key, false));
@@ -542,21 +783,33 @@ function getCard(card: WorktreeCard): CardRefs {
     });
     // めくれが出る前に押したときは、すぐ一覧を開く
     refs.stackHit.addEventListener('click', () => showCardFlyout(key, true));
+    // カードの見出し（タイトルバー）に乗せている間も、めくれを出しておく。消すのは重なりの的と同じくメインプロセス
+    refs.header.addEventListener('pointerenter', () => showCardFlyout(key, false));
+    refs.header.addEventListener('pointermove', () => {
+      if (flyKey !== key) showCardFlyout(key, false);
+    });
     refs.act.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleCard(key);
     });
     cards.set(card.key, refs);
   }
-  setIcon(refs.icon, card.isMain ? 'house' : 'git-branch');
+  const running = card.sessions.some(isRunning);
+  setIcon(refs.iconNow, card.held ? 'circle-pause' : card.isMain ? 'house' : 'git-branch');
+  // 元のフォルダのカードは保留にしない（ワークツリーごと止めるためのもの）
+  setToggle(refs.icon, refs.iconAlt, !!card.held, !card.isMain && !running);
+  refs.el.toggleAttribute('data-held', !!card.held);
   refs.label.textContent = card.label;
-  refs.header.dataset.tip = card.tooltip;
-  // 動いている（処理中・対応待ちの）セッションがあるカードはアーカイブできないので、トグルを出さない
-  refs.act.hidden = card.isMain || card.sessions.some((s) => s.state === 'busy' || s.state === 'waiting');
+  refs.header.dataset.tip = card.held ? `${card.tooltip}\n${holdTooltip(card.held)}` : card.tooltip;
+  // 動いている（処理中・対応待ちの）セッションがあるカードと保留のカードはアーカイブできないので、トグルを出さない
+  refs.act.hidden = card.isMain || running || !!card.held;
+  refs.hold.hidden = !card.held && !refs.memo.editing;
+  if (card.held) refs.memo.set(card.held.note);
   setChanges(refs.changes, card.changes);
   refs.el.toggleAttribute('data-stack', card.stackCount > 0);
   refs.stackHit.dataset.count = String(card.stackCount);
-  syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));
+  if (sync) syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));
+  else for (const s of card.sessions) if (rows.has(s.id)) getRow(s);
   refs.data = card;
   return refs;
 }
@@ -578,14 +831,27 @@ function render(sessions: SessionView[]) {
   latest = sessions;
   const flaggedBefore = new Set(attention);
   const fresh = updateAttention(sessions);
-  if (primed && fresh.length) queueAlerts(fresh);
+  releaseHolds(sessions);
+  // 保留の行は「完了したとき」を知らせない
+  const alerts = fresh.filter((a) => a.reason !== 'done' || !holdOf(a.id));
+  if (primed && alerts.length) queueAlerts(alerts);
   reviveMarks(sessions);
+  // 起動して最初の一覧では、確認した時刻の種を入れる（再起動で猶予が消えないように）
+  if (!primed) for (const [id, at] of startupConfirmedAt(sessions)) if (!confirmedAt.has(id)) confirmedAt.set(id, at);
   const list = buildRepos(sessions, archiveOptions());
   lastRepos = list;
-  // 並びが変わった行・カード・見出しを、前の位置からすべらせる
-  flip(animatedElements, () => {
-    syncChildren(cardsEl, list.map(renderRepo));
-  });
+  if (editingMemos) {
+    // メモの入力中は、並びを変えずに中身だけを書き換える（入力欄を動かすとフォーカスが外れる）。並べ替えは入力を終えてから
+    for (const repo of list) {
+      if (repos.has(repo.key)) getRepo(repo);
+      for (const card of repo.cards) if (cards.has(card.key)) getCard(card, false);
+    }
+  } else {
+    // 並びが変わった行・カード・見出しを、前の位置からすべらせる
+    flip(animatedElements, () => {
+      syncChildren(cardsEl, list.map(renderRepo));
+    });
+  }
   // 新しく未確認になった行に、光を一度だけ横切らせる（並べ替えの動きが終わってから）
   for (const id of newlyFlagged(flaggedBefore, attention, primed)) {
     const refs = rows.get(id);
@@ -606,6 +872,22 @@ function render(sessions: SessionView[]) {
   updateFlyout();
   reportTargets();
   tooltips.prune();
+  startPendingMemo();
+}
+
+/** 保留にしている（そのセッションか、そのカード） */
+function holdOf(id: string): boolean {
+  const s = latest.find((x) => x.id === id);
+  return !!s && isHeld(s, { holds, heldCards });
+}
+
+/** 保留にした直後の行（カード）のメモを、入力の状態にする */
+function startPendingMemo() {
+  const target = pendingMemo;
+  if (!target || editingMemos) return;
+  pendingMemo = undefined;
+  const memo = target.startsWith('s:') ? rows.get(target.slice(2))?.memo : cards.get(target.slice(2))?.memo;
+  memo?.start();
 }
 
 // ---- 画面の操作 ----
@@ -631,7 +913,7 @@ let pinned = true;
 function showPinned(value: boolean) {
   pinned = value;
   pinButton.setAttribute('aria-pressed', String(pinned));
-  pinButton.dataset.tip = pinned ? '最前面に固定中（クリックで外す）' : '最前面に固定する';
+  pinButton.dataset.tip = pinned ? ja.widget.pinned : ja.widget.pin;
 }
 pinButton.addEventListener('click', () => {
   showPinned(!pinned);
@@ -685,6 +967,8 @@ function applyLayout(layout: WidgetLayout) {
   sort = { project: layout.projectOrder, worktree: layout.worktreeOrder, session: layout.sessionOrder };
   marks = { ...layout.archive };
   cardMarks = { ...layout.archivedCards };
+  holds = { ...layout.holds };
+  heldCards = { ...layout.heldCards };
   mainMinutes = layout.mainArchiveMinutes;
   tooltips.setDelay(layout.tooltipDelayMs);
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = layout;
@@ -696,7 +980,11 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
+  root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
+  applyStatusColors(layout.statusColors);
   root.classList.toggle('hide-updated', !layout.showUpdated);
+  root.classList.toggle('hide-state', !layout.showState);
+  root.classList.toggle('hide-context', !layout.showContext);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
   if (!floating) clickThrough = false;
@@ -709,7 +997,7 @@ window.widget.onSessions((sessions) => {
 });
 window.widget.onCycle(openNext);
 // トーストのクリックも、行のクリックと同じく帯を消してから開く
-window.widget.onToastClick(openRow);
+window.widget.onToastClick((id) => openRow(id));
 window.widget.onFlyAction(onFlyAction);
 window.widget.onFlyState((key, open) => {
   flyKey = key;

@@ -2,7 +2,7 @@
 // 変わったファイル（git diff --name-only の出力。リポジトリの一番上からのパス）だけで決める純粋な関数（test/update-plan.test.ts）。
 
 /**
- * - none：何もしない（app/ の外、テスト、見本データ、文書だけの変更）
+ * - none：何もしない（app/ の外、テスト、見本データ、文書、文言の検査の設定だけの変更）
  * - reload：ビルドしてウィンドウを読み込み直す（画面だけの変更）
  * - relaunch：ビルドして起動し直す（メインプロセス、preload、共通の型、設定ファイルなど）
  * - reinstall：依存が変わった。自動では入れ直さず、npm run setup が必要と知らせるだけ
@@ -10,7 +10,7 @@
 export type UpdateAction = 'none' | 'reload' | 'relaunch' | 'reinstall';
 
 /** 変えても、動いているウィジェットに関係しないもの */
-const IGNORED = [/^app\/test\//, /^app\/fixtures\//, /^app\/scripts\/(?!copy-static\.mjs$)/, /^app\/electron-builder\.yml$/, /\.md$/i];
+const IGNORED = [/^app\/test\//, /^app\/fixtures\//, /^app\/scripts\/(?!copy-static\.mjs$)/, /^app\/electron-builder\.yml$/, /^app\/text\//, /^app\/\.textlintrc$/, /\.md$/i];
 /** ビルドして読み込み直せば済むもの（画面のソースと、dist/web/ にコピーする静的ファイル） */
 const RELOAD = [/^app\/src\/renderer\//, /^app\/scripts\/copy-static\.mjs$/];
 
