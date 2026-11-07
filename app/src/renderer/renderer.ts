@@ -637,7 +637,7 @@ function showCardFlyout(key: string, open: boolean, hold?: number) {
   const refs = cards.get(key);
   const card = refs?.data;
   if (!refs || !card || !card.stackCount) return;
-  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), content: cardContent(card), open, hold });
+  window.widget.showFlyout({ key, count: card.stackCount, anchor: rectOf(refs.card), hit: rectOf(refs.stackHit), tab: tabOf(refs), header: rectOf(refs.header), content: cardContent(card), open, hold });
 }
 
 /** アーカイブしたことを知らせるめくれを、カーソルが離れていても出しておく長さ */
@@ -783,6 +783,11 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
     });
     // めくれが出る前に押したときは、すぐ一覧を開く
     refs.stackHit.addEventListener('click', () => showCardFlyout(key, true));
+    // カードの見出し（タイトルバー）に乗せている間も、めくれを出しておく。消すのは重なりの的と同じくメインプロセス
+    refs.header.addEventListener('pointerenter', () => showCardFlyout(key, false));
+    refs.header.addEventListener('pointermove', () => {
+      if (flyKey !== key) showCardFlyout(key, false);
+    });
     refs.act.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleCard(key);
