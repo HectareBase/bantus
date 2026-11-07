@@ -151,11 +151,12 @@ main::-webkit-scrollbar { width: 6px; }
 main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3px; }
 
 /* リポジトリ（プロジェクト）ごとのまとまり。見出しとカードを細い線の枠で囲み、どのプロジェクトのワークツリーかを示す。
-   枠はカードの不透明度の半分で塗る（カードは枠の塗りの上に重なるので、カードのところは枠より濃く見える） */
+   枠の中にはウィンドウの背景色をカードの不透明度で敷く。背景を薄くしても、枠の中はカードと同じだけしか透けない。
+   背景色はカードの色より一段暗い（ライトでは一段濃い）ので、カードの不透明度を上げても枠とカードの見分けがつく */
 .repo {
   margin-bottom: 10px;
   padding: 0 8px;
-  background: rgba(var(--card-rgb), calc(var(--card-alpha) * 0.5));
+  background: rgba(var(--bg-rgb), var(--card-alpha));
   border: 1px solid var(--repo-frame);
   border-radius: 10px;
 }
@@ -561,9 +562,6 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
 html.floating .card, html.floating .titlebar, html.floating .repo { border-color: rgba(128, 128, 128, 0.35); }
-/* 背景がないときは、枠の中にウィンドウの背景色をカードの不透明度で敷き、壁紙が透けすぎないようにする。
-   カードの色より一段暗い（ライトでは一段濃い）ので、カードの不透明度を上げても枠とカードの見分けがつく */
-html.floating .repo { background: rgba(var(--bg-rgb), var(--card-alpha)); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
