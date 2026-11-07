@@ -21,6 +21,9 @@
   { "id": "local_bc-06", "title": "長い分岐元の名前で省略を確かめる", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
     "worktree": { "key": "export", "label": "export-csv", "branch": "claude/export-csv-8a9b0c" }, "baseBranch": "integration/very-long-feature-branch-name-for-checking-ellipsis",
     "changes": { "changed": 0, "untracked": 0, "ahead": 0, "behind": 0 }, "state": "idle", "minutesAgo": 25 },
+  { "id": "local_bc-10", "title": "develop から切って main にマージしたもの", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
+    "worktree": { "key": "old-report", "label": "old-report", "branch": "claude/old-report-3c4d5e" }, "baseBranch": "develop",
+    "changes": { "changed": 0, "untracked": 0, "ahead": 1, "aheadOfBase": true, "behind": 0, "merged": true, "mergedInto": "main" }, "state": "idle", "minutesAgo": 300 },
   { "id": "local_bc-07", "title": "作ったばかり（main から）", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
     "worktree": { "key": "try-out", "label": "try-out", "branch": "claude/try-out-7a8b9c" }, "baseBranch": "main",
     "state": "stopped", "minutesAgo": 60 }

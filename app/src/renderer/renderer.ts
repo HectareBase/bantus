@@ -613,7 +613,7 @@ function flyItem(t: TimelineItem): FlyItem {
 
 function cardContent(card: WorktreeCard): FlyContent {
   if (card.isMain) return { kind: 'plain', items: card.timeline.map(flyItem) };
-  return { kind: 'timeline', items: card.timeline.map(flyItem), ...(card.base && { base: { branch: card.base.branch, tip: card.base.tip } }) };
+  return { kind: 'timeline', items: card.timeline.map(flyItem), ...(card.base && { base: { branch: card.base.branch, tip: card.base.tip, ...(card.mergedInto && { mergedInto: card.mergedInto }) } }) };
 }
 
 function repoContent(repo: RepoView): FlyContent {
@@ -623,6 +623,7 @@ function repoContent(repo: RepoView): FlyContent {
       key: c.key,
       label: c.label,
       merged: c.merged,
+      ...(c.mergedInto && { mergedInto: c.mergedInto }),
       items: [...c.sessions, ...c.archived].map((session) => flyItem({ session, archived: true, origin: false })),
     })),
   };

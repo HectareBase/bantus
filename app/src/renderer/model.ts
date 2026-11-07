@@ -217,7 +217,7 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
  */
 export function changesTooltip(c: GitChanges | undefined, base?: string): string {
   if (!c) return '';
-  if (c.merged) return ja.changes.merged;
+  if (c.merged) return c.mergedInto ? ja.changes.mergedInto(c.mergedInto, base) : ja.changes.merged;
   const parts: string[] = [];
   if (c.changed) parts.push(ja.changes.changed(c.changed));
   if (c.untracked) parts.push(ja.changes.untracked(c.untracked));
@@ -512,6 +512,8 @@ export interface WorktreeCard {
   held?: HoldMark;
   /** マージ済み（ワークツリーがないものも含む） */
   merged: boolean;
+  /** 分岐元ではなく main（元のフォルダのブランチ）に入ってマージ済みにしたとき、そのブランチ名 */
+  mergedInto?: string;
   rank: number;
   latest: number;
 }
@@ -786,6 +788,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         hidden,
         ...(held && { held }),
         merged,
+        ...(!isMain && changes?.merged && changes.mergedInto && { mergedInto: changes.mergedInto }),
         rank,
         latest,
       });

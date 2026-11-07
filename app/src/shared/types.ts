@@ -85,6 +85,11 @@ export interface GitChanges {
   upstream?: string;
   /** 元のブランチにマージコミットで入った（docs/design/worktree-cards.md） */
   merged: boolean;
+  /**
+   * 元のブランチではなく、元のフォルダの今のブランチ（ふつうは main）に入ってマージ済みにしたとき、そのブランチ名。
+   * develop から切って main にマージしたときなど（docs/design/worktree-cards.md の「マージした先」）
+   */
+  mergedInto?: string;
   /** 作業フォルダがもうない（ワークツリーを消した） */
   gone?: boolean;
 }
@@ -210,12 +215,14 @@ export interface FlyCard {
   key: string;
   label: string;
   merged: boolean;
+  /** 分岐元ではなく main に入ってマージ済みにしたとき、そのブランチ名 */
+  mergedInto?: string;
   items: FlyItem[];
 }
 
 export type FlyContent =
   /** base：ワークツリーの分岐元。起点のすぐ上（起点がなければ一番下）に分岐元の行を出す */
-  | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string } }
+  | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string; mergedInto?: string } }
   | { kind: 'plain'; items: FlyItem[] }
   | { kind: 'cards'; cards: FlyCard[] };
 
