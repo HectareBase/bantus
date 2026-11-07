@@ -10,7 +10,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 - コミットメッセージは日本語で、1 行目を `<種別>(<範囲>): <要約>` にする（例：`feat(app): ツールチップを自前で描く`）。`commit-msg` フックが検査する。詳しくは [docs/commit-messages.md](docs/commit-messages.md)
 - 画面に出る文字は `app/src/shared/strings/ja.ts` にだけ書く。`npm run lint:ja` で検査する。詳しくは [docs/strings.md](docs/strings.md)
 - 状態の判定は [docs/research/session-status.md](docs/research/session-status.md) に従う。知らない `waitingFor` の値は「対応待ち（その他）」として扱う
-- 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める（`start_session` に `use_worktree: true` を渡す）。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
+- 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める（`start_session` に `use_worktree: true` と `source_branch: main` を渡す。`origin/main` はローカルの `main` より古いことがあり、省略すると古い状態から切られる）。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
 
 ## フォルダ
 | フォルダ | 中身 |
