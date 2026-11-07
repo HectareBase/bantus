@@ -29,6 +29,7 @@ import {
   pickAlerts,
   revivedCards,
   revivedSessions,
+  startupConfirmedAt,
   canToggleArchive,
   isLive,
   shortcutTarget,
@@ -830,6 +831,8 @@ function render(sessions: SessionView[]) {
   const alerts = fresh.filter((a) => a.reason !== 'done' || !holdOf(a.id));
   if (primed && alerts.length) queueAlerts(alerts);
   reviveMarks(sessions);
+  // 起動して最初の一覧では、確認した時刻の種を入れる（再起動で猶予が消えないように）
+  if (!primed) for (const [id, at] of startupConfirmedAt(sessions)) if (!confirmedAt.has(id)) confirmedAt.set(id, at);
   const list = buildRepos(sessions, archiveOptions());
   lastRepos = list;
   if (editingMemos) {
