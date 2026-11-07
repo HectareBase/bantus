@@ -656,6 +656,14 @@ describe('displayOrder と nextCycleTarget', () => {
     assert.equal(nextCycleTarget([view({ id: 'a' })], new Set(['a']), 'a'), undefined);
     assert.equal(nextCycleTarget([], new Set(), undefined), undefined);
   });
+  it('未確認がなければ、処理中の行は飛ばす', () => assert.equal(nextCycleTarget(sessions, new Set(), 'w1', withMain), 'm2'));
+  it('今開いている行が処理中でも、その次へ進む', () => assert.equal(nextCycleTarget(sessions, new Set(), 'm1', withMain), 'm2'));
+  it('ほかが全部処理中なら何もしない', () => {
+    const busy = [view({ id: 'a', state: 'idle' }), view({ id: 'b', state: 'busy' }), view({ id: 'c', state: 'busy' })];
+    assert.equal(nextCycleTarget(busy, new Set(), 'a'), undefined);
+    assert.equal(nextCycleTarget(busy, new Set(), 'b'), 'a');
+    assert.equal(nextCycleTarget(busy.slice(1), new Set(), undefined), undefined);
+  });
 
   it('Claude が前面になくても、未確認の行があればそちらを開く', () =>
     assert.deepEqual(shortcutTarget(sessions, new Set(['t1']), 'm1', false, withMain), { id: 't1', raise: false }));

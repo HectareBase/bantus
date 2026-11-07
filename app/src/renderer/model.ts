@@ -805,7 +805,8 @@ export function displayOrder(sessions: SessionView[], opts: ArchiveOptions = NO_
 /**
  * ショートカットで次に開くセッションの ID。今開いているセッション（currentId）は選ばない。アーカイブしたものは選ばない
  * - 未確認（左端の帯）の行があれば、表示順でいちばん上のもの（保留の行でも）
- * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）。保留の行（保留のカードの行も）は飛ばす
+ * - なければ、表示順で今開いているセッションの次（最後なら先頭に戻る）。保留の行（保留のカードの行も）と処理中の行は飛ばす
+ * - 回る先がなければ undefined（何もしない）
  */
 export function nextCycleTarget(
   sessions: SessionView[],
@@ -816,8 +817,8 @@ export function nextCycleTarget(
   const shown = displayOrder(sessions, { ...opts, attention });
   const flagged = shown.find((s) => s.id !== currentId && attention.has(s.id))?.id;
   if (flagged) return flagged;
-  // 保留の行は巡回から外す。今開いているものは保留でも残し、その次から探す
-  const ids = shown.filter((s) => !isHeld(s, opts) || s.id === currentId).map((s) => s.id);
+  // 保留の行と処理中の行は巡回から外す（処理中は開いてもやることがない）。今開いているものはどちらでも残し、その次から探す
+  const ids = shown.filter((s) => s.id === currentId || (!isHeld(s, opts) && s.state !== 'busy')).map((s) => s.id);
   // 今開いているものの次から探す。一覧にない（アーカイブしたなど）ときは indexOf が -1 なので先頭から
   const at = currentId ? ids.indexOf(currentId) : -1;
   const next = ids[(at + 1) % ids.length];
