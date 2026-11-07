@@ -8,6 +8,7 @@ import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from
 import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
+import { cardFolder, isFolder, openTerminal } from './open-folder';
 import { startSelfUpdate } from './self-update';
 import { folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
@@ -487,6 +488,32 @@ function createTray(): Tray {
   return t;
 }
 
+/**
+ * カードの見出しの右クリックメニュー。作業フォルダは画面から受け取らず、セッションから探す（画面が任意のパスを開けないように）。
+ * フォルダがわからない、またはもうないときは、項目を押せなくする
+ */
+function showCardMenu(key: string) {
+  if (!win || win.isDestroyed()) return;
+  const dir = cardFolder(lastSessions, key);
+  const enabled = !!dir && isFolder(dir);
+  Menu.buildFromTemplate([
+    {
+      label: ja.menu.openInExplorer,
+      enabled,
+      click: () => {
+        if (dir) void shell.openPath(dir).then((err) => err && console.error(`フォルダを開けませんでした: ${err}`));
+      },
+    },
+    { label: ja.menu.openInTerminal, enabled, click: () => dir && openTerminal(dir) },
+  ]).popup({ window: win });
+}
+
+/** ウィジェットのタイトルの右クリックメニュー */
+function showTitleMenu() {
+  if (!win || win.isDestroyed()) return;
+  Menu.buildFromTemplate([{ label: ja.menu.quit, click: () => app.quit() }]).popup({ window: win });
+}
+
 /** カーソルの位置から、内側の端がそこに来る幅を出す */
 function widthAtCursor(): number {
   const s = getSettings();
@@ -766,6 +793,13 @@ app.whenReady().then(() => {
   });
   ipcMain.on('fly-leave', (e, key: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string') flyout?.leave(key);
+  });
+
+  ipcMain.on('card-menu', (e, key: unknown) => {
+    if (e.sender === win?.webContents && typeof key === 'string') showCardMenu(key);
+  });
+  ipcMain.on('title-menu', (e) => {
+    if (e.sender === win?.webContents) showTitleMenu();
   });
 
   ipcMain.on('flash-taskbar', () => flashTaskbar());

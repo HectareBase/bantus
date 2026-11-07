@@ -150,6 +150,10 @@ export interface WidgetApi {
   hideTip(): void;
   /** 出している（アーカイブしていない）カードの目印。リモートの取得の対象を決める（src/main/git-fetch.ts） */
   setFetchCards(keys: string[]): void;
+  /** カードの見出しの右クリックメニュー（作業フォルダをエクスプローラーやターミナルで開く）。フォルダはメインプロセスがセッションから探す */
+  showCardMenu(key: string): void;
+  /** ウィジェットのタイトルの右クリックメニュー（アプリの終了） */
+  showTitleMenu(): void;
 }
 
 export interface ToastRequest {

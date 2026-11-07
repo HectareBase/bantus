@@ -23,6 +23,13 @@ export const ja = {
     quit: '終了',
   },
 
+  /** 右クリックのメニュー（カードの見出しとウィジェットのタイトル） */
+  menu: {
+    openInExplorer: 'エクスプローラーで開く',
+    openInTerminal: 'ターミナルで開く',
+    quit: 'アプリを終了',
+  },
+
   /** 設定の「モニター」の選択肢 */
   monitor: {
     primary: 'メインのモニター',

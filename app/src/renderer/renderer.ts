@@ -812,6 +812,11 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
       e.stopPropagation();
       toggleCard(key);
     });
+    // 見出しの右クリックで、作業フォルダを開くメニューを出す（メニューはメインプロセスが出す）
+    refs.header.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.widget.showCardMenu(key);
+    });
     cards.set(card.key, refs);
   }
   const running = card.sessions.some(isRunning);
@@ -932,6 +937,12 @@ document.addEventListener('visibilitychange', updatePaused);
 updatePaused();
 
 document.getElementById('settings')!.addEventListener('click', () => window.widget.openSettings());
+
+// タイトルの右クリックで、アプリを終了するメニューを出す
+document.querySelector('.titlebar')!.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.widget.showTitleMenu();
+});
 
 // 最前面への固定。押した見た目はすぐ変え、保存された値が onLayout で戻ってきたらそれに合わせる
 const pinButton = document.getElementById('pin')!;

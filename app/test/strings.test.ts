@@ -19,6 +19,7 @@ const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
 const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
   { file: 'main/main.ts', line: /console\.(log|error)\(/, reason: 'ログ' },
   { file: 'main/self-update.ts', line: /console\.(log|error)\(/, reason: 'ログ' },
+  { file: 'main/open-folder.ts', line: /console\.error\(/, reason: 'ログ' },
   { file: 'main/self-update.ts', line: /reject\(new Error\(`npm run build/, reason: 'ログに出すだけの例外（画面には出さない）' },
   { file: 'renderer/strings.ts', line: /console\.error\(/, reason: 'ログ' },
 ];

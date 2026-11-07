@@ -50,6 +50,8 @@ const widget: WidgetApi = {
   showTip: (text, rect) => ipcRenderer.send('tip-show', text, rect),
   hideTip: () => ipcRenderer.send('tip-hide'),
   setFetchCards: (keys) => ipcRenderer.send('fetch-cards', keys),
+  showCardMenu: (key) => ipcRenderer.send('card-menu', key),
+  showTitleMenu: () => ipcRenderer.send('title-menu'),
 };
 
 const tipApi: TipApi = {
