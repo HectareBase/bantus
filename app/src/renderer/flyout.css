@@ -75,9 +75,13 @@ svg { width: 14px; height: 14px; flex: none; }
 html[data-side="left"] .flap { right: 0; border-right: 0; border-radius: 8px 0 0 8px; transform-origin: right center; }
 html[data-side="left"] .flap svg { transform: scaleX(-1); }
 html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8px 0; transform-origin: left center; }
-.flap.peek { animation: peek-in 0.15s ease-out; }
+/* 伸びる動きは、めくれをカードの端（ウィンドウの端）の向こうから滑り出させて見せる。ウィンドウの外へ出た分は描かれない。
+   横に縮める（scaleX）と件数と矢印も縮んでぶれるので、文字の形は変えない */
+html[data-side="left"] .flap.peek { animation: peek-in-left 0.15s ease-out; }
+html[data-side="right"] .flap.peek { animation: peek-in-right 0.15s ease-out; }
 .flap.pinned { background: var(--stack-strong); animation: none; }
-@keyframes peek-in { from { transform: scaleX(0.35); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes peek-in-left { from { transform: translateX(65%); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@keyframes peek-in-right { from { transform: translateX(-65%); opacity: 0.6; } to { transform: none; opacity: 1; } }
 
 /* ---- 一覧：ウィジェットの横（画面の内側）に、カードの端にそろえて出す ---- */
 .list {
@@ -87,14 +91,26 @@ html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8p
   display: flex;
   flex-direction: column;
   padding: 6px 0;
+  /* 枠線の幅は残し、線は外枠（::before）が描く */
+  border: 1px solid transparent;
+  isolation: isolate;
+}
+/* 外枠：背景・枠線・影だけの中身のない要素。開くときはこれだけを変形させ、文字は変形させない（flyout.ts の morph） */
+.list::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
   background: var(--pop);
   border: 1px solid var(--stroke);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 /* 一覧はめくれと同じ端（カードの端）から開く。めくれの形から一覧の形へ変形し、めくれは一覧の下に隠れる */
-html[data-side="left"] .list { right: 0; transform-origin: right top; }
-html[data-side="right"] .list { left: 0; transform-origin: left top; }
+html[data-side="left"] .list { right: 0; }
+html[data-side="left"] .list::before { transform-origin: right top; }
+html[data-side="right"] .list { left: 0; }
+html[data-side="right"] .list::before { transform-origin: left top; }
 .list-body { overflow-y: auto; min-height: 0; }
 .list-body::-webkit-scrollbar { width: 6px; }
 .list-body::-webkit-scrollbar-thumb { background: var(--stroke); border-radius: 3px; }

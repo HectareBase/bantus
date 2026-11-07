@@ -170,7 +170,11 @@ function placeFlap(show: FlyShow) {
   flapCount.textContent = String(show.count);
 }
 
-/** めくれの形から一覧の形へ変形する */
+/**
+ * めくれの形から一覧の形へ変形する。
+ * 変形させるのは中身のない外枠（.list::before の背景・枠線・影）だけ。文字に拡大の動きをかけると、
+ * 引き伸ばした絵としてぼやけ、止まったときに描き直されてぶれて見えるため。文字は外枠がほぼ広がりきってから、その場で薄い状態から出す
+ */
 function morph() {
   if (reducedMotion.matches || flap.hidden) return;
   // めくれが伸びている途中で押されても、伸びる動き（transform）を除いた形から始める（モックと同じ）
@@ -185,9 +189,11 @@ function morph() {
   list.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }], {
     duration: MORPH_MS,
     easing: 'cubic-bezier(.2, .8, .2, 1)',
+    pseudoElement: '::before',
   });
+  // 0.26 秒の 55%（変形の 65% ほど）から出す。このとき外枠は本来の大きさの 98% ほどまで広がっている
   for (const child of list.children) {
-    child.animate([{ opacity: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1 }], { duration: MORPH_MS + 40 });
+    child.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }], { duration: MORPH_MS + 40 });
   }
 }
 
