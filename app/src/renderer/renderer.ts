@@ -143,6 +143,10 @@ let editingMemos = 0;
 /** 描いたあとに入力の状態にするメモ（`s:<ID>` か `c:<カードの目印>`）。保留にした直後に使う */
 let pendingMemo: string | undefined;
 let mainMinutes = 10;
+/** カードの見出しに変更の印を出すか（onLayout で届く） */
+let showChanges = true;
+/** 最後にメインプロセスへ送った、出しているカードの目印（リモートの取得の対象を決めるのに使う） */
+let sentFetchCards = '';
 /** 最後に受け取ったセッション一覧と、最後に描いたリポジトリ */
 let latest: SessionView[] = [];
 let lastRepos: RepoView[] = [];
@@ -810,7 +814,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
   refs.act.hidden = card.isMain || running || !!card.held;
   refs.hold.hidden = !card.held && !refs.memo.editing;
   if (card.held) refs.memo.set(card.held.note);
-  setChanges(refs.changes, card.changes);
+  setChanges(refs.changes, showChanges ? card.changes : undefined);
   refs.el.toggleAttribute('data-stack', card.stackCount > 0);
   refs.stackHit.dataset.count = String(card.stackCount);
   if (sync) syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));
@@ -845,6 +849,12 @@ function render(sessions: SessionView[]) {
   if (!primed) for (const [id, at] of startupConfirmedAt(sessions)) if (!confirmedAt.has(id)) confirmedAt.set(id, at);
   const list = buildRepos(sessions, archiveOptions());
   lastRepos = list;
+  // リモートの取得は、アーカイブしていない（出している）カードのあるリポジトリだけにする（docs/design/git-fetch.md）
+  const shownCards = list.flatMap((r) => r.cards.map((c) => c.key)).sort();
+  if (JSON.stringify(shownCards) !== sentFetchCards) {
+    sentFetchCards = JSON.stringify(shownCards);
+    window.widget.setFetchCards(shownCards);
+  }
   if (editingMemos) {
     // メモの入力中は、並びを変えずに中身だけを書き換える（入力欄を動かすとフォーカスが外れる）。並べ替えは入力を終えてから
     for (const repo of list) {
@@ -975,6 +985,7 @@ function applyLayout(layout: WidgetLayout) {
   holds = { ...layout.holds };
   heldCards = { ...layout.heldCards };
   mainMinutes = layout.mainArchiveMinutes;
+  showChanges = layout.showChanges;
   tooltips.setDelay(layout.tooltipDelayMs);
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = layout;
   notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen };

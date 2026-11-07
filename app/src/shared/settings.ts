@@ -44,6 +44,17 @@ export interface Settings {
   showState: boolean;
   /** 行の 2 行目に、コンテキストの使用率（「12%」）を出す */
   showContext: boolean;
+  /**
+   * リモートを定期的に取得する（git fetch）。既定はオフ。オンにしたときだけ git の通信をする（docs/design/git-fetch.md）。
+   * 元のフォルダのカードの遅れと、リモートでマージしたワークツリーのマージ済みを出すのに使う
+   */
+  gitFetch: boolean;
+  /** 取得の間隔（分） */
+  gitFetchMinutes: number;
+  /** カードの見出しに変更の印を出す */
+  showChanges: boolean;
+  /** 未追跡のファイルを数える。数えないと git status に --untracked-files=no を付ける */
+  countUntracked: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
   /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
@@ -150,6 +161,10 @@ export const DEFAULT_SETTINGS: Settings = {
   showUpdated: true,
   showState: true,
   showContext: true,
+  gitFetch: false,
+  gitFetchMinutes: 10,
+  showChanges: true,
+  countUntracked: true,
   openAtLogin: false,
   notifyWaiting: true,
   notifyDone: false,
@@ -173,7 +188,7 @@ export const WIDTH_MAX = 480;
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
 export const TOOLTIP_OFF_MS = 2000;
 
-export type CategoryId = 'general' | 'look' | 'cards' | 'notify' | 'about';
+export type CategoryId = 'general' | 'look' | 'cards' | 'git' | 'notify' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -187,6 +202,7 @@ export const CATEGORIES: Category[] = [
   { id: 'general', label: T.categories.general, icon: 'app-window' },
   { id: 'look', label: T.categories.look, icon: 'palette' },
   { id: 'cards', label: T.categories.cards, icon: 'list' },
+  { id: 'git', label: T.categories.git, icon: 'git-branch' },
   { id: 'notify', label: T.categories.notify, icon: 'bell' },
   { id: 'about', label: T.categories.about, icon: 'info' },
 ];
@@ -200,7 +216,15 @@ interface Base<K extends keyof Settings> {
   description?: string;
   /** インストール版（exe）でだけ使える項目。npm start のときは灰色にして、押せなくする */
   packagedOnly?: boolean;
+  /** この設定（オンかオフ）がオフのときは、灰色にして押せなくする */
+  enabledBy?: BooleanKey;
 }
+
+/** オンかオフの設定 */
+type BooleanKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+
+/** ボタンで動かすこと（設定の値は持たない）。gitFetchNow は「今すぐ取得」 */
+export type ActionId = 'gitFetchNow';
 
 /** アーカイブの印を付けられるセッションの ID。見本データの ID（`local_all-01` など）も通す */
 export const SESSION_KEY_ID = /^local_[\w-]{1,64}$/;
@@ -213,6 +237,7 @@ export function isCardKey(key: unknown): key is string {
 export type SettingDef =
   | (Base<
       | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
+      | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
     > & {
       type: 'segmented';
@@ -223,7 +248,9 @@ export type SettingDef =
   | (Base<'display'> & { type: 'display' })
   | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
-  | (Base<'statusColors'> & { type: 'status-colors' });
+  | (Base<'statusColors'> & { type: 'status-colors' })
+  /** ボタン。押すとメインプロセスで action を動かし、横に最後の結果を出す。設定の値は持たない */
+  | (Omit<Base<keyof Settings>, 'key'> & { type: 'action'; key: ActionId; button: string });
 
 const SHOW_OPTIONS = [
   { value: true, label: T.options.show },
@@ -329,6 +356,30 @@ export const SETTING_DEFS: SettingDef[] = [
     options: SHOW_OPTIONS,
   },
   {
+    key: 'gitFetch', category: 'git', group: T.groups.fetch, type: 'segmented',
+    ...T.items.gitFetch,
+    options: [{ value: true, label: T.options.fetch }, { value: false, label: T.options.noFetch }],
+  },
+  {
+    key: 'gitFetchMinutes', category: 'git', group: T.groups.fetch, type: 'segmented', enabledBy: 'gitFetch',
+    ...T.items.gitFetchMinutes,
+    options: [5, 10, 30].map((n) => ({ value: n, label: T.options.minutes(n) })),
+  },
+  {
+    key: 'gitFetchNow', category: 'git', group: T.groups.fetch, type: 'action', enabledBy: 'gitFetch',
+    ...T.items.gitFetchNow,
+  },
+  {
+    key: 'showChanges', category: 'git', group: T.groups.changesMark, type: 'segmented',
+    ...T.items.showChanges,
+    options: [{ value: true, label: T.options.showMark }, { value: false, label: T.options.hideMark }],
+  },
+  {
+    key: 'countUntracked', category: 'git', group: T.groups.changesMark, type: 'segmented',
+    ...T.items.countUntracked,
+    options: [{ value: true, label: T.options.count }, { value: false, label: T.options.noCount }],
+  },
+  {
     key: 'notifyWaiting', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
     ...T.items.notifyWaiting,
     options: NOTIFY_OPTIONS,
@@ -387,6 +438,8 @@ export function normalizeSettings(input: unknown): Settings {
         break;
       case 'status-colors':
         out.statusColors = normalizeStatusColors(v);
+        break;
+      case 'action':
         break;
     }
   }

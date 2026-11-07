@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, formatAgo, isLive, revivedCards, revivedSessions,
+  NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
@@ -694,6 +694,20 @@ describe('コミットされていない変更と、元のブランチとの差'
   it('マージ済みなら、内訳の代わりにマージのアイコンだけ', () => {
     assert.deepEqual(changeItems({ ...some, merged: true }), [{ icon: 'git-merge', count: 0 }]);
     assert.equal(changesTooltip({ ...clean, merged: true }), 'マージ済み');
+  });
+  it('元のフォルダの遅れは、追跡するブランチの名前を出す', () => {
+    assert.equal(changesTooltip({ ...clean, ahead: 1, behind: 3, upstream: 'origin/main' }), 'push していないコミット：1\norigin/main からの遅れ：3');
+    assert.deepEqual(changeItems({ ...clean, behind: 3, upstream: 'origin/main' }), [{ icon: 'arrow-down', count: 3 }]);
+  });
+  it('取得の様子：オフ、まだ、最後の取得と失敗。オフラインの種類も文がある', () => {
+    const now = 10 * 60_000;
+    assert.deepEqual(fetchStatusLines({ enabled: false, running: false, failures: [] }, now), ['定期的な取得はオフです']);
+    assert.deepEqual(fetchStatusLines({ enabled: true, running: false, failures: [] }, now), ['まだ取得していません']);
+    assert.deepEqual(fetchStatusLines({ enabled: true, running: true, lastAt: 0, failures: [] }, now), ['取得しています…']);
+    assert.deepEqual(
+      fetchStatusLines({ enabled: true, running: false, lastAt: now - 3 * 60_000, failures: [{ name: 'repo', failure: 'auth' }] }, now),
+      [`最後の取得：${formatAgo(now - 3 * 60_000, now)}`, 'repo：認証に失敗（止めています。もう一度押すと試します）'],
+    );
   });
   it('追跡するブランチがないワークツリーは、未マージのコミットとして説明する', () =>
     assert.equal(changesTooltip({ ...clean, ahead: 2, aheadOfBase: true }), '未マージのコミット：2'));

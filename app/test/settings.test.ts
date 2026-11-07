@@ -6,6 +6,21 @@ import {
   CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, normalizeColor, normalizeNote, normalizeSettings,
 } from '../src/shared/settings';
 
+describe('git の設定', () => {
+  it('既定は、取得しない・10 分・印を出す・未追跡を数える', () => {
+    const s = normalizeSettings({});
+    assert.deepEqual([s.gitFetch, s.gitFetchMinutes, s.showChanges, s.countUntracked], [false, 10, true, true]);
+  });
+  it('間隔は 5 / 10 / 30 分だけ。ほかは既定に戻す', () => {
+    assert.equal(normalizeSettings({ gitFetchMinutes: 5 }).gitFetchMinutes, 5);
+    assert.equal(normalizeSettings({ gitFetchMinutes: 30 }).gitFetchMinutes, 30);
+    assert.equal(normalizeSettings({ gitFetchMinutes: 1 }).gitFetchMinutes, 10);
+  });
+  it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
+  it('ボタンは設定の値を持たない', () => assert.equal('gitFetchNow' in normalizeSettings({ gitFetchNow: true }), false));
+});
+
 describe('normalizeSettings の settingsWindow', () => {
   it('なければ入れない', () => assert.equal(normalizeSettings({}).settingsWindow, undefined));
   it('4 つの数がそろっていれば整数にして残す', () =>
@@ -125,8 +140,14 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → 見た目 → カードの表示 → 通知 → 情報', () =>
-    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'notify', 'about']));
+  it('左の一覧は 全体 → 見た目 → カードの表示 → git → 通知 → 情報', () =>
+    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'git', 'notify', 'about']));
+  it('git は リモートの取得 → 変更の印', () =>
+    assert.deepEqual(layout('git'), [
+      ['リモートの取得', ['gitFetch', 'gitFetchMinutes', 'gitFetchNow']],
+      ['変更の印', ['showChanges', 'countUntracked']],
+    ]));
+  it('git のアイコンは git-branch', () => assert.equal(CATEGORIES.find((c) => c.id === 'git')?.icon, 'git-branch'));
   it('全体は 位置 → ツールチップ → 起動', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],

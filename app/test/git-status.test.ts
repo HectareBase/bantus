@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createGitStatus, hasUpstream, parseCounts, parseStatus, readBranchInfo } from '../src/main/git-status';
+import { createGitStatus, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, withUpstream, type GitOptions } from '../src/main/git-status';
 import { view } from './helpers';
 
 describe('parseStatus', () => {
@@ -186,4 +186,119 @@ describe('hasUpstream', () => {
     assert.equal(hasUpstream('# branch.oid 1\n# branch.head x\n# branch.upstream origin/x\n'), true);
     assert.equal(hasUpstream('# branch.oid 1\n# branch.head x\n'), false);
   });
+});
+
+describe('parseUpstream', () => {
+  it('追跡するブランチの名前と、# branch.ab の -B（遅れ）を読む', () =>
+    assert.deepEqual(parseUpstream('# branch.oid 1\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -7\n'), { name: 'origin/main', behind: 7 }));
+  it('Windows の改行でも読む', () =>
+    assert.deepEqual(parseUpstream('# branch.upstream origin/main\r\n# branch.ab +0 -3\r\n'), { name: 'origin/main', behind: 3 }));
+  it('追跡するブランチがなければ undefined', () => assert.equal(parseUpstream('# branch.oid 1\n# branch.head x\n'), undefined));
+  it('追跡するブランチが消えていて ab の行がなければ遅れ 0', () =>
+    assert.deepEqual(parseUpstream('# branch.upstream origin/gone\n'), { name: 'origin/gone', behind: 0 }));
+  it('parseStatus は -B を behind に入れない（元のブランチとの差と混ぜない）', () =>
+    assert.equal(parseStatus('# branch.upstream origin/main\n# branch.ab +1 -4\n').behind, 0));
+});
+
+describe('withUpstream', () => {
+  const c = { changed: 0, untracked: 0, ahead: 1, behind: 0, merged: false };
+  const up = { name: 'origin/main', behind: 3 };
+  it('取得がオンなら、追跡するブランチからの遅れを入れる', () =>
+    assert.deepEqual(withUpstream(c, up, true), { ...c, behind: 3, upstream: 'origin/main' }));
+  it('取得がオフなら入れない', () => assert.deepEqual(withUpstream(c, up, false), c));
+  it('追跡するブランチがなければそのまま', () => assert.deepEqual(withUpstream(c, undefined, true), c));
+});
+
+describe('取得と組み合わせたとき', () => {
+  const STATUS = '# branch.oid 1\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -2\n? x\n';
+  const opts = (patch: Partial<GitOptions> = {}): (() => GitOptions) => () => ({ fetchEnabled: true, countUntracked: true, remoteOf: () => 'origin', ...patch });
+
+  it('元のフォルダのカードに、取得がオンのときだけ遅れを出す', async () => {
+    let fetchEnabled = true;
+    const status = createGitStatus(() => {}, async () => STATUS, () => 0, noBranch, () => true, () => ({ fetchEnabled, countUntracked: true, remoteOf: () => undefined }));
+    status.apply([view({ workDir: 'C:/R' })]);
+    await tick();
+    assert.deepEqual(status.apply([view({ workDir: 'C:/R' })])[0]!.changes, { changed: 0, untracked: 1, ahead: 0, behind: 2, merged: false, upstream: 'origin/main' });
+    fetchEnabled = false;
+    assert.deepEqual(status.apply([view({ workDir: 'C:/R' })])[0]!.changes, { changed: 0, untracked: 1, ahead: 0, behind: 0, merged: false });
+  });
+
+  it('ワークツリーの遅れは元のブランチと比べたまま', async () => {
+    const branch = async () => ({ behind: 5, ahead: 0, merged: false });
+    const status = createGitStatus(() => {}, async () => STATUS, () => 0, branch, () => true, opts());
+    status.apply([view({ workDir: 'C:/W', baseBranch: 'main' })]);
+    await tick();
+    await tick();
+    const changes = status.apply([view({ workDir: 'C:/W', baseBranch: 'main' })])[0]!.changes;
+    assert.equal(changes?.behind, 5);
+    assert.equal(changes?.upstream, undefined);
+  });
+
+  it('リモートが分かっていれば、ワークツリーのマージ済みを refs/remotes/<リモート>/<元のブランチ> でも調べる', async () => {
+    const refs: (string | undefined)[] = [];
+    const branch = async (_dir: string, _base: string, remoteRef?: string) => {
+      refs.push(remoteRef);
+      return { behind: 0, ahead: 0, merged: false };
+    };
+    const status = createGitStatus(() => {}, async () => '', () => 0, branch, () => true, opts());
+    status.apply([view({ workDir: 'C:/W', baseBranch: 'main', commonDir: 'C:/R/.git' })]);
+    await tick();
+    await tick();
+    const none = createGitStatus(() => {}, async () => '', () => 0, branch, () => true, opts({ remoteOf: () => undefined }));
+    none.apply([view({ workDir: 'C:/W2', baseBranch: 'main', commonDir: 'C:/R/.git' })]);
+    await tick();
+    await tick();
+    assert.deepEqual(refs, ['refs/remotes/origin/main', undefined]);
+  });
+
+  it('未追跡を数えないときは、git status にそう伝える', async () => {
+    const flags: (boolean | undefined)[] = [];
+    const status = createGitStatus(() => {}, async (_dir, untracked) => {
+      flags.push(untracked);
+      return '';
+    }, () => 0, noBranch, () => true, opts({ countUntracked: false }));
+    status.apply([view({ workDir: 'C:/R' })]);
+    await tick();
+    assert.deepEqual(flags, [false]);
+  });
+
+  it('invalidate したリポジトリの作業フォルダだけを調べ直す', async () => {
+    const git = fakeGit({ 'C:/R': '', 'C:/R/w': '', 'C:/O': '' });
+    const status = createGitStatus(() => {}, git.run, () => 0, noBranch, () => true, opts());
+    const list = () => [
+      view({ workDir: 'C:/R', commonDir: 'C:/R/.git' }),
+      view({ workDir: 'C:/R/w', commonDir: 'C:/R/.git' }),
+      view({ workDir: 'C:/O', commonDir: 'C:/O/.git' }),
+    ];
+    status.apply(list());
+    await tick();
+    status.invalidate('c:/r/.git');
+    status.apply(list());
+    await tick();
+    assert.deepEqual(git.calls.slice(3), ['C:/R', 'C:/R/w']);
+  });
+});
+
+describe('readBranchInfo とリモートの写し', () => {
+  const fake = (outputs: Record<string, string>) => async (_dir: string, args: string[]) => {
+    const key = args.join(' ');
+    if (!(key in outputs)) throw new Error(`unexpected: ${key}`);
+    return outputs[key]!;
+  };
+  const local = 'rev-list --left-right --count refs/heads/main...HEAD';
+  const remote = 'rev-list --left-right --count refs/remotes/origin/main...HEAD';
+  const firstRemote = 'rev-list --first-parent --reverse HEAD..refs/remotes/origin/main';
+
+  it('手元の main に取り込む前でも、リモートの main にマージコミットで入ったらマージ済み。遅れと先行は手元と比べる', async () =>
+    assert.deepEqual(
+      await readBranchInfo('C:/W', 'main', fake({ [local]: '0\t2\n', [remote]: '3\t0\n', [firstRemote]: 'm\n', 'rev-parse m^1 HEAD': 'p\nh\n' }), 'refs/remotes/origin/main'),
+      { behind: 0, ahead: 2, merged: true },
+    ));
+  it('リモートにもまだ入っていなければ、マージ済みではない', async () =>
+    assert.deepEqual(
+      await readBranchInfo('C:/W', 'main', fake({ [local]: '0\t2\n', [remote]: '1\t2\n' }), 'refs/remotes/origin/main'),
+      { behind: 0, ahead: 2, merged: false },
+    ));
+  it('リモートの写しがなければ、マージ済みではない', async () =>
+    assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [local]: '0\t2\n' }), 'refs/remotes/origin/main'), { behind: 0, ahead: 2, merged: false }));
 });

@@ -6,16 +6,17 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { startSelfUpdate } from './self-update';
-import { readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
 import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
-import type { AboutInfo, DisplayOption, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
+import type { AboutInfo, DisplayOption, SessionView, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
@@ -60,8 +61,31 @@ let flashTimer: NodeJS.Timeout | undefined;
 let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
 const toasts = new Set<Notification>();
+/**
+ * リモートの定期的な取得（docs/design/git-fetch.md）。設定でオンにしたときだけ動く。
+ * 取得が終わったら、そのリポジトリの作業フォルダを調べ直す。様子が変わったら設定画面に送る
+ */
+const gitFetch = createGitFetch(
+  (commonDir) => {
+    gitStatus.invalidate(commonDir);
+    sendSessions();
+  },
+  () => {
+    if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('fetch:status', gitFetch.status());
+  },
+);
+/** 取得の時刻が来たかを見る間隔 */
+const FETCH_TICK_MS = 15_000;
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
-const gitStatus = createGitStatus(() => sendSessions());
+const gitStatus = createGitStatus(() => sendSessions(), undefined, undefined, undefined, undefined, () => {
+  const s = getSettings();
+  return { fetchEnabled: s.gitFetch, countUntracked: s.countUntracked, remoteOf: (commonDir) => gitFetch.remoteOf(commonDir) };
+});
+/** 最後に読んだセッションの一覧と、画面が出している（アーカイブしていない）カードの目印。取得の対象を決めるのに使う */
+let lastSessions: SessionView[] = [];
+let fetchCards = new Set<string>();
+/** 前に当てた git の設定（変わったときだけ調べ直す） */
+let appliedGit: Pick<Settings, 'gitFetch' | 'countUntracked'> | undefined;
 
 /** フォルダの .git の種類（ワークツリーの判定に使う） */
 function gitEntry(dir: string): GitEntry {
@@ -155,10 +179,10 @@ function sidebarBounds() {
 
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs } = s;
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
-    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges,
   };
 }
 
@@ -563,6 +587,8 @@ function updateNotice(message: string | undefined) {
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
   const sessions = gitStatus.apply(readSessions());
+  lastSessions = sessions;
+  updateFetchTargets();
   const json = JSON.stringify(sessions);
   if (!force && json === lastSent) return;
   lastSent = json;
@@ -583,6 +609,31 @@ function sendSessions(force = false) {
     if (keptHeldCards) patch.heldCards = keptHeldCards;
     if (Object.keys(patch).length) updateSettings(patch);
   }
+}
+
+/**
+ * 取得するリポジトリ：出しているカードのセッションがあるリポジトリ（commonDir ごとに 1 つ）。
+ * git は元のフォルダで動かす（元のフォルダのカードがなければ、ワークツリーで）。見本データのときは取得しない
+ */
+function updateFetchTargets() {
+  if (process.env.WIDGET_FIXTURE) return;
+  const byRepo = new Map<string, FetchTarget>();
+  for (const s of lastSessions) {
+    if (!s.commonDir || !s.workDir || !s.mainBranch || !fetchCards.has(cardKeyOf(s))) continue;
+    const key = folderKey(s.commonDir);
+    if (!byRepo.has(key) || !s.worktree) byRepo.set(key, { commonDir: key, dir: s.workDir, branch: s.mainBranch, name: s.repoName });
+  }
+  gitFetch.setTargets([...byRepo.values()]);
+}
+
+/** git の設定を当てる。取得のオンとオフ、未追跡を数えるかが変わったら、すべての作業フォルダを調べ直す */
+function applyGitSettings(s: Settings) {
+  gitFetch.setOptions({ enabled: s.gitFetch, minutes: s.gitFetchMinutes });
+  const changed = appliedGit && (appliedGit.gitFetch !== s.gitFetch || appliedGit.countUntracked !== s.countUntracked);
+  appliedGit = { gitFetch: s.gitFetch, countUntracked: s.countUntracked };
+  if (!changed) return;
+  gitStatus.invalidate();
+  sendSessions(true);
 }
 
 /** 今ない目印の印を外す。外すものがなければ undefined */
@@ -643,6 +694,8 @@ app.whenReady().then(() => {
   applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
+  applyGitSettings(getSettings());
+  const fetchTimer = setInterval(() => gitFetch.tick(), FETCH_TICK_MS);
   const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
   if (!process.env.WIDGET_SCREENSHOT) startForegroundProbe();
@@ -740,6 +793,15 @@ app.whenReady().then(() => {
     if (patch && typeof patch === 'object') updateSettings(patch as Partial<Settings>);
   });
   ipcMain.handle('settings:displays', () => displayOptions());
+  ipcMain.on('settings:action', (_e, id: unknown) => {
+    if (id === 'gitFetchNow') gitFetch.fetchNow();
+  });
+  ipcMain.handle('fetch:status', () => gitFetch.status());
+  ipcMain.on('fetch-cards', (_e, keys: unknown) => {
+    if (!Array.isArray(keys) || !keys.every(isCardKey)) return;
+    fetchCards = new Set(keys);
+    updateFetchTargets();
+  });
   ipcMain.handle('settings:about', (): AboutInfo => ({
     version: app.getVersion(),
     settingsFile: settingsFilePath(),
@@ -751,6 +813,7 @@ app.whenReady().then(() => {
   onSettingsChange((s) => {
     applySettings(s);
     applyLoginItem(s);
+    applyGitSettings(s);
     settingsWin?.webContents.send('settings:changed', s);
   });
 
@@ -762,6 +825,7 @@ app.whenReady().then(() => {
 
   app.on('before-quit', () => {
     stopWatching();
+    clearInterval(fetchTimer);
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();

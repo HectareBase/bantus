@@ -362,6 +362,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         repoKey: folderKey(root),
         repoName: root ? basename(root) : ja.session.noFolder,
         mainBranch: commonDir ? readHeadBranch(commonDir, heads) : undefined,
+        ...(commonDir && { commonDir }),
         worktree: d.worktreeName
           ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
           : outside && outsideBranch

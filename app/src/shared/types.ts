@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { ArchiveMark, HoldMark, Settings, StatusColors } from './settings';
+import type { ActionId, ArchiveMark, HoldMark, Settings, StatusColors } from './settings';
 
 /** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
@@ -29,6 +29,8 @@ export interface SessionView {
   spawnedFrom?: string;
   /** 最後のターンのまとめの文章（`turnWrapUp.description`）。一覧の下の段に出す */
   summary?: string;
+  /** 元のリポジトリの .git（ワークツリーでも共通のもの）。リモートの取得の単位（src/main/git-fetch.ts）。git 管理でなければ undefined */
+  commonDir?: string;
   /** git status を調べる作業フォルダ（git 管理でなければ undefined） */
   workDir?: string;
   /** コンテキストの使用量（会話の記録の末尾から。src/main/context-usage.ts）。読めなければ undefined */
@@ -74,8 +76,13 @@ export interface GitChanges {
   ahead: number;
   /** ahead を元のブランチと比べて数えた（追跡するブランチがない） */
   aheadOfBase?: boolean;
-  /** 元のブランチ（baseBranch）にあって、まだ取り込んでいないコミット。元のブランチがわからなければ 0 */
+  /**
+   * 元のブランチ（baseBranch）にあって、まだ取り込んでいないコミット。元のブランチがわからなければ 0。
+   * 元のフォルダでは、取得がオンのときだけ、追跡するブランチ（upstream）からの遅れを入れる
+   */
   behind: number;
+  /** behind を追跡するブランチ（`origin/main` など）と比べて数えた。元のフォルダで、取得がオンのときだけ */
+  upstream?: string;
   /** 元のブランチにマージコミットで入った（docs/design/worktree-cards.md） */
   merged: boolean;
   /** 作業フォルダがもうない（ワークツリーを消した） */
@@ -136,6 +143,8 @@ export interface WidgetApi {
   /** ツールチップを出す。rect は基準の要素（ウィジェットの中の座標）。ツールチップは別のウィンドウで、ウィジェットの外に出る */
   showTip(text: string, rect: TipRect): void;
   hideTip(): void;
+  /** 出している（アーカイブしていない）カードの目印。リモートの取得の対象を決める（src/main/git-fetch.ts） */
+  setFetchCards(keys: string[]): void;
 }
 
 export interface ToastRequest {
@@ -276,7 +285,7 @@ export type WidgetLayout = Pick<
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
-  | 'tooltipDelayMs'
+  | 'tooltipDelayMs' | 'showChanges'
 >;
 
 export interface DisplayOption {
@@ -292,12 +301,30 @@ export interface AboutInfo {
   packaged: boolean;
 }
 
+/** リモートの取得の失敗の種類。offline は設定画面に出さない */
+export type FetchFailure = 'lock' | 'offline' | 'auth' | 'other';
+
+/** 設定画面に出す取得の様子（src/main/git-fetch.ts） */
+export interface FetchStatus {
+  enabled: boolean;
+  running: boolean;
+  /** 最後にうまくいった時刻（どのリポジトリでも）。まだなければ undefined */
+  lastAt?: number;
+  /** 失敗したリポジトリ。オフラインは出さない。ロックはやり直しでもだめだったものだけ */
+  failures: { name: string; failure: FetchFailure }[];
+}
+
 export interface SettingsApi {
   get(): Promise<Settings>;
   set(patch: Partial<Settings>): void;
   onChange(listener: (settings: Settings) => void): void;
   displays(): Promise<DisplayOption[]>;
   about(): Promise<AboutInfo>;
+  /** 設定画面のボタン（type: 'action'）を押した */
+  runAction(id: ActionId): void;
+  /** 取得の様子。変わったら onFetchStatus で届く */
+  fetchStatus(): Promise<FetchStatus>;
+  onFetchStatus(listener: (status: FetchStatus) => void): void;
 }
 
 declare global {
