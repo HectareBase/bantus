@@ -74,9 +74,10 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
     case 'slider': {
       const input = el('input', { type: 'range', min: String(def.min), max: String(def.max), step: String(def.step), value: String(settings[def.key]) });
       input.setAttribute('aria-label', def.label);
-      const value = el('span', { className: 'value', textContent: `${settings[def.key]}${def.unit}` });
+      const text = (v: number) => (def.format ? def.format(v) : `${v}${def.unit}`);
+      const value = el('span', { className: 'value', textContent: text(settings[def.key]) });
       input.addEventListener('input', () => {
-        value.textContent = `${input.value}${def.unit}`;
+        value.textContent = text(Number(input.value));
         set(def.key, Number(input.value));
       });
       return el('div', { className: 'control' }, [value, input]);

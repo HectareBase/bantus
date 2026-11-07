@@ -686,6 +686,7 @@ function applyLayout(layout: WidgetLayout) {
   marks = { ...layout.archive };
   cardMarks = { ...layout.archivedCards };
   mainMinutes = layout.mainArchiveMinutes;
+  tooltips.setDelay(layout.tooltipDelayMs);
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = layout;
   notify = { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen };
   render(latest);

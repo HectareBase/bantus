@@ -239,6 +239,7 @@ export type WidgetLayout = Pick<
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'archive' | 'archivedCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen'
+  | 'tooltipDelayMs'
 >;
 
 export interface DisplayOption {

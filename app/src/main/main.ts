@@ -150,10 +150,10 @@ function sidebarBounds() {
 
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards } = s;
-  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen } = s;
+  const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, tooltipDelayMs } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, showUpdated, archive, archivedCards,
-    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen,
+    notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, tooltipDelayMs,
   };
 }
 

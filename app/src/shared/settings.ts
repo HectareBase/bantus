@@ -43,6 +43,8 @@ export interface Settings {
   flash: boolean;
   /** Claude が前面で、そのセッションを開いているときは知らせない */
   muteWhenOpen: boolean;
+  /** ツールチップが出るまでの時間（ms）。TOOLTIP_OFF_MS（スライダーの右端）なら出さない */
+  tooltipDelayMs: number;
   /**
    * Bantus の中だけのアーカイブで、手で決めたもの（セッションの ID → 手でアーカイブした／手で戻した）。
    * 自動の決まりより優先する。設定画面には出さず、行のトグルで切り替える。デスクトップの isArchived には書かない
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toast: false,
   flash: true,
   muteWhenOpen: true,
+  tooltipDelayMs: 400,
   archive: {},
   archivedCards: {},
 };
@@ -99,6 +102,9 @@ export const DEFAULT_SETTINGS: Settings = {
 /** ドラッグで変えられる幅の範囲（px） */
 export const WIDTH_MIN = 200;
 export const WIDTH_MAX = 480;
+
+/** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
+export const TOOLTIP_OFF_MS = 2000;
 
 export type CategoryId = 'general' | 'cards' | 'notify' | 'about';
 
@@ -147,7 +153,11 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'soundVolume'> & { type: 'slider'; min: number; max: number; step: number; unit: string });
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'soundVolume' | 'tooltipDelayMs'> & {
+      type: 'slider'; min: number; max: number; step: number; unit: string;
+      /** 値の見せ方。なければ値に unit を付ける */
+      format?: (value: number) => string;
+    });
 
 const SHOW_OPTIONS = [
   { value: true, label: '表示' },
@@ -186,6 +196,12 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'headerShade', category: 'general', group: '見た目', type: 'slider',
     label: '見出しの濃さ', description: 'カードの見出し（プロジェクト名）の帯。0% で塗らず、区切り線だけになる',
     min: 0, max: 20, step: 1, unit: '%',
+  },
+  {
+    key: 'tooltipDelayMs', category: 'general', group: 'ツールチップ', type: 'slider',
+    label: '表示までの時間', description: 'ポインタを載せてから出るまで。右端にすると出さない',
+    min: 0, max: TOOLTIP_OFF_MS, step: 100, unit: '秒',
+    format: (v) => (v >= TOOLTIP_OFF_MS ? '表示しない' : `${(v / 1000).toFixed(1)} 秒`),
   },
   {
     key: 'openAtLogin', category: 'general', group: '起動', type: 'segmented', packagedOnly: true,

@@ -103,6 +103,7 @@ describe('設定画面のカテゴリ', () => {
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
       ['見た目', ['backgroundOpacity', 'cardOpacity', 'headerShade']],
+      ['ツールチップ', ['tooltipDelayMs']],
       ['起動', ['openAtLogin']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行に出すもの', () =>
@@ -140,4 +141,15 @@ describe('normalizeSettings の通知', () => {
   });
   it('音の種類だけに試聴のボタンを付ける', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.type === 'segmented' && d.preview).map((d) => d.key), ['soundType']));
+});
+
+describe('normalizeSettings のツールチップ', () => {
+  it('なければ 0.4 秒', () => assert.equal(normalizeSettings({}).tooltipDelayMs, 400));
+  it('0 から右端（出さない）まで通し、範囲の外は丸める', () => {
+    assert.equal(normalizeSettings({ tooltipDelayMs: 0 }).tooltipDelayMs, 0);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 2000 }).tooltipDelayMs, 2000);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 9999 }).tooltipDelayMs, 2000);
+    assert.equal(normalizeSettings({ tooltipDelayMs: -5 }).tooltipDelayMs, 0);
+    assert.equal(normalizeSettings({ tooltipDelayMs: 'x' }).tooltipDelayMs, 400);
+  });
 });
