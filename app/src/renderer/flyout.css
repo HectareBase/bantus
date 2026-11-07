@@ -93,23 +93,34 @@ html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8p
 /* 一覧はめくれと同じ端（カードの端）から開く。めくれの形から一覧の形へ変形し、めくれは一覧の下に隠れる */
 html[data-side="left"] .list { right: 0; transform-origin: right top; }
 html[data-side="right"] .list { left: 0; transform-origin: left top; }
-.list-body { overflow-y: auto; min-height: 0; }
+/* スクロールバーの場所はいつも空けておき、出入りで行の幅が変わらないようにする */
+.list-body { overflow-y: auto; min-height: 0; scrollbar-gutter: stable; }
 .list-body::-webkit-scrollbar { width: 6px; }
 .list-body::-webkit-scrollbar-thumb { background: var(--stroke); border-radius: 3px; }
+/* 下の段（まとめ）。高さはいつも同じにする。乗せた行で出し入れしたり高さを変えたりすると、
+   スクロールする所の高さが変わって行がカーソルの下でずれ、また別のまとめが出る、をくり返してちらつくため。
+   題名 1 行とまとめ 3 行の分を取り、長いまとめは省く */
 .list-foot {
   flex: none;
+  height: calc(4 * 1.4em + 2px + 12px);
   margin: 6px 8px 0;
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--selected);
   font-size: 11.5px;
   color: var(--text-secondary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 9em;
   overflow: hidden;
 }
-.list-foot b { display: block; color: var(--text); margin-bottom: 2px; }
+.list-foot b { display: block; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-foot .summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.list-foot .hint { color: var(--text-tertiary); }
 
 /* ---- 行。点（状態）とトグルは行の縦の真ん中。つなぐ線は点の上下から伸ばす ---- */
 .node {
