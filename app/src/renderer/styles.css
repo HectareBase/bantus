@@ -337,7 +337,7 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 }
 .row[data-attention][data-state="waiting"]::before { background: var(--waiting); }
 .row[data-attention][data-state="idle"]::before { background: var(--idle); }
-.row[data-attention]::before { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
+.row[data-attention]::before { animation: blink 1.6s steps(8) infinite; will-change: opacity; }
 
 /* 新しく未確認になったときに一度だけ横切る光（sweep.ts が動かす）。入れ物だけを角丸で切り、行の中のほかの要素は切らない */
 .sweep {
@@ -401,7 +401,8 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 
 /* 処理中のセッション名は薄くし、明るい文字の帯を左から右へ流す（renderer.ts の setShine が .shine を重ねる）。
    窓（.shine）は中央だけを mask で見せて右へ動かし、中の文字（.shine-text）は同じだけ左へ戻す。文字は止まって見え、帯だけが流れる。
-   中の文字は .title と同じ幅で切るので、「…」の位置も地の文字とそろう */
+   中の文字は .title と同じ幅で切るので、「…」の位置も地の文字とそろう。
+   常に出ている透明なウィンドウでは、動くコマごとに全体を合成し直して重いので、帯は 15 コマ/秒（2 秒で 30 段）に落とす */
 .row[data-state="busy"] .title { position: relative; color: var(--text-tertiary); }
 .shine {
   --band: 20%;
@@ -410,7 +411,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
   overflow: hidden;
   pointer-events: none;
   mask-image: linear-gradient(90deg, transparent calc(50% - var(--band)), #000 50%, transparent calc(50% + var(--band)));
-  animation: shine-window 2s linear infinite;
+  animation: shine-window 2s steps(30) infinite;
   will-change: transform;
 }
 .shine-text {
@@ -420,7 +421,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text);
-  animation: shine-text 2s linear infinite;
+  animation: shine-text 2s steps(30) infinite;
   will-change: transform;
 }
 
@@ -538,12 +539,14 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 /* 入力欄の幅を決めるために文字の幅を測る、見えない要素 */
 .memo-sizer { position: fixed; left: -9999px; top: 0; visibility: hidden; white-space: pre; pointer-events: none; }
 
-/* 処理中：薄い輪の上を、伸び縮みする弧が回る（円周を pathLength で 30 とする）。対応待ち：ゆっくり点滅する */
-.progress-ring { animation: spin 1.6s linear infinite; will-change: transform; }
+/* 処理中：薄い輪の上を、伸び縮みする弧が回る（円周を pathLength で 30 とする）。対応待ち：ゆっくり点滅する。
+   どれも steps() でコマ数を落とす（回転と弧は約 15 コマ/秒、点滅は 10 コマ/秒）。弧の stroke-dasharray は
+   コマごとに描き直しになり、滑らかに動かすと gpu-process と renderer がそれぞれ 1 コアの 1 割ほどを使う */
+.progress-ring { animation: spin 1.6s steps(24) infinite; will-change: transform; }
 .progress-ring circle { fill: none; stroke: currentColor; }
 .progress-ring .track { stroke-width: 2; stroke-opacity: 0.18; }
-.progress-ring .arc { stroke-width: 2.4; stroke-linecap: round; animation: arc 1.4s ease-in-out infinite; }
-.row[data-state="waiting"] .status svg { animation: blink 1.6s ease-in-out infinite; will-change: opacity; }
+.progress-ring .arc { stroke-width: 2.4; stroke-linecap: round; animation: arc 1.4s steps(10) infinite; }
+.row[data-state="waiting"] .status svg { animation: blink 1.6s steps(8) infinite; will-change: opacity; }
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
 html.floating .card, html.floating .titlebar { border-color: rgba(128, 128, 128, 0.35); }

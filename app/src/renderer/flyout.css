@@ -193,7 +193,8 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 .node[data-state="idle"] .status { color: var(--idle); }
 .node[data-state="stopped"] .status { color: var(--stopped); }
 .node[data-held] .status { color: var(--held); }
-.progress-ring { animation: spin 1.6s linear infinite; }
+/* ウィジェットと同じく、回転は約 15 コマ/秒に落とす（styles.css の .progress-ring） */
+.progress-ring { animation: spin 1.6s steps(24) infinite; }
 .progress-ring circle { fill: none; stroke: currentColor; }
 .progress-ring .track { stroke-width: 2; stroke-opacity: 0.18; }
 .progress-ring .arc { stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 18 30; }
