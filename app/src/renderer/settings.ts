@@ -5,10 +5,10 @@ import {
   type CategoryId, type ColorState, type SettingDef, type Settings, type StatusColors,
 } from '../shared/settings.js';
 import { ja } from '../shared/strings/ja.js';
-import type { SessionState } from '../shared/types.js';
+import type { FetchStatus, SessionState } from '../shared/types.js';
 import { createIcon } from './icon.js';
 import type { IconName } from './icons.js';
-import { statusIconName } from './model.js';
+import { fetchStatusLines, statusIconName } from './model.js';
 import { playSound } from './sound.js';
 import { applyStatusColors } from './status-colors.js';
 import { setStatus } from './status-icon.js';
@@ -41,6 +41,24 @@ function card(label: string, description: string | undefined, control: Node, sta
 function set<K extends keyof Settings>(key: K, value: Settings[K]) {
   settings = { ...settings, [key]: value };
   api.set({ [key]: value } as Partial<Settings>);
+  // この設定で押せるかが決まる項目があれば、描き直す
+  if (SETTING_DEFS.some((d) => d.enabledBy === key)) void renderContent();
+}
+
+// ---- ボタン（type: 'action'）の横に出す結果 ----
+
+let fetchStatus: FetchStatus | undefined;
+/** 出している結果の欄（描き直すたびに作り直す） */
+const statusNodes = new Set<HTMLElement>();
+
+function showFetchStatus() {
+  for (const node of statusNodes) {
+    if (!node.isConnected) {
+      statusNodes.delete(node);
+      continue;
+    }
+    node.replaceChildren(...(fetchStatus ? fetchStatusLines(fetchStatus) : []).map((t) => el('span', { textContent: t })));
+  }
 }
 
 // ---- 項目の種類ごとの部品 ----
@@ -97,6 +115,15 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
     }
     case 'status-colors':
       return statusColors();
+    case 'action': {
+      const button = el('button', { className: 'preview-button', textContent: def.button, disabled });
+      button.addEventListener('click', () => api.runAction(def.key));
+      const status = el('div', { className: 'action-status' });
+      status.setAttribute('aria-live', 'polite');
+      statusNodes.add(status);
+      showFetchStatus();
+      return el('div', { className: 'control action' }, [status, button]);
+    }
   }
 }
 
@@ -252,7 +279,7 @@ async function renderContent() {
       content.append(await control(def, false));
       continue;
     }
-    const disabled = def.packagedOnly === true && !packaged;
+    const disabled = (def.packagedOnly === true && !packaged) || (def.enabledBy !== undefined && !settings[def.enabledBy]);
     const node = card(def.label, def.description, await control(def, disabled));
     if (disabled) node.classList.add('disabled');
     content.append(node);
@@ -276,6 +303,13 @@ function renderNav() {
 
 async function start() {
   settings = await api.get();
+  api.onFetchStatus((s) => {
+    fetchStatus = s;
+    showFetchStatus();
+  });
+  fetchStatus = await api.fetchStatus();
+  // 「◯分前」を進める
+  window.setInterval(showFetchStatus, 30_000);
   renderNav();
   await renderContent();
 }

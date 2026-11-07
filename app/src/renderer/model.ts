@@ -2,7 +2,7 @@
 
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
-import type { ContextUsage, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
+import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
 import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
@@ -180,6 +180,17 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   return lines.join('\n');
 }
 
+// ---- リモートの取得（docs/design/git-fetch.md） ----
+
+/** 設定画面の「今すぐ取得」の横に出す文。1 行目が最後の取得、続けて失敗したリポジトリ */
+export function fetchStatusLines(s: FetchStatus, now = Date.now()): string[] {
+  const F = ja.settings.fetchStatus;
+  if (!s.enabled) return [F.off];
+  const lines = [s.running ? F.running : s.lastAt !== undefined ? F.last(formatAgo(s.lastAt, now)) : F.never];
+  for (const f of s.failures) lines.push(F.failed(f.name, F.kinds[f.failure]));
+  return lines;
+}
+
 // ---- コミットされていない変更（docs/design/git-changes.md） ----
 
 export interface ChangeItem {
@@ -209,7 +220,7 @@ export function changesTooltip(c: GitChanges | undefined): string {
   if (c.untracked) parts.push(ja.changes.untracked(c.untracked));
   const lines = parts.length ? [ja.changes.uncommitted(parts.join(ja.changes.separator))] : [];
   if (c.ahead) lines.push(c.aheadOfBase ? ja.changes.aheadOfBase(c.ahead) : ja.changes.unpushed(c.ahead));
-  if (c.behind) lines.push(ja.changes.behind(c.behind));
+  if (c.behind) lines.push(c.upstream ? ja.changes.behindUpstream(c.upstream, c.behind) : ja.changes.behind(c.behind));
   return lines.join('\n');
 }
 

@@ -29,13 +29,15 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 ## 動かすもの
 | 何を | 使い道 | コード |
 |---|---|---|
-| `git --no-optional-locks -C <作業フォルダ> status --porcelain=v2 --branch` | コミットされていない変更の件数。リポジトリには書き込まない。詳しくは [git-changes.md](git-changes.md) | `src/main/git-status.ts` |
-| `git --no-optional-locks -C <作業フォルダ> rev-list` / `rev-parse` | ワークツリーの元のブランチからの遅れと、マージ済みかどうか。読むだけ。詳しくは [worktree-cards.md](worktree-cards.md) | `src/main/git-status.ts` |
+| `git --no-optional-locks -C <作業フォルダ> status --porcelain=v2 --branch` | コミットされていない変更の件数。リポジトリには書き込まない。設定の「未追跡のファイルを数える」をオフにすると `--untracked-files=no` を付ける。詳しくは [git-changes.md](git-changes.md) | `src/main/git-status.ts` |
+| `git --no-optional-locks -C <作業フォルダ> rev-list` / `rev-parse` | ワークツリーの元のブランチからの遅れと、マージ済みかどうか。読むだけ。取得がオンのときは `refs/remotes/<リモート>/<元のブランチ>` も見る。詳しくは [worktree-cards.md](worktree-cards.md) | `src/main/git-status.ts` |
+| `git --no-optional-locks -C <フォルダ> config --get branch.<元のブランチ>.remote` | 取得するリモートの名前。設定の「定期的に取得する」がオンのときだけ | `src/main/git-fetch.ts` |
+| `git -C <フォルダ> -c credential.interactive=never fetch --no-auto-gc --no-auto-maintenance --no-write-fetch-head --quiet <リモート>`（`GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never`） | 設定の「定期的に取得する」が**オンのときだけ**（既定はオフ）。アーカイブしていないカードがあるリポジトリごとに、選んだ間隔（5 / 10 / 30 分）で動かす。ユーザーがリポジトリに設定したリモートと git の通信をする。ログインの画面は出さない。詳しくは [git-fetch.md](git-fetch.md) | `src/main/git-fetch.ts` |
 | `powershell.exe`（起動したら動かし続ける） | 前面のウィンドウのプロセス名が `claude` かを調べる（`GetForegroundWindow`）。プロセス名だけを受け取り、ウィンドウの中身は読まない | `src/main/foreground.ts` |
 | `claude://` のリンク | セッションを開く | `src/main/main.ts` |
 
 ## 書くもの
-ウィジェットが書き込むのは、自分のフォルダだけです。
+ウィジェットが書き込むのは、自分のフォルダだけです。ただし、設定で取得をオンにしたときは、git がリポジトリの `.git` の中のリモートの写し（`refs/remotes/<リモート>/*`）と、取ってきたオブジェクトを書きます。作業中のファイル、インデックス、ローカルのブランチ、HEAD、stash、`FETCH_HEAD` には触れません（[git-fetch.md](git-fetch.md)）。
 
 | 場所 | 中身 |
 |---|---|
@@ -52,4 +54,5 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 - 会話の記録（`~/.claude/projects/*.jsonl`）は、コンテキストの使用量を出すために末尾だけを読み、使用量の数とモデル名のほかは使いません。発言の中身を画面に出したり、ほかへ送ったり、ログに出したりはしません。会話の記録のフォルダは見張りません
 - `git-worktrees.json`、`window-state.json` は読みません。調査はしましたが、今は使っていません
 - UIA（Windows UI Automation）で画面の部品を読んだり、押したりはしません。セッションは `claude://` のリンクで開きます
-- 読んだ内容をネットワークに送りません。ログにも出しません
+- 読んだ内容をネットワークに送りません。ログにも出しません。取得をオンにしたときの git の通信（リポジトリのリモートとの `git fetch`）だけは除きます。そこでも Bantus が読んだもの（セッション、会話）は送りません
+- 取得の失敗の内容はログに出しません。設定画面に、リポジトリ名と失敗の種類だけを出します

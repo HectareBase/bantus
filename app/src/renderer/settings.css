@@ -142,6 +142,7 @@ h2 { font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
   background: var(--control);
 }
 .preview-button:hover { background: var(--hover); }
+.preview-button:disabled { pointer-events: none; }
 .preview-button svg { width: 16px; height: 16px; }
 /* 今は使えない項目（インストール版でだけ使える項目を npm start で開いたとき） */
 .card.disabled .label, .card.disabled .control { opacity: 0.45; }
@@ -250,3 +251,7 @@ input[type="range"] { width: 200px; accent-color: var(--accent); }
 .text-button[hidden] { display: none; }
 .text-button:disabled { opacity: 0.45; pointer-events: none; }
 .reset-all { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* ボタン（type: 'action'）と、その横の結果 */
+.control.action { align-items: center; gap: 12px; }
+.action-status { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--text-secondary); text-align: right; }

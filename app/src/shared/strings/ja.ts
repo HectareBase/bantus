@@ -99,6 +99,8 @@ export const ja = {
     aheadOfBase: (n: number) => `未マージのコミット：${n}`,
     unpushed: (n: number) => `push していないコミット：${n}`,
     behind: (n: number) => `元のブランチからの遅れ：${n}`,
+    /** 元のフォルダで、取得がオンのとき。upstream は `origin/main` など */
+    behindUpstream: (upstream: string, n: number) => `${upstream} からの遅れ：${n}`,
   },
 
   /** トースト通知の本文 */
@@ -149,6 +151,7 @@ export const ja = {
       general: '全体',
       look: '見た目',
       cards: 'カードの表示',
+      git: 'git',
       notify: '通知',
       about: '情報',
     },
@@ -163,6 +166,8 @@ export const ja = {
       order: '並び順',
       rowSize: '行の大きさ',
       rowContent: '行に出すもの',
+      fetch: 'リモートの取得',
+      changesMark: '変更の印',
       notifyWhen: '知らせるとき',
       sound: '音',
       windowsNotify: 'Windows の通知',
@@ -195,6 +200,14 @@ export const ja = {
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
       showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
       showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。上限がわからないモデルはトークン数' },
+      gitFetch: {
+        label: '定期的に取得する',
+        description: 'git fetch でリモートのブランチを取ってくる。元のフォルダの遅れと、GitHub でマージしたワークツリーがわかる。作業中のファイルとローカルのブランチには触れない',
+      },
+      gitFetchMinutes: { label: '間隔', description: 'リポジトリごとに、最後に試してから数える' },
+      gitFetchNow: { label: '今すぐ取得', description: '表示しているカードのリポジトリを取得する', button: '取得' },
+      showChanges: { label: 'カードに変更の印を出す', description: '見出しの右の、変更、未追跡、コミットの数' },
+      countUntracked: { label: '未追跡のファイルを数える', description: '数えないと、大きなリポジトリで調べるのが速くなる' },
       notifyWaiting: { label: '対応待ちになったとき', description: '許可や回答を待っているとき' },
       notifyDone: { label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある' },
       muteWhenOpen: { label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき' },
@@ -232,6 +245,26 @@ export const ja = {
       noToast: '出さない',
       flash: '点滅させる',
       noFlash: '点滅させない',
+      fetch: '取得する',
+      noFetch: '取得しない',
+      showMark: '出す',
+      hideMark: '出さない',
+      count: '数える',
+      noCount: '数えない',
+    },
+    /** 「今すぐ取得」の横に出す、取得の様子 */
+    fetchStatus: {
+      off: '定期的な取得はオフです',
+      running: '取得しています…',
+      never: 'まだ取得していません',
+      last: (ago: string) => `最後の取得：${ago}`,
+      failed: (repo: string, kind: string) => `${repo}：${kind}`,
+      kinds: {
+        auth: '認証に失敗（止めています。もう一度押すと試します）',
+        lock: 'ロックで失敗（次の回に試します）',
+        other: '失敗（次の回に試します）',
+        offline: '通信できません',
+      },
     },
     preview: '試聴',
     /** 状態の色 */
