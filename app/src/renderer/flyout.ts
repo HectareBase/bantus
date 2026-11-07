@@ -154,7 +154,11 @@ function cardBlock(card: FlyCard): HTMLElement {
   return el;
 }
 
-function renderContent(content: FlyContent) {
+/** 下の段に出している行（まとめのない行に乗せたときも、その行を覚えておく） */
+let summaryId: string | undefined;
+
+/** 中身を作り直す。新しい中身を知らせてきたとき（onContent）は、乗せている行のまとめを出したままにする */
+function renderContent(content: FlyContent, keepSummary = false) {
   items = new Map();
   if (content.kind === 'cards') {
     for (const c of content.cards) for (const i of c.items) items.set(i.id, i);
@@ -163,17 +167,30 @@ function renderContent(content: FlyContent) {
     content.items.forEach((i) => items.set(i.id, i));
     body.replaceChildren(...content.items.map((i, n) => node(i, content.kind, content.items[n - 1])));
   }
-  showSummary(undefined);
+  // 下の段は、まとめのある行が 1 つでもあれば、乗せていなくてもいつも同じ高さで出しておく（flyout.css の .list-foot）
+  foot.hidden = ![...items.values()].some((i) => i.summary);
+  summaryId = undefined;
+  showSummary(keepSummary ? summaryId : undefined, true);
 }
 
-/** 行に乗せたら、一覧の下の段に最後のターンのまとめを出す */
-function showSummary(id: string | undefined) {
+/** 行に乗せたら、一覧の下の段に最後のターンのまとめを出す。下の段の大きさは変えず、中の文字だけを入れ替える */
+function showSummary(id: string | undefined, force = false) {
+  if (!force && id === summaryId) return;
+  summaryId = id;
+  if (foot.hidden) return;
   const item = id ? items.get(id) : undefined;
-  foot.hidden = !item?.summary;
-  if (!item?.summary) return foot.replaceChildren();
+  if (!item?.summary) {
+    const hint = document.createElement('span');
+    hint.className = 'hint';
+    hint.textContent = item ? 'この行にはまとめがありません' : '行に乗せると、最後のターンのまとめを出します';
+    return foot.replaceChildren(hint);
+  }
   const b = document.createElement('b');
   b.textContent = item.title;
-  foot.replaceChildren(b, item.summary);
+  const text = document.createElement('div');
+  text.className = 'summary';
+  text.textContent = item.summary;
+  foot.replaceChildren(b, text);
 }
 
 // ---- 置き方と動き ----
@@ -250,7 +267,7 @@ window.flyoutApi.onShow((show) => {
 
 window.flyoutApi.onContent((content, count) => {
   if (!current) return;
-  renderContent(content);
+  renderContent(content, true);
   flapCount.textContent = String(count);
   if (open) placeList();
   reportSolid();
@@ -275,3 +292,5 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') window.flyoutApi.close();
 });
 list.addEventListener('pointerleave', () => showSummary(undefined));
+// 下の段はスクロールしないので、その上で回したホイールは一覧のスクロールに回す
+foot.addEventListener('wheel', (e) => body.scrollBy({ top: e.deltaY }), { passive: true });
