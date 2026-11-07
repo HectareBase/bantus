@@ -574,7 +574,12 @@ function setChanges(el: HTMLElement, c: GitChanges | undefined) {
     const item = document.createElement('span');
     item.className = 'changes-item';
     item.append(createIcon(i.icon));
-    if (i.count) item.append(String(i.count));
+    if (i.count) {
+      const n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = String(i.count);
+      item.append(n);
+    }
     return item;
   }));
   if (items.length) el.dataset.tip = changesTooltip(c);

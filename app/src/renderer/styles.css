@@ -184,6 +184,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .repo-archived[hidden] { display: none; }
 .repo-archived-icon { display: flex; }
 .repo-archived-icon svg { width: 11px; height: 11px; }
+.repo-archived .n { min-width: 1ch; line-height: 1; text-align: center; }
 
 .badge {
   flex: none;
@@ -242,7 +243,8 @@ html[data-edge="left"] .stack-hit { right: -8px; }
 .card-icon { flex: none; width: 28px; margin: -5px -4px -5px -6px; align-self: stretch; color: var(--text-secondary); }
 .card-icon svg { width: 13px; height: 13px; }
 .card-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-act[hidden] { display: none; }
+/* アーカイブできないカードでも場所は空けておく（できるカードと、右の印の位置がそろうように） */
+.card-act[hidden] { display: grid; visibility: hidden; }
 /* 保留のカード：見出しをごく薄いピンク（見出しの濃さで）にし、2 段目に「保留」とメモの枠を出す。中の行は少し薄くする */
 .card-header { flex-wrap: wrap; row-gap: 2px; }
 .card-wrap[data-held] .card-header { background: color-mix(in srgb, var(--held) calc(var(--header-alpha) * 200%), transparent); }
@@ -279,10 +281,20 @@ html[data-edge="left"] .stack-hit { right: -8px; }
   color: var(--text-secondary);
   outline: none;
 }
+/* カードの見出しでは、見出しの上端から垂れ下げる（上の辺はなく、下の角を丸くする）。縦は見出しの中央より上に寄る */
+.card-header .changes {
+  align-self: flex-start;
+  margin-top: -5px;
+  padding: 3px 8px 4px;
+  border-top: 0;
+  border-radius: 0 0 7px 7px;
+}
 .changes[hidden] { display: none; }
 .changes:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
 .changes-item { display: inline-flex; align-items: center; gap: 2px; }
 .changes-item svg { width: 11px; height: 11px; flex: none; }
+/* 数字は行の高さに任せず、字面をアイコンの中心にそろえる */
+.changes-item .n { line-height: 1; text-align: center; }
 
 /* ---- 行 ---- */
 .rows { list-style: none; margin: 0; padding: 0; }
@@ -412,7 +424,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
   will-change: transform;
 }
 
-/* アーカイブのトグル（行とカードの見出しの右端、縦の真ん中）。マウスを乗せたときだけ出し、出ていないときは幅も取らない */
+/* アーカイブのトグル（行とカードの見出しの右端、縦の真ん中）。マウスを乗せたときだけ出す。見出しのトグルは、出ていないときも幅を空けておく（乗せたときに右の印が動かないように） */
 .act {
   width: 22px;
   height: 22px;
@@ -437,8 +449,8 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 /* 処理中・対応待ちの行はアーカイブできない（動いているものは隠さない）ので、トグルを出さない。保留の行も出さない（保留とアーカイブは同時に付けない） */
 .row[data-state="busy"] .act, .row[data-state="waiting"] .act, .row[data-held] .act, .card-wrap[data-held] .row .act { display: none; }
 /* 見出しは右の余白が行より 2px 狭い（6px と 8px）ので、行のトグルと同じ位置（カードの端から 4px）にそろえる */
-.card-header .act { margin-right: -2px; }
-.card-header:not(:hover) .act { width: 0; margin-left: -6px; margin-right: 0; overflow: hidden; }
+/* 行のトグルと同じ大きさ・同じ位置。左に 2px 足し、印の右端を行の使用率（.ctx）の右端（カードの端から 34px）にそろえる */
+.card-header .act { margin: 0 -2px 0 2px; }
 
 /* ---- 状態の印（lucide のアイコン。どれを出すかは model.ts の statusIconName） ---- */
 /* 列は 16px のまま、押す的（保留の切り替え）は左右に 6px ずつ広げて 28px、上下は行の高さいっぱいにする */
