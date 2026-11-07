@@ -962,7 +962,7 @@ resizeHandle.addEventListener('lostpointercapture', () => {
   window.widget.resizeEnd();
 });
 
-// 背景が 0% のときは、カードやタイトルバーのない所のクリックを後ろのウィンドウへ通す
+// 背景が 0% のときは、リポジトリの枠やタイトルバーのない所のクリックを後ろのウィンドウへ通す
 let floating = false;
 let clickThrough = false;
 function setClickThrough(value: boolean) {
@@ -972,7 +972,7 @@ function setClickThrough(value: boolean) {
 }
 document.addEventListener('mousemove', (e) => {
   if (!floating) return;
-  const solid = (e.target as Element).closest('.card, .titlebar, .resize-handle, .stack-hit, .repo-header');
+  const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit');
   setClickThrough(!solid);
 });
 

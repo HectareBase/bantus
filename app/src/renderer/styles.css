@@ -39,6 +39,8 @@
   --stack: #c8c8c8;
   --stack-strong: #b4b4b4;
   --stack-edge: rgba(0, 0, 0, 0.18);
+  /* リポジトリの枠の線 */
+  --repo-frame: rgba(0, 0, 0, 0.12);
   /* デスクトップで今開いている行の透かし */
   --stripe: rgba(0, 0, 0, 0.025);
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
@@ -67,6 +69,7 @@
     --stack: #4c4c4c;
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
+    --repo-frame: rgba(255, 255, 255, 0.12);
     --stripe: rgba(255, 255, 255, 0.03);
     --ctx-full: #ff6b62;
     --ctx-track: rgba(255, 255, 255, 0.14);
@@ -147,17 +150,25 @@ html[data-edge="left"] main > * { direction: ltr; }
 main::-webkit-scrollbar { width: 6px; }
 main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3px; }
 
-/* リポジトリの見出し。カードの上に、名前とバッジを出す */
-.repo { margin-bottom: 10px; }
-/* カードは見出しより字下げして、プロジェクトの中のワークツリーだとわかるようにする */
-:root { --card-indent: 12px; }
-.repo-cards { padding-left: var(--card-indent); }
+/* リポジトリ（プロジェクト）ごとのまとまり。見出しとカードを細い線の枠で囲み、どのプロジェクトのワークツリーかを示す。
+   枠の中にはウィンドウの背景色をカードの不透明度で敷く。背景を薄くしても、枠の中はカードと同じだけしか透けない。
+   背景色はカードの色より一段暗い（ライトでは一段濃い）ので、カードの不透明度を上げても枠とカードの見分けがつく */
+.repo {
+  margin-bottom: 10px;
+  padding: 0 8px;
+  background: rgba(var(--bg-rgb), var(--card-alpha));
+  border: 1px solid var(--repo-frame);
+  border-radius: 10px;
+}
+/* 枠の外側の端からカードまでの幅（枠の線 1px と内側の余白 8px）。重なりの的の幅に使う。
+   内側の余白は、カードの外に出る重なり（幅 7px、カードに 1px かかる）と枠の線のあいだに 2px あくようにしている */
+:root { --card-indent: 9px; }
 .repo-header {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
-  padding: 4px 4px 6px 4px;
+  padding: 6px 2px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -165,12 +176,13 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .repo-icon { flex: none; display: flex; color: var(--text-tertiary); }
 .repo-icon svg { width: 13px; height: 13px; }
 .repo-name { min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* カードごとアーカイブした件数。押すとその一覧を開く */
+/* カードごとアーカイブした件数。見出しの右端（バッジの右）に置き、高さをバッジ（18px）にそろえる。押すとその一覧を開く */
 .repo-archived {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  height: 18px;
   padding: 0 5px;
   border: 1px solid var(--divider);
   border-radius: 4px;
@@ -209,7 +221,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   padding: 0 0 4px;
 }
 
-/* 以前のセッションの重なり（1 枚）。画面の内側の余白（8px）に、ウィジェットの内側の端から 2px あけて見せる。
+/* 以前のセッションの重なり（1 枚）。リポジトリの枠の内側の余白（8px）に、枠の線から 2px あけて見せる。
    カードの塗りは半透明なので、カードの下には入れない */
 /* 高さは飛び出したときのめくれ（shared/flap.ts の FLAP_HEIGHT）と同じ短いつまみ。カードが低いときは中に収める */
 .stack, .stack-hit { display: none; position: absolute; top: 6px; height: max(16px, min(32px, calc(100% - 12px))); }
@@ -221,9 +233,10 @@ html[data-edge="left"] .stack { right: -6px; border-left: 0; border-radius: 0 7p
 .card-wrap[data-fly-open] .stack { visibility: hidden; }
 /* 押せる的は見えている幅より広く、ウィジェットの端からカードの中まで少しかかる。幅を変える取っ手より上に置く */
 .stack-hit { width: 12px; z-index: 11; }
-/* 右端に置いたときは、重なりの側（左）に字下げの分の余白があるので、的をウィジェットの端まで広げる */
-html:not([data-edge="left"]) .stack-hit { left: calc(-8px - var(--card-indent)); width: calc(12px + var(--card-indent)); }
-html[data-edge="left"] .stack-hit { right: -8px; }
+/* 重なりの側には枠の線と内側の余白があるので、的をウィジェットの端まで広げる */
+.stack-hit { width: calc(12px + var(--card-indent)); }
+html:not([data-edge="left"]) .stack-hit { left: calc(-8px - var(--card-indent)); }
+html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 
 /* カードの見出し：ブランチ名と git の印だけ。押しても何も開かない */
 .card-header {
@@ -549,9 +562,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 .row[data-state="waiting"] .status svg { animation: blink 1.6s steps(8) infinite; will-change: opacity; }
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
-html.floating .card, html.floating .titlebar { border-color: rgba(128, 128, 128, 0.35); }
-/* 背景がないときは、リポジトリの見出しも小さな札にして、壁紙の上でも読めるようにする */
-html.floating .repo-header { width: fit-content; max-width: 100%; margin-bottom: 4px; padding: 2px 8px; background: var(--card); border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px; }
+html.floating .card, html.floating .titlebar, html.floating .repo { border-color: rgba(128, 128, 128, 0.35); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
