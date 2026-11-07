@@ -150,8 +150,15 @@ html[data-edge="left"] main > * { direction: ltr; }
 main::-webkit-scrollbar { width: 6px; }
 main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3px; }
 
-/* リポジトリ（プロジェクト）ごとのまとまり。見出しとカードを細い線の枠で囲み、どのプロジェクトのワークツリーかを示す */
-.repo { margin-bottom: 10px; padding: 0 8px; border: 1px solid var(--repo-frame); border-radius: 10px; }
+/* リポジトリ（プロジェクト）ごとのまとまり。見出しとカードを細い線の枠で囲み、どのプロジェクトのワークツリーかを示す。
+   枠はカードの不透明度の半分で塗る（カードは枠の塗りの上に重なるので、カードのところは枠より濃く見える） */
+.repo {
+  margin-bottom: 10px;
+  padding: 0 8px;
+  background: rgba(var(--card-rgb), calc(var(--card-alpha) * 0.5));
+  border: 1px solid var(--repo-frame);
+  border-radius: 10px;
+}
 /* 枠の外側の端からカードまでの幅（枠の線 1px と内側の余白 8px）。重なりの的の幅に使う。
    内側の余白は、カードの外に出る重なり（幅 7px、カードに 1px かかる）と枠の線のあいだに 2px あくようにしている */
 :root { --card-indent: 9px; }
@@ -554,8 +561,6 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
 html.floating .card, html.floating .titlebar, html.floating .repo { border-color: rgba(128, 128, 128, 0.35); }
-/* 背景がないときは、リポジトリの見出しも小さな札にして、壁紙の上でも読めるようにする。札は枠の線から離して置く */
-html.floating .repo-header { width: fit-content; max-width: 100%; margin: 6px 0; padding: 2px 8px; background: var(--card); border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 6px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
