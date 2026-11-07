@@ -10,7 +10,11 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 - コミットメッセージは日本語で、1 行目を `<種別>(<範囲>): <要約>` にする（例：`feat(app): ツールチップを自前で描く`）。`commit-msg` フックが検査する。詳しくは [docs/commit-messages.md](docs/commit-messages.md)
 - 画面に出る文字は `app/src/shared/strings/ja.ts` にだけ書く。`npm run lint:ja` で検査する。詳しくは [docs/strings.md](docs/strings.md)
 - 状態の判定は [docs/research/session-status.md](docs/research/session-status.md) に従う。知らない `waitingFor` の値は「対応待ち（その他）」として扱う
-- 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める（`start_session` に `use_worktree: true` と `source_branch: main` を渡す。`origin/main` はローカルの `main` より古いことがあり、省略すると古い状態から切られる）。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
+- 機能の追加や修正は、main のチェックアウトで直接進めない。ワークツリーを作り、その作業フォルダで新しいセッションを始めて進める。すでにワークツリーのセッションにいるときはそのまま進める。質問への回答、調査、ドキュメントだけの小さな変更は今のセッションでよい
+  - 新しいワークツリーは、手元のブランチの最新から切る。リモートの写し（`origin/...`）は手元より古いことが多く、切り元を指定しないと古い状態から切られる
+  - 作る前に、分岐元をユーザーに見せて確かめる。候補は今のセッションのブランチ（`git branch --show-current`）と `main` で、それぞれの最新のコミット（`git log -1 --format="%h %s" <ブランチ>`）と、今のブランチが `main` にない変更を持っていればその数を添える。`AskUserQuestion` で選んでもらい、答えを待ってから作る
+  - すぐ始めるとき（`initiation` が `user_asked` か `offer`）は、`start_session` に `use_worktree: true` と `source_branch: <選んだブランチ>` を渡す
+  - 提案カード（`initiation: "own_initiative"`）では `source_branch` が捨てられる。だからブリーフの最初の手順に「作業の前に `git merge --ff-only <選んだブランチ>` で追いつき、`git log -1 <選んだブランチ>` と同じコミットにいることを確かめる」と、ブランチ名を書き入れて書く
 
 ## フォルダ
 | フォルダ | 中身 |
