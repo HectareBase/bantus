@@ -22,6 +22,8 @@ const NAMES = [
   'file-pen-line', 'file-plus', 'arrow-up', 'arrow-down',
   // 保留（docs/design/hold.md）：状態の印、乗せたときの切り替えの印、メモの枠
   'circle-pause', 'circle-play', 'pencil',
+  // HTML ビューア（docs/design/html-viewer.md）：設定のカテゴリ、見出しのボタン
+  'panel-bottom', 'rotate-cw', 'external-link', 'chevron-down', 'chevron-up',
 ];
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());

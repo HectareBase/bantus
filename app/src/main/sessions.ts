@@ -228,7 +228,7 @@ function cycleMs(): number {
 
 /**
  * 開発用：環境変数 WIDGET_FIXTURE に見本データ（app/fixtures/*.json）を指定すると、実データの代わりに表示する。
- * 見本データの minutesAgo は「何分前に動きがあったか」。ファイルに書いた順を作った順とする（createdAt と通し番号）。
+ * 見本データの minutesAgo は「何分前に動きがあったか」。workDir は見本データのファイルから見た相対パスで書ける。ファイルに書いた順を作った順とする（createdAt と通し番号）。
  * WIDGET_FIXTURE_CYCLE（秒）を付けると、その間隔ですべてのセッションの状態を 1 つずつ進める（状態の変化と並べ替えを確かめる）。
  */
 export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): SessionView[] {
@@ -239,6 +239,8 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
     ...s,
     // 前の形の見本データ（遅れとマージ済みがない）も読めるようにする
     ...(s.changes && { changes: { behind: 0, merged: false, ...s.changes } }),
+    // 作業フォルダ（HTML ビューアの見本）は、見本データのファイルから見た相対パスで書ける
+    ...(typeof s.workDir === 'string' && s.workDir && { workDir: resolve(dirname(path), s.workDir) }),
     createdAt: i + 1,
     lastActivityAt: now - (Number(minutesAgo) || 0) * 60_000,
   }));

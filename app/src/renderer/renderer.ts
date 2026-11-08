@@ -56,6 +56,7 @@ import { applyStatusColors } from './status-colors.js';
 import { fillStrings } from './strings.js';
 import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
+import { initViewer } from './viewer.js';
 
 interface RowRefs {
   el: HTMLLIElement;
@@ -116,6 +117,7 @@ const repoTemplate = document.getElementById('repo-template') as HTMLTemplateEle
 fillIcons(document);
 fillStrings(document);
 const tooltips = initTooltips();
+const viewer = initViewer();
 
 const rows = new Map<string, RowRefs>();
 const cards = new Map<string, CardRefs>();
@@ -899,7 +901,8 @@ function render(sessions: SessionView[]) {
   }
   for (const [key, refs] of cards) if (!refs.el.isConnected) cards.delete(key);
   for (const [key, refs] of repos) if (!refs.el.isConnected) repos.delete(key);
-  applyFocus();
+  // HTML ビューアは、今開いているセッションの作業フォルダのファイルを出す
+  viewer.setTarget(applyFocus());
   updateFlyout();
   reportTargets();
   tooltips.prune();
@@ -983,7 +986,7 @@ function setClickThrough(value: boolean) {
 }
 document.addEventListener('mousemove', (e) => {
   if (!floating) return;
-  const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit');
+  const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit, .viewer');
   setClickThrough(!solid);
 });
 
@@ -1014,6 +1017,7 @@ function applyLayout(layout: WidgetLayout) {
   render(latest);
   const root = document.documentElement;
   root.dataset.edge = edge;
+  viewer.applyLayout(layout);
   reportTargets();
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));

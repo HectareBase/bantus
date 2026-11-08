@@ -25,6 +25,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [worktree-cards.md](design/worktree-cards.md) | ワークツリー単位のカードと Bantus のアーカイブ（実現性の確認と仕様） |
 | [packaging-plan.md](design/packaging-plan.md) | exe 化とインストーラーの計画（electron-builder、NSIS）と、確かめた結果 |
 | [hold.md](design/hold.md) | 保留（あとで再開するセッションとワークツリーに、ピンクの印と理由のメモを付ける）の実装イメージ |
+| [html-viewer.md](design/html-viewer.md) | HTML ビューア（今開いているセッションの作業フォルダの HTML を、カードの一覧の下に出す） |
 
 ## 開発の決まり
 | 文書 | 内容 |

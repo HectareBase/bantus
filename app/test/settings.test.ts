@@ -154,8 +154,8 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → 見た目 → カードの表示 → git → 通知 → 情報', () =>
-    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'git', 'notify', 'about']));
+  it('左の一覧は 全体 → 見た目 → カードの表示 → git → 通知 → HTML ビューア → 情報', () =>
+    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'git', 'notify', 'viewer', 'about']));
   it('git は リモートの取得 → 変更の印', () =>
     assert.deepEqual(layout('git'), [
       ['リモートの取得', ['gitFetch', 'gitFetchMinutes', 'gitFetchNow']],

@@ -21,6 +21,25 @@
   <!-- リポジトリの見出しと、ワークツリーごとのカード。data-icon の要素には icon.ts が lucide のアイコンを入れる -->
   <main id="cards"></main>
 
+  <!-- HTML ビューア（docs/design/html-viewer.md）：高さを変えるつまみ、見出し、HTML の場所。
+       HTML はメインプロセスが #viewer-slot の上に別のビュー（WebContentsView）で重ねる。出せないときは下の文字が見える -->
+  <section id="viewer" class="viewer" hidden data-i18n-aria-label="viewer.aria">
+    <div id="viewer-grip" class="viewer-grip" data-i18n-tip="viewer.resize"></div>
+    <div class="viewer-box">
+      <div class="viewer-header">
+        <span class="viewer-file"></span>
+        <span class="viewer-place"></span>
+        <span class="spacer"></span>
+        <button id="viewer-reload" class="icon-button" data-i18n-tip="viewer.reload" data-i18n-aria-label="viewer.reload" data-icon="rotate-cw"></button>
+        <button id="viewer-external" class="icon-button" data-i18n-tip="viewer.openExternal" data-i18n-aria-label="viewer.openExternal" data-icon="external-link"></button>
+        <button id="viewer-collapse" class="icon-button" aria-expanded="true"></button>
+      </div>
+      <div id="viewer-slot" class="viewer-slot">
+        <div class="viewer-empty"><span class="viewer-message"></span><span class="viewer-path"></span></div>
+      </div>
+    </div>
+  </section>
+
   <!-- リポジトリ：見出し（名前、バッジ、カードごとアーカイブした件数）とカードの並び。件数は右端に置く -->
   <template id="repo-template">
     <section class="repo">

@@ -1,6 +1,7 @@
 // 設定項目の定義。項目やカテゴリを足すときは、ここに足すだけで設定画面にも出る。
 
 import { ja } from './strings/ja.js';
+import { checkViewerPath } from './viewer-path.js';
 
 const T = ja.settings;
 
@@ -86,6 +87,19 @@ export interface Settings {
   holds: Record<string, HoldMark>;
   /** 保留にしたカード（カードの目印 → 印）。設定画面には出さず、カードの見出しのアイコンで切り替える */
   heldCards: Record<string, HoldMark>;
+  /** カードの一覧の下に HTML ビューアを出す（docs/design/html-viewer.md） */
+  viewerEnabled: boolean;
+  /**
+   * ビューアに出すファイル。作業フォルダ（元のフォルダならリポジトリのルート）から見た相対パスで、区切りは /。空ならまだ決めていない。
+   * すべてのリポジトリで共通（リポジトリごとに変えるときは、リポジトリの目印からパスへの表を足す）
+   */
+  viewerPath: string;
+  /** ファイルが変わったら読み込み直す */
+  viewerAutoReload: boolean;
+  /** ビューアの HTML の高さ（CSS px）。設定画面には出さず、つまみのドラッグで変える。上限はウィンドウの高さで決まる（画面側） */
+  viewerHeight: number;
+  /** ビューアを畳んでいる（見出しだけを出す）。設定画面には出さず、見出しのボタンで切り替える */
+  viewerCollapsed: boolean;
   /** 設定ウィンドウを最後に閉じたときの位置と大きさ（最大化前の大きさ）。設定画面には出さない */
   settingsWindow?: WindowBounds;
 }
@@ -179,6 +193,11 @@ export const DEFAULT_SETTINGS: Settings = {
   archivedCards: {},
   holds: {},
   heldCards: {},
+  viewerEnabled: false,
+  viewerPath: '',
+  viewerAutoReload: true,
+  viewerHeight: 240,
+  viewerCollapsed: false,
 };
 
 /**
@@ -198,10 +217,23 @@ export function clampWidth(width: number, areaWidth: number): number {
   return Math.min(widthLimit(areaWidth), Math.max(WIDTH_MIN, Math.round(width)));
 }
 
+/**
+ * ビューアの HTML の高さの範囲（CSS px）。上限は保存値の行き過ぎを切るだけのもの。
+ * 実際の上限は「ウィンドウの高さ − VIEWER_ROOM」（カードの一覧と見出しの分を残す。画面側で決める）
+ */
+export const VIEWER_HEIGHT_MIN = 80;
+export const VIEWER_HEIGHT_MAX = 4000;
+export const VIEWER_ROOM = 160;
+
+/** ウィンドウの高さ（CSS px）に合わせて、ビューアの高さを範囲に収める。ウィンドウが低いときは下限を優先する */
+export function clampViewerHeight(height: number, windowHeight: number): number {
+  return Math.max(VIEWER_HEIGHT_MIN, Math.min(Math.round(height), windowHeight - VIEWER_ROOM));
+}
+
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
 export const TOOLTIP_OFF_MS = 2000;
 
-export type CategoryId = 'general' | 'look' | 'cards' | 'git' | 'notify' | 'about';
+export type CategoryId = 'general' | 'look' | 'cards' | 'git' | 'notify' | 'viewer' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -217,6 +249,7 @@ export const CATEGORIES: Category[] = [
   { id: 'cards', label: T.categories.cards, icon: 'list' },
   { id: 'git', label: T.categories.git, icon: 'git-branch' },
   { id: 'notify', label: T.categories.notify, icon: 'bell' },
+  { id: 'viewer', label: T.categories.viewer, icon: 'panel-bottom' },
   { id: 'about', label: T.categories.about, icon: 'info' },
 ];
 
@@ -252,6 +285,7 @@ export type SettingDef =
       | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
+      | 'viewerEnabled' | 'viewerAutoReload'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -262,6 +296,11 @@ export type SettingDef =
   | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
+  /**
+   * 1 行の文字。stacked（名前の下）に出し、入力を確定したとき（change）に check で検査する。
+   * だめなら理由を入力欄の下に出し、保存しない。保存された値も check を通らなければ既定値に戻す
+   */
+  | (Base<'viewerPath'> & { type: 'text'; placeholder?: string; check: (value: string) => { value: string } | { error: string } })
   /** ボタン。押すとメインプロセスで action を動かし、横に最後の結果を出す。設定の値は持たない */
   | (Omit<Base<keyof Settings>, 'key'> & { type: 'action'; key: ActionId; button: string });
 
@@ -431,6 +470,24 @@ export const SETTING_DEFS: SettingDef[] = [
     ...T.items.flash,
     options: [{ value: true, label: T.options.flash }, { value: false, label: T.options.noFlash }],
   },
+  {
+    key: 'viewerEnabled', category: 'viewer', group: T.groups.viewerShow, type: 'segmented',
+    ...T.items.viewerEnabled,
+    options: [{ value: true, label: T.options.showMark }, { value: false, label: T.options.hideMark }],
+  },
+  {
+    key: 'viewerPath', category: 'viewer', group: T.groups.viewerFile, type: 'text', enabledBy: 'viewerEnabled',
+    ...T.items.viewerPath,
+    check: (value) => {
+      const r = checkViewerPath(value);
+      return 'path' in r ? { value: r.path } : { error: T.viewerPathProblems[r.problem] };
+    },
+  },
+  {
+    key: 'viewerAutoReload', category: 'viewer', group: T.groups.viewerFile, type: 'segmented', enabledBy: 'viewerEnabled',
+    ...T.items.viewerAutoReload,
+    options: [{ value: true, label: T.options.reload }, { value: false, label: T.options.noReload }],
+  },
 ];
 
 /** 保存されていた値や画面から届いた値を、定義に合う値にそろえる。合わないものは既定値に戻す */
@@ -452,6 +509,12 @@ export function normalizeSettings(input: unknown): Settings {
       case 'status-colors':
         out.statusColors = normalizeStatusColors(v);
         break;
+      case 'text':
+        if (typeof v === 'string') {
+          const r = def.check(v);
+          if ('value' in r) out[def.key] = r.value;
+        }
+        break;
       case 'action':
         break;
     }
@@ -460,6 +523,9 @@ export function normalizeSettings(input: unknown): Settings {
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
+  const vh = src.viewerHeight;
+  if (typeof vh === 'number' && Number.isFinite(vh)) out.viewerHeight = Math.min(VIEWER_HEIGHT_MAX, Math.max(VIEWER_HEIGHT_MIN, Math.round(vh)));
+  if (typeof src.viewerCollapsed === 'boolean') out.viewerCollapsed = src.viewerCollapsed;
   out.archive = normalizeMarks(src.archive, (id) => SESSION_KEY_ID.test(id));
   out.archivedCards = normalizeMarks(src.archivedCards, isCardKey);
   out.holds = normalizeHolds(src.holds, (id) => SESSION_KEY_ID.test(id));

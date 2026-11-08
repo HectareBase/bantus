@@ -154,7 +154,33 @@ export interface WidgetApi {
   showCardMenu(key: string): void;
   /** ウィジェットのタイトルの右クリックメニュー（アプリの終了） */
   showTitleMenu(): void;
+  /**
+   * HTML ビューアに出すセッション（今開いているもの）。パスはメインプロセスが自分の一覧から引く。
+   * 同じ作業フォルダのセッションに変わっても、表示は変わらない（docs/design/html-viewer.md）
+   */
+  setViewerTarget(id: string | undefined): void;
+  /** HTML を出す場所（ウィジェットの中の座標、CSS px）。出さないときは undefined */
+  setViewerBounds(rect: TipRect | undefined): void;
+  /** 今のファイルを読み込み直す（スクロールの位置は保つ） */
+  reloadViewer(): void;
+  /** 今のファイルをいつものブラウザーで開く */
+  openViewerExternal(): void;
+  /** ビューアの高さと畳んだ状態を保存する。保存され、onLayout で画面に戻ってくる */
+  setViewerLayout(patch: { viewerHeight?: number; viewerCollapsed?: boolean }): void;
+  /** ビューアの様子（何を出しているか、出せない理由）が変わったとき */
+  onViewerState(listener: (state: ViewerState) => void): void;
 }
+
+/**
+ * HTML ビューアの様子（docs/design/html-viewer.md）。place はワークツリー名（元のフォルダならブランチ名）。
+ * off：ビューアを使っていない、noSession：開いているセッションがない、noPath：ファイルの場所を決めていない、
+ * noDir：セッションに作業フォルダがない、archived：カードをアーカイブした、missing：ファイルがない（path は探した場所）、ok：表示している
+ */
+export type ViewerState =
+  | { kind: 'off' | 'noSession' | 'noPath' }
+  | { kind: 'noDir' | 'archived'; file: string; place: string }
+  | { kind: 'missing'; file: string; place: string; path: string }
+  | { kind: 'ok'; file: string; place: string };
 
 export interface ToastRequest {
   /** クリックで開くセッションの ID */
@@ -297,7 +323,7 @@ export type WidgetLayout = Pick<
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
-  | 'tooltipDelayMs' | 'showChanges'
+  | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerHeight' | 'viewerCollapsed'
 >;
 
 export interface DisplayOption {

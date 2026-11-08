@@ -22,6 +22,8 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | `%USERPROFILE%\.claude\projects\<フォルダ>\<cliSessionId>.jsonl` の**末尾だけ**（64 KB から、見つからなければ 4 MB まで広げる） | 最後のアシスタントの発言（`type` が `assistant`、`isSidechain` でないもの）の `message.usage` の `input_tokens`、`cache_read_input_tokens`、`cache_creation_input_tokens`。`local_*.json` に `model` がなければ `message.model` | コンテキストの使用量（分子）。窓の大きさ（分母）はモデルの対応表から決める推定で、表にないモデルは割合を出さない。大きさと更新時刻が変わったときだけ読み直す。アーカイブ済みのセッションの記録は読まない。発言の中身は使わず、どこにも送らない | `src/main/context-usage.ts` |
 | 作業フォルダの `.git`（ファイル）と `.git/HEAD`（ワークツリーなら `.git/worktrees/<名前>/HEAD`） | 今のブランチ名 | 元のフォルダのカード（家のアイコン）と、リポジトリの外のワークツリーのカードの見出しに出す。どちらも `local_*.json` の `branch` には入らない | `src/main/sessions.ts` |
 
+| 作業フォルダの中の HTML ファイル（設定の「ファイルの場所」） | ファイルそのもの | HTML ビューアに出す。設定でオンにしたときだけ（既定はオフ）。今開いているセッションの作業フォルダの中だけで、ファイルの入ったフォルダを `fs.watch` で見張る。詳しくは [html-viewer.md](html-viewer.md) | `src/main/viewer.ts` |
+
 - 上の 2 つのフォルダは `fs.watch` で見張り、変わったら読み直します。取りこぼしに備えて、30 秒ごとにも読み直します。
 - 書き込み途中のファイルを読むことがあるので、読めなかったファイルは飛ばし、次の読み直しを待ちます。
 - 行をクリックしてから本体が `lastFocusedAt` を書き込むまで、3 秒以上かかることがあります。その間はクリックした行を仮に今開いているものとして塗ります（`src/renderer/model.ts` の `resolveFocus`）。仮の値は、ファイルがクリックしたセッションに追いついたとき、クリックより新しい `lastFocusedAt` を持つ別のセッションが出たとき（本体で別のセッションを開いた）、クリックしたセッションが一覧から消えたときに外します。時間では外さないので、書き込みが遅れても前の行に戻って揺れることはありません。本体で開けなかったときに残り続けないよう、30 秒の期限だけは残しています。
@@ -35,6 +37,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | `git -C <フォルダ> -c credential.interactive=never fetch --no-auto-gc --no-auto-maintenance --no-write-fetch-head --quiet <リモート>`（`GIT_TERMINAL_PROMPT=0`、`GCM_INTERACTIVE=never`） | 設定の「定期的に取得する」が**オンのときだけ**（既定はオフ）。アーカイブしていないカードがあるリポジトリごとに、選んだ間隔（5 / 10 / 30 分）で動かす。ユーザーがリポジトリに設定したリモートと git の通信をする。ログインの画面は出さない。詳しくは [git-fetch.md](git-fetch.md) | `src/main/git-fetch.ts` |
 | `powershell.exe`（起動したら動かし続ける） | 前面のウィンドウのプロセス名が `claude` かを調べる（`GetForegroundWindow`）。プロセス名だけを受け取り、ウィンドウの中身は読まない | `src/main/foreground.ts` |
 | `claude://` のリンク | セッションを開く | `src/main/main.ts` |
+| HTML ビューアに出したページの JavaScript | 設定でオンにしたときだけ。preload のない別のビュー（sandbox、保存しないパーティション）で動かし、ページの移動、新しいウィンドウ、権限の要求、ダウンロードは止める。http(s) のリンクはいつものブラウザーに渡す（[html-viewer.md](html-viewer.md)） | `src/main/viewer.ts` |
 
 ## 書くもの
 ウィジェットが書き込むのは、自分のフォルダだけです。ただし、設定で取得をオンにしたときは、git がリポジトリの `.git` の中のリモートの写し（`refs/remotes/<リモート>/*`）と、取ってきたオブジェクトを書きます。作業中のファイル、インデックス、ローカルのブランチ、HEAD、stash、`FETCH_HEAD` には触れません（[git-fetch.md](git-fetch.md)）。

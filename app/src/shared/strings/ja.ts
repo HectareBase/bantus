@@ -146,6 +146,22 @@ export const ja = {
     badgeHeld: (n: number) => `保留 ${n}`,
   },
 
+  /** HTML ビューア（ウィジェットの下。docs/design/html-viewer.md） */
+  viewer: {
+    aria: 'HTML ビューア',
+    resize: 'ドラッグで高さを変える',
+    reload: '読み込み直す',
+    openExternal: 'ブラウザーで開く',
+    collapse: '畳む',
+    expand: '広げる',
+    /** 開いているセッションがまだないとき */
+    noSession: '開いているセッションがありません',
+    noPath: '設定でファイルの場所を指定してください',
+    noDir: 'このセッションでは表示できません',
+    missing: 'ファイルがありません',
+    archived: 'このカードはアーカイブしています',
+  },
+
   /** 以前のセッションの一覧（flyout） */
   flyout: {
     startedOnMain: 'main で始めたセッション',
@@ -177,6 +193,7 @@ export const ja = {
       cards: 'カードの表示',
       git: 'git',
       notify: '通知',
+      viewer: 'HTML ビューア',
       about: '情報',
     },
     groups: {
@@ -195,6 +212,8 @@ export const ja = {
       notifyWhen: '知らせるとき',
       sound: '音',
       windowsNotify: 'Windows の通知',
+      viewerShow: '表示',
+      viewerFile: 'ファイル',
     },
     /** ツールチップの時間の見せ方 */
     tooltipDelay: {
@@ -240,6 +259,20 @@ export const ja = {
       soundVolume: { label: '音量' },
       toast: { label: 'トースト通知', description: 'クリックするとそのセッションを開く。音は上の「音」の設定に従う' },
       flash: { label: 'タスクバーの点滅', description: '3 秒ほどで止まる。ウィジェットが前面にあるときは点滅しない' },
+      viewerEnabled: { label: 'カードの下に HTML を出す', description: '今開いているセッションの作業フォルダにある HTML ファイルを表示する' },
+      viewerPath: {
+        label: 'ファイルの場所',
+        description: '作業フォルダから見た相対パス。元のフォルダのセッションでは、リポジトリのルートから見る。すべてのリポジトリで共通',
+        placeholder: 'docs/index.html',
+      },
+      viewerAutoReload: { label: '変更を表示に反映する', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
+    },
+    /** ファイルの場所を受け付けない理由（入力欄の下に出す） */
+    viewerPathProblems: {
+      absolute: '絶対パスは使えません。作業フォルダから見た相対パスで書いてください',
+      outside: '作業フォルダの外は指定できません',
+      extension: '.html か .htm のファイルを指定してください',
+      invalid: 'ファイル名に使えない文字が入っています',
     },
     /** 選択肢の文字 */
     options: {
@@ -275,6 +308,8 @@ export const ja = {
       hideMark: '出さない',
       count: '数える',
       noCount: '数えない',
+      reload: '反映する',
+      noReload: '反映しない',
     },
     /** 「今すぐ取得」の横に出す、取得の様子 */
     fetchStatus: {
