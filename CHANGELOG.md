@@ -4,6 +4,19 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.4.0]
+
+### 追加
+- **HTML ビューア**：カードの一覧の下に、作業フォルダからの相対パスで指定した HTML を出す。今開いているセッションのワークツリーに合わせて切り替わり、戻したときはスクロールの位置が残る。ファイルを書き換えると読み込み直す。高さはドラッグで変えられ、畳むこともできる。設定の「ビューア」カテゴリでオンにする（既定はオフ）
+- **右クリックのメニュー**：カードの見出しから作業フォルダをエクスプローラーかターミナルで開ける。ウィジェットのタイトルからアプリを終了できる
+- **分岐元**：以前のセッションの一覧に、ワークツリーの分岐元の行を出す。分岐元が元のフォルダのブランチと違うカードは、以前のセッションがなくても一覧を開ける
+
+### 変更
+- **ウィジェットの幅**：固定の上限（480px）をなくし、画面の作業領域の半分まで広げられるようにした
+- **リポジトリの枠**：見出しとカードをリポジトリごとに細い線の枠で囲み、カードの不透明度に合わせて塗る。アーカイブの件数は見出しの右端に置く
+- **マージ済みの判定**：分岐元ではなく main に入ったワークツリーも、マージ済みにする
+- **git の印**：見出しの印の枠を広げ、カードと同じ色で塗る
+
 ## [0.3.0]
 
 ### 追加
@@ -67,7 +80,8 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 - Claude デスクトップのデータを読むだけで、書き換えはしない。読むものは [docs/design/data-usage.md](docs/design/data-usage.md) にある
 - 読み取っているファイルの形式は公式には公開されていないので、Claude デスクトップの更新で動かなくなることがある。調べた版は、デスクトップアプリ 4.4212.0、CLI 2.1.309
 
-[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HectareBase/bantus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HectareBase/bantus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HectareBase/bantus/releases/tag/v0.2.0
 [0.1.0]: https://github.com/HectareBase/bantus/releases/tag/v0.1.0
