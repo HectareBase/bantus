@@ -294,11 +294,13 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
   color: var(--text-secondary);
   outline: none;
 }
-/* カードの見出しでは、見出しの上端から垂れ下げる（上の辺はなく、下の角を丸くする）。縦は見出しの中央より上に寄る */
+/* カードの見出しでは、見出しの上端から垂れ下げる（上の辺はなく、下の角を丸くする）。縦は見出しの中央より上に寄る。
+   カードの本体と同じ不透明の色で塗り、見出しの帯から垂れたタブに見せる */
 .card-header .changes {
   align-self: flex-start;
   margin-top: -5px;
-  padding: 3px 8px 4px;
+  padding: 3px 12px 4px;
+  background: rgb(var(--card-rgb));
   border-top: 0;
   border-radius: 0 0 7px 7px;
 }
