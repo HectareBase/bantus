@@ -15,7 +15,7 @@ import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from 
 import { scaleRect, tipBounds } from './tip-place';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
-import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { SESSION_KEY_ID, clampWidth, isCardKey, widthLimit, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
 import type { AboutInfo, DisplayOption, SessionView, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
 
@@ -173,7 +173,7 @@ function targetDisplay(s: Settings): Display {
 function sidebarBounds() {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
-  const width = Math.min(dragWidth ?? s.width, Math.floor(area.width / 2));
+  const width = Math.min(dragWidth ?? s.width, widthLimit(area.width));
   const x = s.edge === 'left' ? area.x : area.x + area.width - width;
   return { x, y: area.y, width, height: area.height };
 }
@@ -514,13 +514,13 @@ function showTitleMenu() {
   Menu.buildFromTemplate([{ label: ja.menu.quit, click: () => app.quit() }]).popup({ window: win });
 }
 
-/** カーソルの位置から、内側の端がそこに来る幅を出す */
+/** カーソルの位置から、内側の端がそこに来る幅を出す。作業領域の半分で止める（見た目の幅と合わせる） */
 function widthAtCursor(): number {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
-  return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
+  return clampWidth(w, area.width);
 }
 
 /**

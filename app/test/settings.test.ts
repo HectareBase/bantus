@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, normalizeColor, normalizeNote, normalizeSettings,
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, normalizeColor, normalizeNote, normalizeSettings,
 } from '../src/shared/settings';
 
 describe('git の設定', () => {
@@ -19,6 +19,20 @@ describe('git の設定', () => {
   it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
   it('ボタンは設定の値を持たない', () => assert.equal('gitFetchNow' in normalizeSettings({ gitFetchNow: true }), false));
+});
+
+describe('ウィジェットの幅', () => {
+  it('保存された幅は 480px を超えても残す', () => assert.equal(normalizeSettings({ width: 900 }).width, 900));
+  it('保存された幅の行き過ぎと小さすぎは切る', () => {
+    assert.equal(normalizeSettings({ width: 100000 }).width, 3840);
+    assert.equal(normalizeSettings({ width: 10 }).width, WIDTH_MIN);
+  });
+  it('ドラッグの幅は作業領域の半分で止める', () => {
+    assert.equal(clampWidth(1500, 2560), 1280);
+    assert.equal(clampWidth(700.4, 2560), 700);
+    assert.equal(clampWidth(50, 2560), WIDTH_MIN);
+  });
+  it('作業領域が狭いときは半分を優先する', () => assert.equal(clampWidth(300, 300), 150));
 });
 
 describe('normalizeSettings の settingsWindow', () => {

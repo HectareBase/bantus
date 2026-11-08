@@ -181,9 +181,22 @@ export const DEFAULT_SETTINGS: Settings = {
   heldCards: {},
 };
 
-/** ドラッグで変えられる幅の範囲（px） */
+/**
+ * 幅の範囲（px）。実際の上限は、置く画面の作業領域の半分（widthLimit）。
+ * WIDTH_MAX は保存された値の行き過ぎを切るだけのもの
+ */
 export const WIDTH_MIN = 200;
-export const WIDTH_MAX = 480;
+export const WIDTH_MAX = 3840;
+
+/** 作業領域の幅から、ウィジェットの幅の上限を出す（半分まで） */
+export function widthLimit(areaWidth: number): number {
+  return Math.floor(areaWidth / 2);
+}
+
+/** ドラッグ中の幅を範囲に収める。下限は WIDTH_MIN、上限は作業領域の半分（作業領域が狭いときは半分を優先する） */
+export function clampWidth(width: number, areaWidth: number): number {
+  return Math.min(widthLimit(areaWidth), Math.max(WIDTH_MIN, Math.round(width)));
+}
 
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
 export const TOOLTIP_OFF_MS = 2000;
