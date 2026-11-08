@@ -564,7 +564,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 .row[data-state="waiting"] .status svg { animation: blink 1.6s steps(8) infinite; will-change: opacity; }
 
 /* 背景が 0% のときは、どんな壁紙の上でも輪郭がわかるよう、カードとタイトルバーの枠を少し強くする */
-html.floating .card, html.floating .titlebar, html.floating .repo { border-color: rgba(128, 128, 128, 0.35); }
+html.floating .card, html.floating .titlebar, html.floating .repo, html.floating .viewer-box { border-color: rgba(128, 128, 128, 0.35); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes arc {
@@ -599,3 +599,54 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 }
 html[data-edge="left"] .resize-handle { left: auto; right: 0; }
 html.resizing, html.resizing * { cursor: ew-resize !important; }
+
+/* ---- HTML ビューア（docs/design/html-viewer.md）：カードの一覧の下に、つまみ、細い見出し、HTML の順に置く ----
+   HTML はメインプロセスが .viewer-slot の上に別のビューで重ねる。出せないときは .viewer-empty の文字が見える */
+.viewer { flex: none; display: flex; flex-direction: column; margin: 0 8px 8px; }
+.viewer[hidden] { display: none; }
+/* 上下にドラッグして高さを変えるつまみ。真ん中に短い線を出す */
+.viewer-grip { flex: none; height: 10px; display: grid; place-items: center; cursor: ns-resize; }
+.viewer-grip::before { content: ""; width: 32px; height: 3px; border-radius: 2px; background: var(--text-tertiary); opacity: 0.5; }
+.viewer-grip:hover::before { opacity: 1; }
+.viewer[data-collapsed] .viewer-grip { visibility: hidden; cursor: default; }
+html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
+.viewer-box {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 2px 0 10px;
+  flex: none;
+  background: var(--header);
+  font-size: 12px;
+  min-width: 0;
+}
+.viewer[data-collapsed] .viewer-header { background: transparent; }
+.viewer-file { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.viewer-place { margin-left: 6px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1000 auto; }
+.viewer-header .icon-button { width: 26px; height: 24px; flex: none; }
+.viewer-header .icon-button:disabled { opacity: 0.4; background: transparent; }
+.viewer-slot { position: relative; height: var(--viewer-h, 240px); border-top: 1px solid var(--divider); }
+.viewer[data-collapsed] .viewer-slot { display: none; }
+.viewer-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.viewer-path { font-size: 11px; color: var(--text-tertiary); word-break: break-all; user-select: text; }
+.viewer[data-kind="ok"] .viewer-empty { display: none; }

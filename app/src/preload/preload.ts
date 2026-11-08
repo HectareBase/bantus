@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Settings, StatusColors } from '../shared/settings';
-import type { FetchStatus, FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, WidgetApi, WidgetLayout } from '../shared/types';
+import type { FetchStatus, FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, ViewerState, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
   onSessions: (listener) => {
@@ -52,6 +52,14 @@ const widget: WidgetApi = {
   setFetchCards: (keys) => ipcRenderer.send('fetch-cards', keys),
   showCardMenu: (key) => ipcRenderer.send('card-menu', key),
   showTitleMenu: () => ipcRenderer.send('title-menu'),
+  setViewerTarget: (id) => ipcRenderer.send('viewer-target', id ?? null),
+  setViewerBounds: (rect) => ipcRenderer.send('viewer-bounds', rect ?? null),
+  reloadViewer: () => ipcRenderer.send('viewer-reload'),
+  openViewerExternal: () => ipcRenderer.send('viewer-open-external'),
+  setViewerLayout: (patch) => ipcRenderer.send('viewer-layout', patch),
+  onViewerState: (listener) => {
+    ipcRenderer.on('viewer:state', (_e, state: ViewerState) => listener(state));
+  },
 };
 
 const tipApi: TipApi = {

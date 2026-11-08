@@ -2,7 +2,7 @@
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
@@ -13,11 +13,13 @@ import { startSelfUpdate } from './self-update';
 import { folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
+import { createViewer, type Viewer } from './viewer';
+import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from './viewer-target';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
-import { SESSION_KEY_ID, WIDTH_MAX, WIDTH_MIN, isCardKey, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { SESSION_KEY_ID, clampWidth, isCardKey, widthLimit, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
-import type { AboutInfo, DisplayOption, SessionView, TipRect, ToastRequest, WidgetLayout } from '../shared/types';
+import type { AboutInfo, DisplayOption, SessionView, TipRect, ToastRequest, ViewerState, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
@@ -85,6 +87,11 @@ const gitStatus = createGitStatus(() => sendSessions(), undefined, undefined, un
 /** 最後に読んだセッションの一覧と、画面が出している（アーカイブしていない）カードの目印。取得の対象を決めるのに使う */
 let lastSessions: SessionView[] = [];
 let fetchCards = new Set<string>();
+/** 画面から出しているカードの目印が一度でも届いたか（届くまでは、アーカイブしたカードを見分けられない） */
+let fetchCardsKnown = false;
+/** HTML ビューア（viewer.ts）と、画面が今開いているセッション */
+let viewer: Viewer | undefined;
+let viewerTargetId: string | undefined;
 /** 前に当てた git の設定（変わったときだけ調べ直す） */
 let appliedGit: Pick<Settings, 'gitFetch' | 'countUntracked'> | undefined;
 
@@ -173,7 +180,7 @@ function targetDisplay(s: Settings): Display {
 function sidebarBounds() {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
-  const width = Math.min(dragWidth ?? s.width, Math.floor(area.width / 2));
+  const width = Math.min(dragWidth ?? s.width, widthLimit(area.width));
   const x = s.edge === 'left' ? area.x : area.x + area.width - width;
   return { x, y: area.y, width, height: area.height };
 }
@@ -181,9 +188,11 @@ function sidebarBounds() {
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges } = s;
+  const { viewerEnabled, viewerPath, viewerHeight, viewerCollapsed } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges,
+    viewerEnabled, viewerPath, viewerHeight, viewerCollapsed,
   };
 }
 
@@ -217,6 +226,7 @@ function applyZoom() {
   for (const w of [win, tipWin, flyout?.window()]) {
     if (w && !w.isDestroyed()) w.webContents.setZoomFactor(zoom);
   }
+  viewer?.applyZoom();
   if (changed) {
     hideTip();
     flyout?.hide();
@@ -514,13 +524,13 @@ function showTitleMenu() {
   Menu.buildFromTemplate([{ label: ja.menu.quit, click: () => app.quit() }]).popup({ window: win });
 }
 
-/** カーソルの位置から、内側の端がそこに来る幅を出す */
+/** カーソルの位置から、内側の端がそこに来る幅を出す。作業領域の半分で止める（見た目の幅と合わせる） */
 function widthAtCursor(): number {
   const s = getSettings();
   const area = targetDisplay(s).workArea;
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
-  return Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
+  return clampWidth(w, area.width);
 }
 
 /**
@@ -610,12 +620,49 @@ function updateNotice(message: string | undefined) {
   if (Notification.isSupported()) new Notification({ title: APP_LABEL, body: message, icon: ICON }).show();
 }
 
+/** ビューアが読むファイル。realpath をとる（リンクをたどった先が作業フォルダの中かを確かめるため） */
+const viewerFs: ViewerFs = {
+  realFile: (path) => {
+    try {
+      return statSync(path).isFile() ? realpathSync.native(path) : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+  realDir: (path) => {
+    try {
+      return statSync(path).isDirectory() ? realpathSync.native(path) : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+};
+
+/** HTML ビューアに出すものを決め直す（一覧、設定、出しているカード、開いているセッションが変わったとき） */
+function refreshViewer(force = false) {
+  if (!viewer) return;
+  const s = getSettings();
+  const shown = fetchCardsKnown ? fetchCards : undefined;
+  if (!s.viewerEnabled) {
+    viewer.update({ state: { kind: 'off' } }, new Set(), s.viewerAutoReload, force);
+    return;
+  }
+  const session = viewerTargetId ? lastSessions.find((x) => x.id === viewerTargetId) : undefined;
+  viewer.update(resolveViewerTarget(session, s.viewerPath, shown, viewerFs), liveViewerKeys(lastSessions, shown), s.viewerAutoReload, force);
+}
+
+function isViewerRect(v: unknown): v is TipRect {
+  return isTipRect(v) && v.width >= 0 && v.height >= 0;
+}
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
-  const sessions = gitStatus.apply(readSessions());
+  // 見本データの作業フォルダ（HTML ビューアの見本）では git を動かさない。見本の changes をそのまま見せる
+  const sessions = process.env.WIDGET_FIXTURE ? readSessions() : gitStatus.apply(readSessions());
   lastSessions = sessions;
   updateFetchTargets();
+  refreshViewer();
   const json = JSON.stringify(sessions);
   if (!force && json === lastSent) return;
   lastSent = json;
@@ -821,6 +868,44 @@ app.whenReady().then(() => {
   // ウィジェットのイベント（隠す・最小化など）は createWidget で登録する。めくれより先に出ていたときだけ、ここで知らせる
   if (win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 
+  // HTML ビューア（docs/design/html-viewer.md）。画面からはセッションの ID と場所だけを受け取り、パスはこちらで引く
+  viewer = createViewer({
+    window: () => win,
+    zoom: zoomFactor,
+    onState: (state: ViewerState) => {
+      if (win && !win.isDestroyed()) win.webContents.send('viewer:state', state);
+    },
+    refresh: () => refreshViewer(),
+  });
+  ipcMain.on('viewer-target', (e, id: unknown) => {
+    if (e.sender !== win?.webContents) return;
+    if (id !== null && (typeof id !== 'string' || !SESSION_KEY_ID.test(id))) return;
+    viewerTargetId = id ?? undefined;
+    refreshViewer(true);
+  });
+  ipcMain.on('viewer-bounds', (e, rect: unknown) => {
+    if (e.sender !== win?.webContents) return;
+    if (rect === null) viewer?.setBounds(undefined);
+    else if (isViewerRect(rect)) viewer?.setBounds(rect);
+  });
+  ipcMain.on('viewer-reload', (e) => {
+    if (e.sender !== win?.webContents) return;
+    // ファイルができた・消えたも拾う
+    refreshViewer();
+    viewer?.reload();
+  });
+  ipcMain.on('viewer-open-external', (e) => {
+    if (e.sender === win?.webContents) viewer?.openExternal();
+  });
+  ipcMain.on('viewer-layout', (e, patch: unknown) => {
+    if (e.sender !== win?.webContents || !patch || typeof patch !== 'object') return;
+    const { viewerHeight, viewerCollapsed } = patch as Record<string, unknown>;
+    const next: Partial<Settings> = {};
+    if (typeof viewerHeight === 'number' && Number.isFinite(viewerHeight)) next.viewerHeight = viewerHeight;
+    if (typeof viewerCollapsed === 'boolean') next.viewerCollapsed = viewerCollapsed;
+    if (Object.keys(next).length) updateSettings(next);
+  });
+
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('layout:get', () => widgetLayout(getSettings()));
   ipcMain.on('settings:set', (_e, patch: unknown) => {
@@ -834,7 +919,9 @@ app.whenReady().then(() => {
   ipcMain.on('fetch-cards', (_e, keys: unknown) => {
     if (!Array.isArray(keys) || !keys.every(isCardKey)) return;
     fetchCards = new Set(keys);
+    fetchCardsKnown = true;
     updateFetchTargets();
+    refreshViewer();
   });
   ipcMain.handle('settings:about', (): AboutInfo => ({
     version: app.getVersion(),
@@ -848,6 +935,7 @@ app.whenReady().then(() => {
     applySettings(s);
     applyLoginItem(s);
     applyGitSettings(s);
+    refreshViewer();
     settingsWin?.webContents.send('settings:changed', s);
   });
 

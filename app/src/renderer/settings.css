@@ -13,6 +13,7 @@
   --menu: #f9f9f9;
   --menu-text: #1a1a1a;
   --accent: #005fb8;
+  --error: #c42b1c;
   --on-accent: #ffffff;
   --focus: #1a1a1a;
   color-scheme: light dark;
@@ -31,6 +32,7 @@
     --menu: #2b2b2b;
     --menu-text: #ffffff;
     --accent: #60cdff;
+    --error: #ff99a4;
     --on-accent: #000000;
     --focus: #ffffff;
   }
@@ -163,6 +165,23 @@ option, optgroup {
 }
 
 input[type="range"] { width: 200px; accent-color: var(--accent); }
+
+/* 1 行の文字（ファイルの場所など）。stacked のカードで、幅いっぱいに出す。だめな理由は下に出す */
+.control.text-field { flex-direction: column; align-items: stretch; gap: 4px; }
+.text-field input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--text-secondary);
+  border-radius: 4px;
+  background: var(--control);
+  color: inherit;
+  font: inherit;
+}
+.text-field input:focus { outline: none; border-bottom: 2px solid var(--accent); }
+.text-field input[aria-invalid="true"] { border-bottom: 2px solid var(--error); }
+.field-error { font-size: 12px; color: var(--error); }
 .value { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* 情報 */

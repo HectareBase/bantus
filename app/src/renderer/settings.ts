@@ -72,7 +72,7 @@ function previewSound() {
   previewTimer = window.setTimeout(() => playSound(settings.soundType, 'done', settings.soundVolume), 1_500);
 }
 
-/** disabled なら、値は見せるが押せなくする（今は segmented だけが使う） */
+/** disabled なら、値は見せるが押せなくする（segmented、text、action が使う） */
 async function control(def: SettingDef, disabled: boolean): Promise<Node> {
   switch (def.type) {
     case 'segmented': {
@@ -115,6 +115,27 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
     }
     case 'status-colors':
       return statusColors();
+    case 'text': {
+      const input = el('input', { type: 'text', value: settings[def.key], disabled, spellcheck: false, placeholder: def.placeholder ?? '' });
+      input.setAttribute('aria-label', def.label);
+      const error = el('div', { className: 'field-error', hidden: true });
+      error.setAttribute('aria-live', 'polite');
+      // 入力を確定したとき（Enter、フォーカスが外れたとき）に検査する。だめなら理由を出し、保存しない
+      input.addEventListener('change', () => {
+        const r = def.check(input.value);
+        input.toggleAttribute('aria-invalid', 'error' in r);
+        if ('error' in r) {
+          input.setAttribute('aria-invalid', 'true');
+          error.textContent = r.error;
+          error.hidden = false;
+          return;
+        }
+        error.hidden = true;
+        input.value = r.value;
+        if (r.value !== settings[def.key]) set(def.key, r.value);
+      });
+      return el('div', { className: 'control text-field' }, [input, error]);
+    }
     case 'action': {
       const button = el('button', { className: 'preview-button', textContent: def.button, disabled });
       button.addEventListener('click', () => api.runAction(def.key));
@@ -280,7 +301,7 @@ async function renderContent() {
       continue;
     }
     const disabled = (def.packagedOnly === true && !packaged) || (def.enabledBy !== undefined && !settings[def.enabledBy]);
-    const node = card(def.label, def.description, await control(def, disabled));
+    const node = card(def.label, def.description, await control(def, disabled), def.type === 'text');
     if (disabled) node.classList.add('disabled');
     content.append(node);
   }

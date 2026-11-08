@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>task-b</title>
+<style>
+  body { font: 13px/1.6 "Segoe UI", "Yu Gothic UI", sans-serif; margin: 0; padding: 12px 14px; color: #1a1a1a; background: #fffff0; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  section { padding: 8px 10px; margin: 8px 0; background: #fff; border: 1px solid #ddd; border-radius: 6px; }
+  .late { border-color: #3b8eea; }
+  button { font: inherit; }
+</style>
+</head>
+<body>
+<h1>task-b の見本</h1>
+<p>HTML ビューアの見本（app/fixtures/viewer）。スクロールの保持、読み込み直し、リンクの扱いを確かめる。</p>
+<ul>
+  <li><a href="https://example.com/">外部のリンク（いつものブラウザーで開く）</a></li>
+  <li><a href="https://example.com/" target="_blank">新しいウィンドウのリンク（ブラウザーに渡す）</a></li>
+  <li><a href="other.html">ほかのファイルへのリンク（移動しない）</a></li>
+  <li><a href="#s20">ページの中のリンク（20 番目の節）</a></li>
+  <li><button id="geo">位置情報を求める（断られる）</button> <span id="geo-result"></span></li>
+</ul>
+<div id="sections"></div>
+<script>
+  // 後から描くページの見本：半分は 0.5 秒後に足す（スクロールを戻すときに、高さが足りるまで待つかを確かめる）
+  const box = document.getElementById('sections');
+  const add = (from, to, late) => {
+    for (let i = from; i <= to; i++) {
+      const s = document.createElement('section');
+      s.id = 's' + i;
+      if (late) s.className = 'late';
+      s.textContent = 'task-b：' + i + ' 番目の節' + (late ? '（後から描いた）' : '');
+      box.append(s);
+    }
+  };
+  add(1, 20, false);
+  setTimeout(() => add(21, 60, true), 500);
+  document.getElementById('geo').addEventListener('click', () => {
+    navigator.geolocation.getCurrentPosition(
+      () => (document.getElementById('geo-result').textContent = '許可された'),
+      (e) => (document.getElementById('geo-result').textContent = '断られた：' + e.message),
+    );
+  });
+</script>
+</body>
+</html>
