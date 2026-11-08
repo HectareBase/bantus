@@ -259,20 +259,20 @@ export const ja = {
       soundVolume: { label: '音量' },
       toast: { label: 'トースト通知', description: 'クリックするとそのセッションを開く。音は上の「音」の設定に従う' },
       flash: { label: 'タスクバーの点滅', description: '3 秒ほどで止まる。ウィジェットが前面にあるときは点滅しない' },
-      viewerEnabled: { label: 'カードの下に HTML を出す', description: '今開いているセッションの作業フォルダにある HTML ファイルを表示する' },
+      viewerEnabled: { label: 'カードの下の HTML', description: '今開いているセッションの作業フォルダにある HTML ファイルを表示する' },
       viewerPath: {
         label: 'ファイルの場所',
-        description: '作業フォルダから見た相対パス。元のフォルダのセッションでは、リポジトリのルートから見る。すべてのリポジトリで共通',
+        description: '作業フォルダから見た相対パス。すべてのリポジトリで共通',
         placeholder: 'docs/index.html',
       },
-      viewerAutoReload: { label: '変更を表示に反映する', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
+      viewerAutoReload: { label: 'ファイルを書き換えたとき', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
     },
     /** ファイルの場所を受け付けない理由（入力欄の下に出す） */
     viewerPathProblems: {
       absolute: '絶対パスは使えません。作業フォルダから見た相対パスで書いてください',
       outside: '作業フォルダの外は指定できません',
       extension: '.html か .htm のファイルを指定してください',
-      invalid: 'ファイル名に使えない文字が入っています',
+      invalid: 'ファイル名に使えない文字や形があります',
     },
     /** 選択肢の文字 */
     options: {
