@@ -5,12 +5,17 @@
 // 命令
 // - fg：前面のウィンドウのプロセス名を答える（わからなければ空行）
 // - raise：Claude のメインウィンドウを前に出し、前に出せたら 1、出せなかったら 0 を答える
+// - open <base64>：セッションへ切り替える。中身は「local_ID と、データフォルダを改行で区切ったもの」の UTF-8 を base64 にした 1 語。
+//   本体に WM_COPYDATA を送り、受け付けられたら 1、ウィンドウがない・送れない・結果が 0 なら 0 を答える
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 // 前面にないプロセスの SetForegroundWindow は Windows に断られる（タスクバーが点滅するだけ）。
 // 断られたら、どこにも割り当てのない仮想キー（0x88）を押して離したことにしてから、もう一度呼ぶ。
 // 入力があったことで前面の切り替えの制限が外れる。0x88 はどのアプリも使わないので、前面のアプリには何も起きない
+//
+// open では 0x88 を押したことにしてから AllowSetForegroundWindow で本体に前に出る許可を渡し、WM_COPYDATA（0x4A）を
+// SendMessageTimeout（SMTO_ABORTIFHUNG = 2、1 秒で打ち切り）で送る。メッセージ専用ウィンドウの親は HWND_MESSAGE（-3）
 const SCRIPT = `
 Add-Type -Namespace Bantus -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -19,6 +24,10 @@ Add-Type -Namespace Bantus -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+[DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(uint pid);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+[DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, ref COPYDATASTRUCT lParam, uint flags, uint timeout, out IntPtr result);
+[StructLayout(LayoutKind.Sequential)] public struct COPYDATASTRUCT { public IntPtr dwData; public int cbData; public IntPtr lpData; }
 '@
 function Get-FgName {
   $id = [uint32]0
@@ -39,14 +48,51 @@ function Invoke-Raise {
   }
   if ($ok -and (Get-FgName) -eq 'claude') { '1' } else { '0' }
 }
+function Invoke-Open([string]$arg) {
+  $parts = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($arg)) -split "\`n"
+  $id = $parts[0]
+  if ($id -notmatch '^local_[0-9a-f-]{36}$') { return '0' }
+  foreach ($dir in $parts[1..($parts.Length - 1)]) {
+    if (-not $dir) { continue }
+    $h = [Bantus.Win]::FindWindowEx([IntPtr](-3), [IntPtr]::Zero, 'Chrome_MessageWindow', $dir)
+    if ($h -eq [IntPtr]::Zero) { continue }
+    $owner = [uint32]0
+    [void][Bantus.Win]::GetWindowThreadProcessId($h, [ref]$owner)
+    $exe = (Get-Process -Id $owner -ErrorAction SilentlyContinue).Path
+    if (-not $exe) { continue }
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 0, [UIntPtr]::Zero)
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 2, [UIntPtr]::Zero)
+    [void][Bantus.Win]::AllowSetForegroundWindow($owner)
+    $bytes = [Text.Encoding]::Unicode.GetBytes("START\`0$env:SystemRoot\`0\`"$exe\`" claude://claude.ai/epitaxy/$id\`0")
+    $mem = [Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length + 2)
+    try {
+      [Runtime.InteropServices.Marshal]::Copy($bytes, 0, $mem, $bytes.Length)
+      [Runtime.InteropServices.Marshal]::WriteInt16($mem, $bytes.Length, 0)
+      $data = New-Object Bantus.Win+COPYDATASTRUCT
+      $data.cbData = $bytes.Length + 2
+      $data.lpData = $mem
+      $result = [IntPtr]::Zero
+      $sent = [Bantus.Win]::SendMessageTimeout($h, 0x4A, [IntPtr]::Zero, [ref]$data, 2, 1000, [ref]$result)
+      if ($sent -ne [IntPtr]::Zero -and $result -ne [IntPtr]::Zero) { return '1' }
+    } finally {
+      [Runtime.InteropServices.Marshal]::FreeHGlobal($mem)
+    }
+  }
+  '0'
+}
 while ($null -ne ($line = [Console]::In.ReadLine())) {
-  $answer = if ($line.Trim() -eq 'raise') { Invoke-Raise } else { Get-FgName }
+  $words = $line.Trim() -split ' ', 2
+  $answer = switch ($words[0]) {
+    'raise' { Invoke-Raise }
+    'open' { Invoke-Open $words[1] }
+    default { Get-FgName }
+  }
   [Console]::Out.WriteLine($answer)
   [Console]::Out.Flush()
 }
 `;
 
-type Command = 'fg' | 'raise';
+type Command = 'fg' | 'raise' | `open ${string}`;
 type Waiter = { resolve: (line: string | undefined) => void; done: boolean };
 
 let child: ChildProcessWithoutNullStreams | undefined;
@@ -126,4 +172,15 @@ export async function foregroundProcessName(timeoutMs = 1000): Promise<string | 
  */
 export async function raiseClaudeWindow(timeoutMs = 1000): Promise<boolean> {
   return (await ask('raise', timeoutMs)) === '1';
+}
+
+/**
+ * プロセスを起動せずにセッションへ切り替える。Electron の単一インスタンスの仕組みと同じ WM_COPYDATA を、
+ * 本体のメッセージ専用ウィンドウ（タイトルがデータフォルダのパス）に直接送る（docs/research/deep-link-and-uia.md）。
+ * 受け付けられたときだけ true。ウィンドウがない、送れない、結果が 0、PowerShell が使えない、時間切れは false
+ */
+export async function sendOpenToClaude(id: string, dataFolders: string[], timeoutMs = 1500): Promise<boolean> {
+  if (dataFolders.length === 0) return false;
+  const arg = Buffer.from([id, ...dataFolders].join('\n'), 'utf8').toString('base64');
+  return (await ask(`open ${arg}`, timeoutMs)) === '1';
 }

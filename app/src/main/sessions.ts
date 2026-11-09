@@ -28,10 +28,18 @@ export function defaultPaths(): DataPaths {
   };
 }
 
-function claudeDataDirs(base: string): string[] {
+/**
+ * デスクトップのデータフォルダ（`Claude-Data\claude_*`）。
+ * 本体のメッセージ専用ウィンドウのタイトルがこのフルパスになる（docs/research/deep-link-and-uia.md）
+ */
+export function desktopDataFolders(base = defaultPaths().dataBase): string[] {
   return listDirs(base)
     .filter((name) => name.startsWith('claude_'))
-    .map((name) => join(base, name, 'claude-code-sessions'));
+    .map((name) => join(base, name));
+}
+
+function claudeDataDirs(base: string): string[] {
+  return desktopDataFolders(base).map((dir) => join(dir, 'claude-code-sessions'));
 }
 
 function listDirs(dir: string): string[] {

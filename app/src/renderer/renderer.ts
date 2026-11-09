@@ -370,7 +370,7 @@ function openNext(claudeInFront: boolean) {
   if (target) openRow(target.id, target.raise);
 }
 
-/** 行を開く。raise が true なら、リンクを使わずに Claude のウィンドウを前に出すだけにする（前に出せなければ main がリンクで開く） */
+/** 行を開く。raise が true なら、リンクを使わずに Claude のウィンドウを前に出すだけにする（前に出せなければ main がセッションを開き直す） */
 function openRow(id: string, raise = false) {
   // 開く（前に出す）のを先に頼む。帯の更新と描き直しはそのあと
   if (raise) window.widget.raiseSession(id);
