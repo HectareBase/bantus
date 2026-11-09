@@ -67,6 +67,57 @@ function readJson(path: string): any {
   }
 }
 
+/**
+ * 解釈した JSON を、ファイルの更新時刻と大きさが変わるまで使い回す表。一覧を作り直すたびに、
+ * アーカイブ済みも含めたすべての local_*.json を読み直さないため。
+ * 返す値は表の中身そのものなので、呼び出し側で書き換えない（書き換えるなら複製する）。
+ * 読めなかったもの（書き込み途中など）は覚えず、次も読み直す
+ */
+export function createJsonCache() {
+  const entries = new Map<string, { mtimeMs: number; size: number; data: unknown }>();
+  /** 今回読んだパス（prune で、消えたファイルを表から外すため） */
+  let seen = new Set<string>();
+  let reads = 0;
+  return {
+    read(path: string): any {
+      seen.add(path);
+      let st: { mtimeMs: number; size: number };
+      try {
+        st = statSync(path);
+      } catch {
+        entries.delete(path);
+        return undefined;
+      }
+      const hit = entries.get(path);
+      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.data;
+      reads++;
+      const data = readJson(path);
+      if (data === undefined) entries.delete(path);
+      else entries.set(path, { mtimeMs: st.mtimeMs, size: st.size, data });
+      return data;
+    },
+    /** 前の prune から今までに読まなかったパスを表から外す */
+    prune() {
+      for (const path of entries.keys()) if (!seen.has(path)) entries.delete(path);
+      seen = new Set();
+    },
+    /** 表の大きさと、実際にファイルを読んだ回数（テスト用） */
+    stats: () => ({ size: entries.size, reads }),
+  };
+}
+
+type JsonCache = ReturnType<typeof createJsonCache>;
+
+/** フォルダ（runningDir と dataBase）ごとの使い回しの表 */
+const jsonCaches = new Map<string, JsonCache>();
+
+/** テストで、使い回しが効いているかを見るため */
+export function jsonCacheFor(dir: string): JsonCache {
+  let cache = jsonCaches.get(dir);
+  if (!cache) jsonCaches.set(dir, (cache = createJsonCache()));
+  return cache;
+}
+
 function isAlive(pid: unknown): boolean {
   if (typeof pid !== 'number') return false;
   try {
@@ -88,11 +139,13 @@ interface Running {
 /** CLI のセッション ID → { status, waitingFor, cwd }。ファイルだけが残っているものは除く */
 function readRunning(runningDir: string): Map<string, Running> {
   const map = new Map<string, Running>();
+  const cache = jsonCacheFor(runningDir);
   for (const file of listFiles(runningDir, /^\d+\.json$/)) {
-    const d = readJson(file);
+    const d = cache.read(file);
     if (!d?.sessionId || !isAlive(d.pid)) continue;
     map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor, cwd: typeof d.cwd === 'string' ? d.cwd : undefined });
   }
+  cache.prune();
   return map;
 }
 
@@ -327,9 +380,11 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
   /** ワークツリーの名前を持たず、フォルダから見つけたセッション → そのフォルダ */
   const byFolder = new Map<SessionView, string>();
+  // 解釈した中身は使い回すので、d は読むだけにする（view には値を写す）
+  const files = jsonCacheFor(paths.dataBase);
   for (const dir of sessionDirs(paths.dataBase)) {
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
-      const d = readJson(file);
+      const d = files.read(file);
       if (!d?.sessionId) continue;
       const archived = Boolean(d.isArchived);
       const at = Number(d.lastFocusedAt) || 0;
@@ -418,6 +473,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
     if (same.baseBranch) view.baseBranch = same.baseBranch;
     else delete view.baseBranch;
   }
+  files.prune();
   assignSeq(numbered);
   contextReader?.prune(cliIds);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない

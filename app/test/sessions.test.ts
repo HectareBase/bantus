@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
-import { readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
+import { rmSync, utimesSync } from 'node:fs';
+import { createJsonCache, jsonCacheFor, readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
 
@@ -318,4 +319,93 @@ describe('readFixture', () => {
   });
 
   it('ファイルがなければ空', () => assert.deepEqual(readFixture(join(tmp.path, 'none.json'), now, 0), []));
+});
+
+describe('createJsonCache（解釈した JSON の使い回し）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const file = join(tmp.path, 'a.json');
+
+  it('変わっていなければ読み直さず、同じ中身を返す', () => {
+    writeJson(file, { n: 1 });
+    const cache = createJsonCache();
+    const first = cache.read(file);
+    assert.deepEqual(first, { n: 1 });
+    assert.equal(cache.read(file), first);
+    assert.equal(cache.stats().reads, 1);
+  });
+
+  it('大きさか更新時刻が変わったら読み直す', () => {
+    writeJson(file, { n: 1 });
+    const cache = createJsonCache();
+    cache.read(file);
+    writeJson(file, { n: 22 });
+    assert.deepEqual(cache.read(file), { n: 22 });
+    // 同じ大きさでも、更新時刻が変われば読み直す
+    writeJson(file, { n: 33 });
+    utimesSync(file, new Date(1_000_000), new Date(1_000_000));
+    assert.deepEqual(cache.read(file), { n: 33 });
+    assert.equal(cache.stats().reads, 3);
+  });
+
+  it('読めなかったものは覚えない', () => {
+    writeJson(file, '{ broken');
+    const cache = createJsonCache();
+    assert.equal(cache.read(file), undefined);
+    assert.equal(cache.read(file), undefined);
+    assert.equal(cache.stats().reads, 2);
+    assert.equal(cache.stats().size, 0);
+  });
+
+  it('prune で、前の prune から読まなかったファイルを外す', () => {
+    const other = join(tmp.path, 'b.json');
+    writeJson(file, { n: 1 });
+    writeJson(other, { n: 2 });
+    const cache = createJsonCache();
+    cache.read(file);
+    cache.read(other);
+    cache.prune();
+    assert.equal(cache.stats().size, 2);
+    cache.read(file);
+    cache.prune();
+    assert.equal(cache.stats().size, 1);
+  });
+});
+
+describe('readSessions（使い回し）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const paths: DataPaths = { runningDir: join(tmp.path, 'sessions'), dataBase: join(tmp.path, 'Claude-Data') };
+  const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+  const file = (n: number) => join(dir, `local_${n}.json`);
+
+  it('変わっていないセッションのファイルは読み直さず、変わったものと消えたものは反映する', () => {
+    writeJson(file(1), { sessionId: 'local_1', title: 'one', lastActivityAt: 1 });
+    writeJson(file(2), { sessionId: 'local_2', title: 'two', lastActivityAt: 2 });
+    writeJson(join(paths.runningDir, '1.json'), { pid: process.pid, sessionId: 'cli-1', status: 'busy' });
+    const files = jsonCacheFor(paths.dataBase);
+    const running = jsonCacheFor(paths.runningDir);
+    assert.deepEqual(readSessions(paths).map((s) => s.title), ['two', 'one']);
+    assert.equal(files.stats().reads, 2);
+    assert.equal(running.stats().reads, 1);
+
+    readSessions(paths);
+    assert.equal(files.stats().reads, 2);
+    assert.equal(running.stats().reads, 1);
+
+    writeJson(file(1), { sessionId: 'local_1', title: 'one renamed', lastActivityAt: 3 });
+    rmSync(file(2));
+    assert.deepEqual(readSessions(paths).map((s) => s.title), ['one renamed']);
+    assert.equal(files.stats().reads, 3);
+    assert.equal(files.stats().size, 1);
+  });
+
+  it('作った一覧を書き換えても、次の一覧に響かない', () => {
+    const [first] = readSessions(paths);
+    first!.title = 'changed';
+    first!.changes = { changed: 1, untracked: 0, ahead: 0, behind: 0, merged: false };
+    const [again] = readSessions(paths);
+    assert.equal(again!.title, 'one renamed');
+    assert.equal(again!.changes, undefined);
+  });
 });
