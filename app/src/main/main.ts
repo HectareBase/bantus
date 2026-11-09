@@ -196,11 +196,11 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
+    edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -214,10 +214,11 @@ function applyTheme(s: Settings) {
   if (nativeTheme.themeSource !== s.theme) nativeTheme.themeSource = s.theme;
 }
 
-/** 一覧（めくれ）の状態の色。ウィジェットの色は layout で届く */
+/** 一覧（めくれ）の状態の色と、今開いている行の強調の濃さ。ウィジェットには layout で届く */
 function sendFlyoutColors() {
   const w = flyout?.window();
-  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', getSettings().statusColors);
+  const { statusColors, activeHighlight } = getSettings();
+  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', statusColors, activeHighlight);
 }
 
 /** 表示の拡大率（1 で等倍） */

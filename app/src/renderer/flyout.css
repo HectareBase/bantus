@@ -13,7 +13,15 @@
   --stack: #c8c8c8;
   --stack-strong: #b4b4b4;
   --stack-edge: rgba(0, 0, 0, 0.18);
-  --stripe: rgba(0, 0, 0, 0.025);
+  /* 今開いている行の透かしと塗り。-a は標準の不透明度で、設定の濃さの倍率 --hl（flyout.ts が入れる）をかける */
+  --shade-rgb: 0, 0, 0;
+  --hl: 1;
+  --stripe-a: 0.025;
+  --focus-a: 0.04;
+  --focus-hover-a: 0.06;
+  --stripe: rgba(var(--shade-rgb), calc(var(--stripe-a) * var(--hl)));
+  --focus-fill: rgba(var(--shade-rgb), calc(var(--focus-a) * var(--hl)));
+  --focus-hover: rgba(var(--shade-rgb), calc(var(--focus-hover-a) * var(--hl)));
   /* 状態の色。ライトとダークで同じで、設定の色で上書きする（status-colors.ts） */
   --waiting: #e6a100;
   --busy: #3b8eea;
@@ -36,7 +44,10 @@
     --stack: #4c4c4c;
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
-    --stripe: rgba(255, 255, 255, 0.03);
+    --shade-rgb: 255, 255, 255;
+    --stripe-a: 0.03;
+    --focus-a: 0.06;
+    --focus-hover-a: 0.07;
   }
 }
 
@@ -151,9 +162,9 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 }
 .node.linked { padding-left: 30px; }
 .node:hover { background: var(--hover); }
-/* デスクトップで今開いているセッション：ごく薄い斜めのストライプ（色相は使わない） */
-.node[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--hover); }
-.node[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--selected); }
+/* デスクトップで今開いているセッション：塗りに斜めのストライプを重ねる（色相は使わない）。濃さは設定で変えられる */
+.node[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-fill); }
+.node[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-hover); }
 .node .dot {
   position: absolute;
   left: 12px;

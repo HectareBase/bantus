@@ -18,6 +18,8 @@ export interface Settings {
   cardOpacity: number;
   /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
   headerShade: number;
+  /** デスクトップで今開いているセッションの行（とめくれの一覧の行）の強調の濃さ。HIGHLIGHT_SCALE の倍率を CSS の --hl に入れる */
+  activeHighlight: ActiveHighlight;
   /**
    * ウィジェット・ツールチップ・めくれの表示の拡大率（%）。Windows のディスプレイの拡大とは別に、その上からかける。
    * 設定ウィンドウにはかけない。幅（width）は画面の座標のままなので、拡大すると中身が窮屈になる
@@ -155,6 +157,12 @@ export function normalizeNote(v: unknown): string {
   return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
 }
 
+/** 今開いている行の強調の濃さ。normal が以前からの見た目 */
+export type ActiveHighlight = 'subtle' | 'normal' | 'strong';
+
+/** 強調の濃さごとの、塗りとストライプの不透明度にかける倍率 */
+export const HIGHLIGHT_SCALE: Record<ActiveHighlight, number> = { subtle: 0.5, normal: 1, strong: 2 };
+
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
 
@@ -172,6 +180,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
+  activeHighlight: 'normal',
   zoom: 100,
   theme: 'system',
   statusColors: DEFAULT_STATUS_COLORS,
@@ -305,7 +314,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin' | 'hardwareAcceleration'
+      | 'edge' | 'theme' | 'activeHighlight' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin' | 'hardwareAcceleration'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
       | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
@@ -385,6 +394,15 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'headerShade', category: 'look', group: T.groups.widget, type: 'slider',
     ...T.items.headerShade,
     min: 0, max: 20, step: 1, unit: '%',
+  },
+  {
+    key: 'activeHighlight', category: 'look', group: T.groups.widget, type: 'segmented',
+    ...T.items.activeHighlight,
+    options: [
+      { value: 'subtle', label: T.options.highlightSubtle },
+      { value: 'normal', label: T.options.highlightNormal },
+      { value: 'strong', label: T.options.highlightStrong },
+    ],
   },
   {
     key: 'zoom', category: 'look', group: T.groups.widget, type: 'slider',

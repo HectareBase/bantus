@@ -236,6 +236,7 @@ export const ja = {
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
       headerShade: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% で区切り線だけになる' },
+      activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線' },
       zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
       mainArchiveMinutes: {
@@ -297,6 +298,9 @@ export const ja = {
       noOpen: '開かない',
       useGpu: '使う',
       noGpu: '使わない',
+      highlightSubtle: '薄い',
+      highlightNormal: '標準',
+      highlightStrong: '濃い',
       themeSystem: 'システム',
       themeLight: 'ライト',
       themeDark: 'ダーク',

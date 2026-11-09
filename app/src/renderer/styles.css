@@ -41,8 +41,17 @@
   --stack-edge: rgba(0, 0, 0, 0.18);
   /* リポジトリの枠の線 */
   --repo-frame: rgba(0, 0, 0, 0.12);
-  /* デスクトップで今開いている行の透かし */
-  --stripe: rgba(0, 0, 0, 0.025);
+  /* デスクトップで今開いている行の透かし（--stripe）と塗り。-a は標準の濃さの不透明度で、
+     設定の濃さの倍率 --hl（renderer.ts が入れる。標準は 1）をかける。塗りはマウスを乗せた行と同じ濃さが標準 */
+  --hl: 1;
+  --stripe-a: 0.025;
+  --focus-a: 0.04;
+  --focus-hover-a: 0.08;
+  --focus-pressed-a: 0.07;
+  --stripe: rgba(var(--shade-rgb), calc(var(--stripe-a) * var(--hl)));
+  --focus-fill: rgba(var(--shade-rgb), calc(var(--focus-a) * var(--hl)));
+  --focus-hover: rgba(var(--shade-rgb), calc(var(--focus-hover-a) * var(--hl)));
+  --focus-pressed: rgba(var(--shade-rgb), calc(var(--focus-pressed-a) * var(--hl)));
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
   --ctx-track: rgba(0, 0, 0, 0.12);
@@ -70,7 +79,10 @@
     --stack-strong: #5c5c5c;
     --stack-edge: rgba(255, 255, 255, 0.18);
     --repo-frame: rgba(255, 255, 255, 0.12);
-    --stripe: rgba(255, 255, 255, 0.03);
+    --stripe-a: 0.03;
+    --focus-a: 0.06;
+    --focus-hover-a: 0.09;
+    --focus-pressed-a: 0.04;
     --ctx-full: #ff6b62;
     --ctx-track: rgba(255, 255, 255, 0.14);
   }
@@ -333,10 +345,11 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 .row:hover { background: var(--hover); }
 .row:active { background: var(--pressed); }
 .row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
-/* デスクトップで今開いているセッション：マウスを乗せたときと同じ濃さに、ごく薄い斜めのストライプの透かしを重ねる（色相は使わない） */
-.row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--hover); }
-.row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--selected); }
-.row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--pressed); }
+/* デスクトップで今開いているセッション：塗りに斜めのストライプの透かしを重ねる（色相は使わない）。
+   濃さは設定で変えられ、標準はマウスを乗せたときと同じ濃さの塗りに、ごく薄いストライプ */
+.row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-fill); }
+.row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-hover); }
+.row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-pressed); }
 
 /* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付けて点滅させる。クリックするか処理中になると消える */
 .row::before {
