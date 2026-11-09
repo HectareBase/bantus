@@ -122,6 +122,12 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     el.append(act);
   }
   el.addEventListener('click', () => window.flyoutApi.action({ type: 'open', id: item.id }));
+  // 右クリックで、ID をコピーするメニューを出す（メニューはメインプロセスが出す）
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.flyoutApi.showSessionMenu(item.id);
+  });
   // ホイールクリックでトグルと同じ処理を呼ぶ（トグルを出さない行は切り替えない）。mousedown でオートスクロールを止める
   el.addEventListener('mousedown', (e) => {
     if (e.button === 1) e.preventDefault();
