@@ -814,7 +814,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
       e.stopPropagation();
       toggleCard(key);
     });
-    // 見出しの右クリックで、作業フォルダを開くメニューを出す（メニューはメインプロセスが出す）
+    // 見出しの右クリックで、作業フォルダを開く・ID をコピーするメニューを出す（メニューはメインプロセスが出す）
     refs.header.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       window.widget.showCardMenu(key);

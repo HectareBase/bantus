@@ -27,6 +27,7 @@ export const ja = {
   menu: {
     openInExplorer: 'エクスプローラーで開く',
     openInTerminal: 'ターミナルで開く',
+    copySessionId: 'ID をコピー',
     quit: 'アプリを終了',
   },
 
