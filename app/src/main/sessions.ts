@@ -229,10 +229,20 @@ interface GitAnchor {
  * （なければ `<gitdir>/../..`）を commonDir とする。git の外なら undefined
  */
 function findGitAnchor(folder: string): GitAnchor | undefined {
+  const found = findGitDirs(folder);
+  return found && { gitRoot: found.gitRoot, commonDir: found.commonDir };
+}
+
+/**
+ * folder から上へ `.git` を探し、作業フォルダの一番上（gitRoot）、HEAD のある場所（gitDir）、ref を共有する場所（commonDir）を返す。
+ * `.git` がフォルダならどれも同じリポジトリ。ファイル（`gitdir: <場所>`、ワークツリー）なら gitDir はその場所で、
+ * commonDir はそこの `commondir`（なければ `<gitdir>/../..`）。読むだけで、git の外なら undefined
+ */
+export function findGitDirs(folder: string): { gitRoot: string; gitDir: string; commonDir: string } | undefined {
   for (let dir = resolve(folder); ; dir = dirname(dir)) {
     const dotGit = join(dir, '.git');
     try {
-      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, commonDir: dotGit };
+      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, gitDir: dotGit, commonDir: dotGit };
       const m = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, 'utf8'));
       if (!m?.[1]) return undefined;
       const gitDir = resolve(dir, m[1].trim());
@@ -242,7 +252,7 @@ function findGitAnchor(folder: string): GitAnchor | undefined {
       } catch {
         commonDir = resolve(gitDir, '..', '..');
       }
-      return { gitRoot: dir, commonDir };
+      return { gitRoot: dir, gitDir, commonDir };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
     }
