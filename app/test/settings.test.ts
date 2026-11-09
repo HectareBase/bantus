@@ -68,6 +68,17 @@ describe('normalizeSettings の openAtLogin', () => {
   });
 });
 
+describe('normalizeSettings の hardwareAcceleration', () => {
+  it('なければ GPU を使わない', () => assert.equal(normalizeSettings({}).hardwareAcceleration, false));
+  it('true を残す', () => assert.equal(normalizeSettings({ hardwareAcceleration: true }).hardwareAcceleration, true));
+  it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ hardwareAcceleration: 'true' }).hardwareAcceleration, false));
+  it('全体のカテゴリに、使う・使わないの 2 つで出す', () => {
+    const def = SETTING_DEFS.find((d) => d.key === 'hardwareAcceleration');
+    assert.equal(def?.category, 'general');
+    assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
+  });
+});
+
 describe('normalizeSettings の一覧の項目', () => {
   it('なければ既定値', () => {
     const s = normalizeSettings({});
@@ -162,11 +173,12 @@ describe('設定画面のカテゴリ', () => {
       ['変更の印', ['showChanges', 'countUntracked']],
     ]));
   it('git のアイコンは git-branch', () => assert.equal(CATEGORIES.find((c) => c.id === 'git')?.icon, 'git-branch'));
-  it('全体は 位置 → ツールチップ → 起動', () =>
+  it('全体は 位置 → ツールチップ → 起動 → 動作', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
       ['ツールチップ', ['tooltipDelayMs']],
       ['起動', ['openAtLogin']],
+      ['動作', ['hardwareAcceleration']],
     ]));
   it('見た目は 明るさ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
