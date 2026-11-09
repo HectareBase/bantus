@@ -58,6 +58,11 @@ export interface Settings {
   countUntracked: boolean;
   /** Windows にサインインしたときに開く。インストール版でだけ使える（npm start のときは灰色にする） */
   openAtLogin: boolean;
+  /**
+   * GPU（ハードウェア アクセラレーション）で描く。既定は使わない（GPU のプロセスのメモリが大きく減る。docs/design/gpu.md）。
+   * 起動するとき（app の ready より前）にだけ効くので、変えたらメインプロセスが起動し直す
+   */
+  hardwareAcceleration: boolean;
   /** 対応待ちになったときに知らせる（音、トースト、タスクバーの点滅） */
   notifyWaiting: boolean;
   /** 完了した（処理中から待機になった）ときに知らせる。Claude 本体の通知と重なるので、既定は知らせない */
@@ -184,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showChanges: true,
   countUntracked: true,
   openAtLogin: false,
+  hardwareAcceleration: false,
   notifyWaiting: true,
   notifyDone: false,
   sound: true,
@@ -299,7 +305,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
+      | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin' | 'hardwareAcceleration'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
       | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
@@ -354,6 +360,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'segmented', packagedOnly: true,
     ...T.items.openAtLogin,
     options: [{ value: true, label: T.options.open }, { value: false, label: T.options.noOpen }],
+  },
+  {
+    key: 'hardwareAcceleration', category: 'general', group: T.groups.rendering, type: 'segmented',
+    ...T.items.hardwareAcceleration,
+    options: [{ value: true, label: T.options.useGpu }, { value: false, label: T.options.noGpu }],
   },
   {
     key: 'theme', category: 'look', group: T.groups.brightness, type: 'segmented',

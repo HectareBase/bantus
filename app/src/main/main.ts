@@ -9,6 +9,7 @@ import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegr
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
+import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
 import { desktopDataFolders, folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
@@ -138,6 +139,13 @@ app.setAppUserModelId(WORKTREE ? worktreeAppUserModelId(APP_USER_MODEL_ID, WORKT
 if (WORKTREE) useWorktreeUserData(WORKTREE);
 // 見本データで動かすとき（開発用）は、データフォルダを分ける。設定が別になり、いつものウィジェットと同時に起動できる
 else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('userData')}-debug`);
+
+/**
+ * GPU（ハードウェア アクセラレーション）を使うか。app の ready より前にしか切り替えられないので、起動したときの設定で決める。
+ * 設定を変えたら起動し直す（docs/design/gpu.md）。データフォルダを決めたあとに読む（ワークツリー版と見本データは設定が別）
+ */
+const HARDWARE_ACCELERATION = getSettings().hardwareAcceleration;
+if (!HARDWARE_ACCELERATION) app.disableHardwareAcceleration();
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
 const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
@@ -618,9 +626,12 @@ function reloadWindows() {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.reload();
 }
 
-/** 起動し直す。before-quit の片付け（トレイのアイコンなど）を通すため、exit ではなく quit で終える */
-function relaunch() {
-  app.relaunch({ args: [app.getAppPath()] });
+/**
+ * 起動し直す。before-quit の片付け（トレイのアイコンなど）を通すため、exit ではなく quit で終える。
+ * openSettings なら、起動し直したあとに設定ウィンドウを開く（設定を変えて起動し直したとき）
+ */
+function relaunch(openSettings = false) {
+  app.relaunch({ args: relaunchArgs(app.isPackaged, app.getAppPath(), openSettings) });
   app.quit();
 }
 
@@ -782,7 +793,7 @@ app.whenReady().then(() => {
   const stopWatching = watchSessions(() => sendSessions());
   applyGitSettings(getSettings());
   const fetchTimer = setInterval(() => gitFetch.tick(), FETCH_TICK_MS);
-  const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch, notice: updateNotice }) : () => {};
+  const stopSelfUpdate = SELF_UPDATE ? startSelfUpdate(app.getAppPath(), { reload: reloadWindows, relaunch: () => relaunch(), notice: updateNotice }) : () => {};
   // 撮影だけのときは登録しない（いつものウィジェットのキーを奪わない）
   if (!process.env.WIDGET_SCREENSHOT) startForegroundProbe();
   // ワークツリー版も登録しない（いつものウィジェットが持っている）
@@ -796,6 +807,7 @@ app.whenReady().then(() => {
     });
     if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
   }
+  if (process.argv.includes(OPEN_SETTINGS_ARG)) openSettingsWindow();
 
   ipcMain.on('open-session', (_e, id: unknown) => void openSession(id));
   ipcMain.on('raise-session', (_e, id: unknown) => void raiseSession(id));
@@ -948,6 +960,11 @@ app.whenReady().then(() => {
 
   readLoginItem();
   onSettingsChange((s) => {
+    // GPU の設定は起動し直さないと効かない。設定ウィンドウを開いたまま起動し直す
+    if (s.hardwareAcceleration !== HARDWARE_ACCELERATION) {
+      relaunch(true);
+      return;
+    }
     applySettings(s);
     applyLoginItem(s);
     applyGitSettings(s);
