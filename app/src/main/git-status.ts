@@ -4,9 +4,10 @@
 // リモートの取得（git fetch）は別の待ち行列（git-fetch.ts）で、設定でオンにしたときだけ動かす。
 
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { GitChanges, SessionState, SessionView } from '../shared/types';
-import { folderKey } from './sessions';
+import { findGitDirs, folderKey } from './sessions';
 
 /** 1 回の git status を待つ長さ。大きなリポジトリで止まらないよう、過ぎたら諦める */
 const TIMEOUT_MS = 5_000;
@@ -115,6 +116,113 @@ export async function readBranchInfo(dir: string, base: string, run = git, remot
   return { ...info, merged: false };
 }
 
+/** コミットの ID（SHA-1 か SHA-256） */
+const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+/**
+ * 作業フォルダ dir の HEAD と、names に並べた ref（`refs/...`）の先頭のコミットを、`.git` のファイルから読む（git は起動しない）。
+ * ref はばらのファイル（共有の場所 refDir の下）を先に見て、なければ packed-refs から探す。ないものは null。
+ * HEAD が読めない（git の外、まだコミットがない）、reftable を使っているなど、確かに読めないときは undefined
+ */
+export function readRefs(dir: string, names: string[]): { head: string; refs: (string | null)[] } | undefined {
+  const dirs = findGitDirs(dir);
+  if (!dirs) return undefined;
+  // reftable の形式は読めないので、使い回さない（毎回 git に聞く）
+  if (existsSync(join(dirs.refDir, 'reftable'))) return undefined;
+  let packed: Map<string, string> | undefined;
+  const fromPacked = (name: string): string | null => {
+    if (!packed) {
+      packed = new Map();
+      try {
+        for (const line of readFileSync(join(dirs.refDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
+          const m = /^([0-9a-f]+) (refs\/\S+)$/.exec(line);
+          if (m) packed.set(m[2]!, m[1]!);
+        }
+      } catch {
+        // packed-refs がないのは普通
+      }
+    }
+    return packed.get(name) ?? null;
+  };
+  /** ref の名前からコミットへ。シンボリックな ref（`ref: ...`）は数段までたどる。読めないときは throw */
+  const resolveRef = (name: string, depth = 0): string | null => {
+    if (depth > 5 || !name.startsWith('refs/')) throw new Error('unresolvable ref');
+    let text: string;
+    try {
+      text = readFileSync(join(dirs.refDir, name), 'utf8').trim();
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      // ない、ref の途中がファイル（refs/heads/a があって refs/heads/a/b を探した）、フォルダだった（refs/heads/a/b があって
+      // refs/heads/a を探した）なら packed-refs を見る
+      if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') return fromPacked(name);
+      throw e;
+    }
+    if (OID.test(text)) return text;
+    const m = /^ref: (\S+)$/.exec(text);
+    if (m) return resolveRef(m[1]!, depth + 1);
+    throw new Error('unexpected ref');
+  };
+  try {
+    // HEAD はワークツリーごと（gitDir）。ブランチを指していれば、その先頭を共有の場所から読む
+    const text = readFileSync(join(dirs.gitDir, 'HEAD'), 'utf8').trim();
+    const m = /^ref: (\S+)$/.exec(text);
+    const head = OID.test(text) ? text : m ? resolveRef(m[1]!) : null;
+    if (!head) return undefined;
+    return { head, refs: names.map((n) => resolveRef(n)) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** 覚えておく作業フォルダの数の上限（古いものから捨てる） */
+const BRANCH_CACHE_MAX = 200;
+
+/**
+ * readBranchInfo の結果を、HEAD と比べる ref（元のブランチ、リモートの写し、main）の先頭のコミットの組が変わるまで使い回す。
+ * 結果はコミットのつながりだけで決まるので、組が同じなら git を起動しない。先頭を読めないとき（refs が undefined）と、
+ * 途中で git が失敗したとき（タイムアウトなど）は覚えない
+ */
+export function createBranchReader(
+  run: typeof git = git,
+  refs: typeof readRefs = readRefs,
+): ReadBranch & { stats: () => { calls: number } } {
+  const cache = new Map<string, { id: string; info: BranchInfo }>();
+  let calls = 0;
+  const read = async (dir: string, base: string, remoteRef?: string, main?: string): Promise<BranchInfo> => {
+    const names = [`refs/heads/${base}`, ...(remoteRef ? [remoteRef] : []), ...(main && main !== base ? [`refs/heads/${main}`] : [])];
+    const found = refs(dir, names);
+    const id = found && JSON.stringify([base, remoteRef, main, found.head, found.refs]);
+    const key = folderKey(dir);
+    const hit = cache.get(key);
+    if (id && hit?.id === id) {
+      // 使った順に並べ直す（上限を超えたら、長く使っていないものから捨てる）
+      cache.delete(key);
+      cache.set(key, hit);
+      return { ...hit.info };
+    }
+    // 元のブランチが手元にない：readBranchInfo は最初の rev-list の失敗で、遅れ 0・マージ済みでないとする。git を起動するまでもない
+    if (found && found.refs[0] === null) return { behind: 0, ahead: 0, merged: false };
+    /** ないと読めた ref。それを渡した git の失敗は、ないせいなので覚えてよい */
+    const missing = found ? names.filter((_, i) => found.refs[i] === null) : [];
+    let failed = false;
+    const counted: typeof git = (d, args) => {
+      calls++;
+      return run(d, args).catch((e) => {
+        if (!missing.some((m) => args.includes(`${m}...HEAD`) || args.includes(`HEAD..${m}`))) failed = true;
+        throw e;
+      });
+    };
+    const info = await readBranchInfo(dir, base, counted, remoteRef, main);
+    cache.delete(key);
+    if (id && !failed) {
+      cache.set(key, { id, info: { ...info } });
+      while (cache.size > BRANCH_CACHE_MAX) cache.delete(cache.keys().next().value!);
+    }
+    return info;
+  };
+  return Object.assign(read, { stats: () => ({ calls }) });
+}
+
 /** ref と HEAD の差を数えてから mergedInto で調べる。ref がなければ false */
 async function mergedIntoRef(dir: string, ref: string, run: typeof git): Promise<boolean> {
   try {
@@ -187,7 +295,7 @@ export function createGitStatus(
   onUpdate: () => void,
   run: RunStatus = runGit,
   now = () => Date.now(),
-  branch: ReadBranch = (dir, base, remoteRef, main) => readBranchInfo(dir, base, git, remoteRef, main),
+  branch: ReadBranch = createBranchReader(),
   exists: (dir: string) => boolean = existsSync,
   options: () => GitOptions = () => DEFAULT_OPTIONS,
 ) {

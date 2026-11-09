@@ -6,15 +6,14 @@
 // - めくれと一覧の上だけクリックを受け取り、ほかは下（ウィジェットや後ろのウィンドウ）へ通す
 // - めくれを出している間は、カーソルが重なりに反応する範囲とめくれのどちらからも外れたら、すぐ消す（動きは付けない）
 // - めくれが隠れていても、ウィジェットの外の、めくれが飛び出す所にカーソルが入ったら、ウィジェットの画面に知らせて出してもらう
-//   （ウィジェットの外はウィジェットの画面からは見えないので、ウィジェットが出ている間はいつもカーソルの位置を見る）
+//   （ウィジェットの外はウィジェットの画面からは見えないので、ウィジェットが出ている間はいつもカーソルの位置を見る。
+//   カーソルがウィジェットと反応する範囲から遠いあいだは、見る間隔を長くする）
 
 import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
 import { join } from 'node:path';
 import type { FlyAction, FlyContent, FlyRequest, FlyShow, FlyTarget, TipRect } from '../shared/types';
-import { contains, flyoutBounds, inHoverZone, scaleRect, type Rect } from './tip-place';
+import { POLL_NEAR_MS, contains, flyoutBounds, inHoverZone, pollInterval, scaleRect, type Rect } from './tip-place';
 
-/** カーソルの位置を見る間隔 */
-const POLL_MS = 30;
 /** 外のクリックで閉じてから、同じものを開き直さない長さ */
 const REOPEN_GUARD_MS = 400;
 /** 一覧を開いたまま、ほかの重なりに乗ったとき、切り替えるまでとどまるのを待つ長さ */
@@ -139,6 +138,8 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
   let holdUntil = 0;
   let ignoring = true;
   let poll: NodeJS.Timeout | undefined;
+  /** 今待っている間隔（カーソルが遠いと長くする。tip-place.ts の pollInterval） */
+  let pollMs = 0;
   /** 重なりに反応する範囲（ウィジェットの中の座標、CSS px） */
   let targets: FlyTarget[] = [];
   /** ウィジェットの外で、カーソルが入っている範囲（入ったときに 1 度だけ知らせる） */
@@ -171,14 +172,46 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     return { top, inset, zoom };
   }
 
+  function wantPoll(): boolean {
+    return widgetVisible && !win.isDestroyed() && (key !== undefined || targets.length > 0);
+  }
+
   /** ウィジェットが出ていて、めくれを出しているか反応する範囲があるときだけカーソルを見る */
   function syncPoll() {
-    const want = widgetVisible && !win.isDestroyed() && (key !== undefined || targets.length > 0);
-    if (want && !poll) poll = setInterval(tick, POLL_MS);
-    if (!want && poll) {
-      clearInterval(poll);
+    if (!wantPoll()) {
+      clearTimeout(poll);
       poll = undefined;
+      return;
     }
+    // めくれを出したら、遠いときの長い間隔で待っている途中でも、すぐ短い間隔に戻す
+    if (!poll || (key !== undefined && pollMs > POLL_NEAR_MS)) schedulePoll(POLL_NEAR_MS);
+  }
+
+  function schedulePoll(ms: number) {
+    clearTimeout(poll);
+    pollMs = ms;
+    poll = setTimeout(pollTick, ms);
+  }
+
+  /** カーソルを見て、次に見るまでの間隔を決める。ウィジェットと反応する範囲から遠ければ長くする */
+  function pollTick() {
+    poll = undefined;
+    const c = tick();
+    // tick の中でめくれを消したときは、syncPoll がもう次を決めている
+    if (poll || !c || !wantPoll()) return;
+    const widget = deps.widget();
+    let wb: Rect | undefined;
+    let zones: Rect[] = [];
+    if (widget && !widget.isDestroyed()) {
+      const b = widget.getBounds();
+      const zoom = deps.zoom();
+      wb = b;
+      zones = targets.map((t) => {
+        const z = scaleRect(t.zone, zoom);
+        return { x: b.x + z.x, y: b.y + z.y, width: z.width, height: z.height };
+      });
+    }
+    schedulePoll(pollInterval(c, wb, zones, key !== undefined));
   }
 
   /** ウィジェットの外で、重なりに反応する範囲に入ったら知らせる。ウィジェットの中は、ウィジェットの画面が自分で見る */
@@ -202,17 +235,18 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     hovered = found;
   }
 
-  function tick() {
+  /** カーソルを見て、めくれを消すか、ウィジェットの外の範囲に入ったかを決める。見たカーソルの位置を返す */
+  function tick(): Electron.Point | undefined {
     // 終了の途中などでウィンドウが壊れたあとに呼ばれたら、カーソルを見るのをやめる。
     // 壊れたウィンドウを触ると 30ms ごとに例外になり、エラーのダイアログが閉じても出続ける
     if (win.isDestroyed()) {
       syncPoll();
-      return;
+      return undefined;
     }
     const c = screen.getCursorScreenPoint();
     if (!key || !ready) {
       if (!key) watchOutside(c, false);
-      return;
+      return c;
     }
     const zoom = deps.zoom();
     const zone = inHoverZone(c, win.getBounds(), solid.map((r) => scaleRect(r, zoom)), hit);
@@ -224,6 +258,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     if (!open && !zone.solid && !zone.hit && Date.now() >= holdUntil) hide();
     // めくれや一覧の上では、ほかの重なりの範囲に重なっていても反応しない
     watchOutside(c, zone.solid);
+    return c;
   }
 
   function hide() {

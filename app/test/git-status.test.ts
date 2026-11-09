@@ -1,9 +1,12 @@
 // コミットされていない変更（src/main/git-status.ts）を、偽の git で確かめる
 
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { createGitStatus, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, withUpstream, type GitOptions } from '../src/main/git-status';
-import { view } from './helpers';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
+import { createBranchReader, createGitStatus, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, readRefs, withUpstream, type GitOptions } from '../src/main/git-status';
+import { tempDir, view, writeJson } from './helpers';
 
 describe('parseStatus', () => {
   it('変更、名前の変更、衝突、未追跡、push していないコミットを数える', () => {
@@ -339,4 +342,207 @@ describe('readBranchInfo とリモートの写し', () => {
     ));
   it('リモートの写しがなければ、マージ済みではない', async () =>
     assert.deepEqual(await readBranchInfo('C:/W', 'main', fake({ [local]: '0\t2\n' }), 'refs/remotes/origin/main'), { behind: 0, ahead: 2, merged: false }));
+});
+
+describe('readRefs（.git のファイルから ref の先頭を読む）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const c = 'c'.repeat(40);
+  const repo = join(tmp.path, 'repo');
+  const git = join(repo, '.git');
+  const wt = join(tmp.path, 'wt');
+
+  before(() => {
+    writeJson(join(git, 'HEAD'), 'ref: refs/heads/main\n');
+    writeJson(join(git, 'refs', 'heads', 'main'), `${a}\n`);
+    writeJson(join(git, 'refs', 'remotes', 'origin', 'HEAD'), 'ref: refs/remotes/origin/main\n');
+    writeJson(join(git, 'packed-refs'), `# pack-refs with: peeled fully-peeled sorted\n${b} refs/remotes/origin/main\n${c} refs/tags/v1\n^${a}\n`);
+    // ワークツリー：.git ファイル → .git/worktrees/wt（HEAD はそこ、ref は共有の場所）
+    writeJson(join(wt, '.git'), `gitdir: ${join(git, 'worktrees', 'wt')}\n`);
+    writeJson(join(git, 'worktrees', 'wt', 'HEAD'), 'ref: refs/heads/claude/x\n');
+    writeJson(join(git, 'worktrees', 'wt', 'commondir'), '../..\n');
+    writeJson(join(git, 'refs', 'heads', 'claude', 'x'), `${c}\n`);
+  });
+
+  it('ばらのファイル、packed-refs、シンボリックな ref を読み、ないものは null', () =>
+    assert.deepEqual(readRefs(repo, ['refs/heads/main', 'refs/remotes/origin/main', 'refs/remotes/origin/HEAD', 'refs/heads/none']), {
+      head: a,
+      refs: [a, b, b, null],
+    }));
+
+  it('ワークツリーの HEAD は、その gitdir から読み、ref は元のリポジトリから読む', () => {
+    mkdirSync(join(wt, 'sub'), { recursive: true });
+    assert.deepEqual(readRefs(join(wt, 'sub'), ['refs/heads/main']), { head: c, refs: [a] });
+  });
+
+  it('途中がフォルダやファイルの名前は packed-refs を見て、なければ null', () =>
+    assert.deepEqual(readRefs(repo, ['refs/heads/claude', 'refs/heads/main/x']), { head: a, refs: [null, null] }));
+
+  it('HEAD がコミットを直接指していれば、その ID', () => {
+    const detached = join(tmp.path, 'detached');
+    writeJson(join(detached, '.git', 'HEAD'), `${b}\n`);
+    assert.deepEqual(readRefs(detached, []), { head: b, refs: [] });
+  });
+
+  it('まだコミットがない、reftable なら undefined', () => {
+    const empty = join(tmp.path, 'empty');
+    writeJson(join(empty, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    assert.equal(readRefs(empty, []), undefined);
+    const reftable = join(tmp.path, 'reftable');
+    writeJson(join(reftable, '.git', 'HEAD'), `${a}\n`);
+    writeJson(join(reftable, '.git', 'reftable', 'tables.list'), '');
+    assert.equal(readRefs(reftable, []), undefined);
+  });
+
+  it('本物の git と同じ値を読む（packed-refs とワークツリー）', () => {
+    const real = join(tmp.path, 'real');
+    const g = (cwd: string, ...args: string[]) =>
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', '-C', cwd, ...args], {
+        encoding: 'utf8',
+        windowsHide: true,
+      }).trim();
+    try {
+      g(tmp.path, 'init', '-q', '-b', 'main', real);
+    } catch {
+      return; // git がなければ確かめない
+    }
+    g(real, 'commit', '-q', '--allow-empty', '-m', 'one');
+    g(real, 'branch', 'develop');
+    g(real, 'pack-refs', '--all');
+    g(real, 'commit', '-q', '--allow-empty', '-m', 'two');
+    const tree = join(tmp.path, 'real-wt');
+    g(real, 'worktree', 'add', '-q', '-b', 'feature', tree, 'develop');
+    g(tree, 'commit', '-q', '--allow-empty', '-m', 'three');
+    assert.deepEqual(readRefs(tree, ['refs/heads/develop', 'refs/heads/main', 'refs/remotes/origin/main']), {
+      head: g(tree, 'rev-parse', 'HEAD'),
+      refs: [g(real, 'rev-parse', 'refs/heads/develop'), g(real, 'rev-parse', 'refs/heads/main'), null],
+    });
+  });
+});
+
+describe('createBranchReader（ref が変わるまで使い回す）', () => {
+  const counts = 'rev-list --left-right --count refs/heads/main...HEAD';
+  const first = 'rev-list --first-parent --reverse HEAD..refs/heads/main';
+  const outputs: Record<string, string> = {
+    [counts]: '2\t0\n',
+    [first]: 'c1\n',
+    'rev-parse c1^1 HEAD': 'p\nh\n',
+    'rev-list --left-right --count refs/heads/dev...HEAD': '0\t1\n',
+  };
+  type Refs = { head: string; refs: (string | null)[] } | undefined;
+  const setup = (start: Refs) => {
+    const calls: string[] = [];
+    let state = start;
+    const run = async (_dir: string, args: string[]) => {
+      const key = args.join(' ');
+      calls.push(key);
+      if (!(key in outputs)) throw new Error(`unexpected: ${key}`);
+      return outputs[key]!;
+    };
+    const read = createBranchReader(run, () => state);
+    return { read, calls, set: (next: Refs) => (state = next) };
+  };
+
+  it('HEAD と ref の先頭が同じなら git を起動しない', async () => {
+    const { read, calls } = setup({ head: 'h', refs: ['m'] });
+    const one = await read('C:/W', 'main');
+    assert.deepEqual(one, { behind: 2, ahead: 0, merged: true });
+    const n = calls.length;
+    // 返した結果を書き換えても、使い回す中身は変わらない
+    one.merged = false;
+    assert.deepEqual(await read('c:/w/', 'main'), { behind: 2, ahead: 0, merged: true });
+    assert.equal(calls.length, n);
+    assert.equal(read.stats().calls, n);
+  });
+
+  it('HEAD か ref の先頭が変わったら調べ直す', async () => {
+    const { read, calls, set } = setup({ head: 'h', refs: ['m'] });
+    await read('C:/W', 'main');
+    const n = calls.length;
+    set({ head: 'h2', refs: ['m'] });
+    await read('C:/W', 'main');
+    assert.equal(calls.length, 2 * n);
+    set({ head: 'h2', refs: ['m2'] });
+    await read('C:/W', 'main');
+    assert.equal(calls.length, 3 * n);
+  });
+
+  it('比べる ref が違えば、同じフォルダでも調べ直す', async () => {
+    const { read, calls } = setup({ head: 'h', refs: ['m'] });
+    await read('C:/W', 'main');
+    const n = calls.length;
+    await read('C:/W', 'main', undefined, 'develop');
+    assert.ok(calls.length > n);
+  });
+
+  it('先頭を読めなければ、毎回 git に聞く', async () => {
+    const { read, calls } = setup(undefined);
+    await read('C:/W', 'main');
+    const n = calls.length;
+    await read('C:/W', 'main');
+    assert.equal(calls.length, 2 * n);
+  });
+
+  it('元のブランチがないと読めたら、git を起動せず遅れ 0', async () => {
+    const { read, calls } = setup({ head: 'h', refs: [null] });
+    assert.deepEqual(await read('C:/W', 'gone'), { behind: 0, ahead: 0, merged: false });
+    assert.equal(calls.length, 0);
+  });
+
+  it('途中で git が失敗したら覚えない', async () => {
+    const { read, calls } = setup({ head: 'h', refs: ['x'] });
+    // other の rev-list は出力を用意していないので失敗する
+    assert.deepEqual(await read('C:/W', 'other'), { behind: 0, ahead: 0, merged: false });
+    await read('C:/W', 'other');
+    assert.equal(calls.length, 2);
+  });
+
+  it('ないと読めたリモートの写しで git が失敗しても、覚えてよい', async () => {
+    const { read, calls } = setup({ head: 'h', refs: ['m', null] });
+    await read('C:/W', 'dev', 'refs/remotes/origin/dev');
+    const n = calls.length;
+    assert.equal(n, 2);
+    await read('C:/W', 'dev', 'refs/remotes/origin/dev');
+    assert.equal(calls.length, n);
+  });
+});
+
+describe('readRefs（共有の場所の決め方とたどり方）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const c = 'c'.repeat(40);
+
+  it('commondir のない gitdir（サブモジュールなど）は、ref もその gitdir から読む', () => {
+    const top = join(tmp.path, 'top');
+    const modules = join(top, '.git', 'modules', 'sub');
+    // 上のリポジトリにも同じ名前のブランチがあるが、読んではいけない
+    writeJson(join(top, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    writeJson(join(top, '.git', 'refs', 'heads', 'main'), `${a}\n`);
+    writeJson(join(modules, 'HEAD'), `${b}\n`);
+    writeJson(join(modules, 'refs', 'heads', 'main'), `${c}\n`);
+    writeJson(join(top, 'sub', '.git'), 'gitdir: ../.git/modules/sub\n');
+    assert.deepEqual(readRefs(join(top, 'sub'), ['refs/heads/main', 'refs/heads/develop']), { head: b, refs: [c, null] });
+  });
+
+  it('HEAD が packed-refs にだけあるブランチを指していても読む', () => {
+    const repo = join(tmp.path, 'packed');
+    writeJson(join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    writeJson(join(repo, '.git', 'packed-refs'), `${a} refs/heads/main\n`);
+    assert.deepEqual(readRefs(repo, []), { head: a, refs: [] });
+  });
+
+  it('シンボリックな ref を何段もたどる。輪になっていれば読めないとする', () => {
+    const repo = join(tmp.path, 'chain');
+    writeJson(join(repo, '.git', 'HEAD'), `${a}\n`);
+    writeJson(join(repo, '.git', 'refs', 'heads', 'x'), 'ref: refs/heads/y\n');
+    writeJson(join(repo, '.git', 'refs', 'heads', 'y'), 'ref: refs/heads/z\n');
+    writeJson(join(repo, '.git', 'refs', 'heads', 'z'), `${b}\n`);
+    assert.deepEqual(readRefs(repo, ['refs/heads/x']), { head: a, refs: [b] });
+    writeJson(join(repo, '.git', 'refs', 'heads', 'z'), 'ref: refs/heads/x\n');
+    assert.equal(readRefs(repo, ['refs/heads/x']), undefined);
+  });
 });
