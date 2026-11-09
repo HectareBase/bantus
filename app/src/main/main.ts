@@ -1,9 +1,10 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { cardSessions, menuLabel } from './card-sessions';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -511,7 +512,7 @@ function createTray(): Tray {
 
 /**
  * カードの見出しの右クリックメニュー。作業フォルダは画面から受け取らず、セッションから探す（画面が任意のパスを開けないように）。
- * フォルダがわからない、またはもうないときは、項目を押せなくする
+ * フォルダがわからない、またはもうないときは、項目を押せなくする。セッションの ID もコピーできる
  */
 function showCardMenu(key: string) {
   if (!win || win.isDestroyed()) return;
@@ -526,7 +527,26 @@ function showCardMenu(key: string) {
       },
     },
     { label: ja.menu.openInTerminal, enabled, click: () => dir && openTerminal(dir) },
+    { type: 'separator' },
+    copyIdItem(key),
   ]).popup({ window: win });
+}
+
+/**
+ * 「ID をコピー」の項目。ID は画面から受け取らず、セッションから引く。
+ * セッションが 1 つならそのまま、いくつもあるときはタイトルを並べたサブメニューにする。ないときは押せなくする
+ */
+function copyIdItem(key: string): Electron.MenuItemConstructorOptions {
+  const sessions = cardSessions(lastSessions, key);
+  const copy = (id: string) => clipboard.writeText(id);
+  if (sessions.length <= 1) {
+    const id = sessions[0]?.id;
+    return { label: ja.menu.copySessionId, enabled: !!id, click: () => id && copy(id) };
+  }
+  return {
+    label: ja.menu.copySessionId,
+    submenu: sessions.map((s) => ({ label: menuLabel(s.title), click: () => copy(s.id) })),
+  };
 }
 
 /** ウィジェットのタイトルの右クリックメニュー */
