@@ -96,6 +96,8 @@ export interface Settings {
   viewerPath: string;
   /** ファイルが変わったら読み込み直す */
   viewerAutoReload: boolean;
+  /** ビューアの HTML の拡大率（%）。ウィジェットの拡大率（zoom）とは別で、重ねてはかけない */
+  viewerZoom: number;
   /** ビューアの HTML の高さ（CSS px）。設定画面には出さず、つまみのドラッグで変える。上限はウィンドウの高さで決まる（画面側） */
   viewerHeight: number;
   /** ビューアを畳んでいる（見出しだけを出す）。設定画面には出さず、見出しのボタンで切り替える */
@@ -196,6 +198,7 @@ export const DEFAULT_SETTINGS: Settings = {
   viewerEnabled: false,
   viewerPath: '',
   viewerAutoReload: true,
+  viewerZoom: 100,
   viewerHeight: 240,
   viewerCollapsed: false,
 };
@@ -293,7 +296,7 @@ export type SettingDef =
       preview?: 'sound';
     })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -487,6 +490,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'viewerAutoReload', category: 'viewer', group: T.groups.viewerFile, type: 'segmented', enabledBy: 'viewerEnabled',
     ...T.items.viewerAutoReload,
     options: [{ value: true, label: T.options.reload }, { value: false, label: T.options.noReload }],
+  },
+  {
+    key: 'viewerZoom', category: 'viewer', group: T.groups.viewerLook, type: 'slider', enabledBy: 'viewerEnabled',
+    ...T.items.viewerZoom,
+    min: 50, max: 200, step: 10, unit: '%',
   },
 ];
 

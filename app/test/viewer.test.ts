@@ -147,8 +147,15 @@ describe('ビューアの設定', () => {
     assert.deepEqual([s.viewerEnabled, s.viewerPath, s.viewerAutoReload, s.viewerHeight, s.viewerCollapsed], [false, '', true, 240, false]);
   });
   it('カテゴリは panel-bottom のアイコン', () => assert.equal(CATEGORIES.find((c) => c.id === 'viewer')?.icon, 'panel-bottom'));
-  it('パスと自動の読み込み直しは、出さないとき押せない', () =>
-    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'viewerEnabled').map((d) => d.key), ['viewerPath', 'viewerAutoReload']));
+  it('パスと自動の読み込み直しと拡大率は、出さないとき押せない', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'viewerEnabled').map((d) => d.key), ['viewerPath', 'viewerAutoReload', 'viewerZoom']));
+  it('拡大率は、なければ 100%、ウィジェットの拡大率とは別に 50% から 200% に収める', () => {
+    assert.equal(normalizeSettings({}).viewerZoom, 100);
+    assert.equal(normalizeSettings({ zoom: 120 }).viewerZoom, 100);
+    assert.equal(normalizeSettings({ viewerZoom: 30 }).viewerZoom, 50);
+    assert.equal(normalizeSettings({ viewerZoom: 500 }).viewerZoom, 200);
+    assert.equal(normalizeSettings({ viewerZoom: 130, zoom: 90 }).zoom, 90);
+  });
   it('パスは検査を通ったものだけを、そろえて保存する', () => {
     assert.equal(normalizeSettings({ viewerPath: 'docs\\a.html' }).viewerPath, 'docs/a.html');
     assert.equal(normalizeSettings({ viewerPath: 'C:\\a.html' }).viewerPath, DEFAULT_SETTINGS.viewerPath);

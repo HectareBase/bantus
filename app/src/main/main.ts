@@ -872,11 +872,14 @@ app.whenReady().then(() => {
   viewer = createViewer({
     window: () => win,
     zoom: zoomFactor,
+    pageZoom: () => getSettings().viewerZoom / 100,
+    dark: () => nativeTheme.shouldUseDarkColors,
     onState: (state: ViewerState) => {
       if (win && !win.isDestroyed()) win.webContents.send('viewer:state', state);
     },
     refresh: () => refreshViewer(),
   });
+  nativeTheme.on('updated', () => viewer?.applyTheme());
   ipcMain.on('viewer-target', (e, id: unknown) => {
     if (e.sender !== win?.webContents) return;
     if (id !== null && (typeof id !== 'string' || !SESSION_KEY_ID.test(id))) return;

@@ -214,6 +214,7 @@ export const ja = {
       windowsNotify: 'Windows の通知',
       viewerShow: '表示',
       viewerFile: 'ファイル',
+      viewerLook: '見た目',
     },
     /** ツールチップの時間の見せ方 */
     tooltipDelay: {
@@ -266,6 +267,7 @@ export const ja = {
         placeholder: 'docs/index.html',
       },
       viewerAutoReload: { label: 'ファイルを書き換えたとき', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
+      viewerZoom: { label: '表示の拡大率', description: 'HTML の文字の大きさ。ウィジェットの拡大率とは別に決める' },
     },
     /** ファイルの場所を受け付けない理由（入力欄の下に出す） */
     viewerPathProblems: {

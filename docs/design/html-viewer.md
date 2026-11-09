@@ -7,10 +7,13 @@
 - メインプロセスが `WebContentsView` を作り、`win.contentView.addChildView` でウィジェットに重ねる（`app/src/main/viewer.ts`）
   - `webPreferences`：preload なし、`sandbox: true`、`contextIsolation: true`、`nodeIntegration: false`、`webviewTag: false`
   - パーティションは `viewer`（`persist:` を付けないので、クッキーやストレージをディスクに書かない。ほかのウィンドウとも分かれる）
-  - 背景は白。背景のない HTML でも、ウィジェットの背景が透けて読みにくくならないようにする
+  - ビューの下地（`setBackgroundColor`）は、読み込む前はテーマの色（ライトは白、ダークはカードの色 `#282828`）。ダークで切り替えたときに白く光らないようにする
+  - 読み込み終えたら、ページの背景（`html`、なければ `body` の不透明な背景）の色に塗り直す。出し直したときに違う色が一瞬見えないようにする。背景のないページは白（既定の黒い文字が読めるように。`color-scheme` が dark のページはダークの色）
+  - テーマが変わったら、少し待って測り直す（ページが `prefers-color-scheme` で色を変えることがあるため）
 - 画面側に場所取り用の `#viewer-slot` を置く。その位置と大きさを `ResizeObserver` とウィンドウの `resize` で測り、IPC（`viewer-bounds`）で送る。メインは表示の拡大率（`zoom`）をかけて `setBounds` で合わせる
 - ビューはウィンドウに足して（`addChildView`）から隠す。足す前に `setVisible(false)` にすると、あとで出してもページが隠れたまま（描かれない）になることがあった
-- ビューにも表示の拡大率をかける（読み込み終えるたびと、設定を変えたとき）
+- ビューの HTML には、ウィジェットとは別の拡大率（`viewerZoom`、50%〜200%、既定は 100%）をかける（読み込み終えるたびと、設定を変えたとき）。ウィジェットの拡大率（`zoom`）は、ビューの場所と大きさにだけかける
+- スクロールバーを細く、半透明の灰色にする（`scrollbar-width: thin`、`scrollbar-color`）。`insertCSS` の user の層で足すので、ページが自分で決めた値が勝つ。ページが `::-webkit-scrollbar` や `scrollbar-*` を使っていれば足さない（`scrollbar-*` を決めると `::-webkit-scrollbar` が効かなくなるため）
 
 ## 表示するファイル
 - 対象は、今開いているセッション（`renderer/model.ts` の `resolveFocus()` の結果）の `SessionView.workDir` から見た、設定の相対パス（`viewerPath`）。元のフォルダのセッションならリポジトリのルートから見る（`workDir` がそうなっている）
