@@ -92,3 +92,30 @@ export function inHoverZone(
     hit: hit.some((r) => contains(r, cursor.x, cursor.y)),
   };
 }
+
+/** カーソルの位置を見る間隔。近いときとめくれを出しているとき */
+export const POLL_NEAR_MS = 30;
+/** ウィジェットと反応する範囲から遠いときの間隔（省電力のため） */
+export const POLL_FAR_MS = 250;
+/**
+ * この距離（画面の座標）より近ければ、すぐ反応できるよう短い間隔で見る。遠い間隔のあいだにふつうの速さで動かしても
+ * この距離を越えきらないよう、広めにとる
+ */
+export const POLL_NEAR_PX = 200;
+
+/** r の外側にあるとき、点から r までの距離（中なら 0） */
+export function distanceTo(r: Rect, x: number, y: number): number {
+  const dx = Math.max(r.x - x, 0, x - (r.x + r.width));
+  const dy = Math.max(r.y - y, 0, y - (r.y + r.height));
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * 次にカーソルを見るまでの間隔。めくれを出しているあいだは短いまま。出していなければ、ウィジェットと反応する範囲
+ * （どちらも画面の座標）のどれかに POLL_NEAR_PX より近いときだけ短くし、遠ければ長くする
+ */
+export function pollInterval(cursor: { x: number; y: number }, widget: Rect | undefined, zones: Rect[], showing: boolean): number {
+  if (showing || !widget) return POLL_NEAR_MS;
+  const near = [widget, ...zones].some((r) => distanceTo(r, cursor.x, cursor.y) <= POLL_NEAR_PX);
+  return near ? POLL_NEAR_MS : POLL_FAR_MS;
+}

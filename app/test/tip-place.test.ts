@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FLY_GAP, FLY_LIST_WIDTH, FLY_SHADOW, TIP_GAP, TIP_MARGIN, contains, flyoutBounds, inHoverZone, scaleRect, tipBounds } from '../src/main/tip-place';
+import { FLY_GAP, FLY_LIST_WIDTH, FLY_SHADOW, POLL_FAR_MS, POLL_NEAR_MS, POLL_NEAR_PX, TIP_GAP, TIP_MARGIN, contains, distanceTo, flyoutBounds, inHoverZone, pollInterval, scaleRect, tipBounds } from '../src/main/tip-place';
 
 const area = { x: 0, y: 0, width: 1920, height: 1040 };
 const size = { width: 200, height: 40 };
@@ -94,4 +94,39 @@ describe('inHoverZone', () => {
   it('めくれの上ではクリックを受け取る', () => assert.deepEqual(inHoverZone({ x: 1640, y: 150 }, win, [flap], [hit]), { solid: true, hit: false }));
   it('どちらからも外れた', () => assert.deepEqual(inHoverZone({ x: 1700, y: 150 }, win, [flap], [hit]), { solid: false, hit: false }));
   it('的がなければ、めくれだけで決める', () => assert.deepEqual(inHoverZone({ x: 1660, y: 150 }, win, [flap], []), { solid: true, hit: false }));
+});
+
+describe('pollInterval（カーソルを見る間隔）', () => {
+  const widget = { x: 1520, y: 0, width: 400, height: 1040 };
+  // ウィジェットの外へ飛び出す、反応する範囲
+  const zone = { x: 1300, y: 100, width: 220, height: 44 };
+
+  it('distanceTo は中なら 0、外なら一番近い辺や角までの距離', () => {
+    assert.equal(distanceTo(widget, 1600, 500), 0);
+    assert.equal(distanceTo(widget, 1500, 500), 20);
+    assert.equal(distanceTo({ x: 0, y: 0, width: 10, height: 10 }, 13, 14), 5);
+  });
+
+  it('ウィジェットの上や近くでは短い間隔', () => {
+    assert.equal(pollInterval({ x: 1600, y: 500 }, widget, [], false), POLL_NEAR_MS);
+    assert.equal(pollInterval({ x: 1520 - POLL_NEAR_PX, y: 500 }, widget, [], false), POLL_NEAR_MS);
+  });
+
+  it('遠いと長い間隔', () => {
+    assert.equal(pollInterval({ x: 1520 - POLL_NEAR_PX - 1, y: 500 }, widget, [], false), POLL_FAR_MS);
+    assert.equal(pollInterval({ x: 100, y: 100 }, widget, [zone], false), POLL_FAR_MS);
+    assert.ok(POLL_FAR_MS > POLL_NEAR_MS);
+  });
+
+  it('ウィジェットから遠くても、反応する範囲に近ければ短い間隔', () => {
+    assert.equal(pollInterval({ x: 1300 - POLL_NEAR_PX + 10, y: 120 }, widget, [zone], false), POLL_NEAR_MS);
+  });
+
+  it('めくれを出しているあいだは、遠くても短い間隔のまま', () => {
+    assert.equal(pollInterval({ x: 100, y: 100 }, widget, [zone], true), POLL_NEAR_MS);
+  });
+
+  it('ウィジェットの場所が分からなければ短い間隔', () => {
+    assert.equal(pollInterval({ x: 100, y: 100 }, undefined, [], false), POLL_NEAR_MS);
+  });
 });
