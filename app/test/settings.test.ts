@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, normalizeColor, normalizeNote, normalizeSettings,
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HIGHLIGHT_SCALE, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, normalizeColor, normalizeNote, normalizeSettings,
 } from '../src/shared/settings';
 
 describe('git の設定', () => {
@@ -135,6 +135,19 @@ describe('normalizeSettings の見出しの濃さ', () => {
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
 });
 
+describe('normalizeSettings の開いている行の濃さ', () => {
+  it('なければ標準で、倍率は 1（以前と同じ見た目）', () => {
+    assert.equal(normalizeSettings({}).activeHighlight, 'normal');
+    assert.equal(HIGHLIGHT_SCALE.normal, 1);
+  });
+  it('薄い・濃いを残す', () => {
+    assert.equal(normalizeSettings({ activeHighlight: 'subtle' }).activeHighlight, 'subtle');
+    assert.equal(normalizeSettings({ activeHighlight: 'strong' }).activeHighlight, 'strong');
+  });
+  it('知らない値は標準に戻す', () => assert.equal(normalizeSettings({ activeHighlight: 'max' }).activeHighlight, 'normal'));
+  it('薄い < 標準 < 濃い', () => assert.ok(HIGHLIGHT_SCALE.subtle < HIGHLIGHT_SCALE.normal && HIGHLIGHT_SCALE.normal < HIGHLIGHT_SCALE.strong));
+});
+
 describe('normalizeSettings の表示の拡大率', () => {
   it('なければ 100%', () => assert.equal(normalizeSettings({}).zoom, 100));
   it('80〜150 に収め、整数にする', () => {
@@ -183,7 +196,7 @@ describe('設定画面のカテゴリ', () => {
   it('見た目は 明るさ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['明るさ', ['theme']],
-      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'zoom']],
+      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
       ['状態の色', ['statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>

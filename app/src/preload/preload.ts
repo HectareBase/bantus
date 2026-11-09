@@ -2,7 +2,7 @@
 // sandbox の preload は自分のファイル以外を読み込めないので、shared からは型だけを使う。
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Settings, StatusColors } from '../shared/settings';
+import type { ActiveHighlight, Settings, StatusColors } from '../shared/settings';
 import type { FetchStatus, FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, ViewerState, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
@@ -87,7 +87,7 @@ const flyoutApi: FlyoutApi = {
   },
   reportSolid: (rects) => ipcRenderer.send('fly:solid', rects),
   onColors: (listener) => {
-    ipcRenderer.on('fly:colors', (_e, colors: StatusColors) => listener(colors));
+    ipcRenderer.on('fly:colors', (_e, colors: StatusColors, highlight: ActiveHighlight) => listener(colors, highlight));
   },
   requestOpen: () => ipcRenderer.send('fly:request-open'),
   action: (action) => ipcRenderer.send('fly:action', action),

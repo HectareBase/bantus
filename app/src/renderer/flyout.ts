@@ -10,7 +10,7 @@ import { ja } from '../shared/strings/ja.js';
 import { createIcon } from './icon.js';
 import { canToggleArchive, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
-import { applyStatusColors } from './status-colors.js';
+import { applyHighlight, applyStatusColors } from './status-colors.js';
 
 document.title = ja.window.flyout(ja.app.name);
 
@@ -306,7 +306,10 @@ function setOpen(animate: boolean) {
   reportSolid();
 }
 
-window.flyoutApi.onColors((colors) => applyStatusColors(colors));
+window.flyoutApi.onColors((colors, highlight) => {
+  applyStatusColors(colors);
+  applyHighlight(highlight);
+});
 window.flyoutApi.onShow((show) => {
   current = show;
   open = false;
