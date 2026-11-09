@@ -229,7 +229,7 @@ export const ja = {
       openAtLogin: { label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える' },
       hardwareAcceleration: {
         label: 'GPU',
-        description: '使わないとメモリが 100 MB ほど減る。切り替えると Bantus が起動し直す',
+        description: '使うとメモリが 100 MB ほど増える。切り替えると Bantus が起動し直す',
       },
       tooltipDelayMs: { label: '表示までの時間', description: 'ポインタを載せてから出るまで。右端にすると出さない' },
       theme: { label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
