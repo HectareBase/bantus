@@ -6,7 +6,7 @@
 ウィジェットのプロセスのうち、GPU のプロセスがいちばん大きいメモリを使っていました。Bantus の画面は文字、枠、半透明の塗り、CSS のアニメーションだけで、WebGL や動画を使いません。GPU がなくても、ソフトウェアの描画で足ります。
 
 ## 動かし方
-- 設定の「全体」→「描画」→「GPU で描く」（使う／使わない）。設定の名前は `hardwareAcceleration`（`app/src/shared/settings.ts`）
+- 設定の「全体」→「動作」→「GPU」（使う／使わない）。設定の名前は `hardwareAcceleration`（`app/src/shared/settings.ts`）
 - メインプロセスは、起動したとき（`app` の ready より前）に設定を読み、使わないなら `app.disableHardwareAcceleration()` を呼ぶ。ready のあとでは切り替えられない
   - 設定はデータフォルダの `settings.json` から読む。ワークツリー版と見本データはデータフォルダを先に切り替えるので、その後で読む（`app/src/main/main.ts`）
 - 設定を変えたら、その場で起動し直す（`app.relaunch()` → `app.quit()`）。新しいコードへの切り替え（`self-update.ts`）と同じ関数を使う

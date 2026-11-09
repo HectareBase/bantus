@@ -362,7 +362,7 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: true, label: T.options.open }, { value: false, label: T.options.noOpen }],
   },
   {
-    key: 'hardwareAcceleration', category: 'general', group: T.groups.rendering, type: 'segmented',
+    key: 'hardwareAcceleration', category: 'general', group: T.groups.performance, type: 'segmented',
     ...T.items.hardwareAcceleration,
     options: [{ value: true, label: T.options.useGpu }, { value: false, label: T.options.noGpu }],
   },

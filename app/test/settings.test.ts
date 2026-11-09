@@ -173,12 +173,12 @@ describe('設定画面のカテゴリ', () => {
       ['変更の印', ['showChanges', 'countUntracked']],
     ]));
   it('git のアイコンは git-branch', () => assert.equal(CATEGORIES.find((c) => c.id === 'git')?.icon, 'git-branch'));
-  it('全体は 位置 → ツールチップ → 起動 → 描画', () =>
+  it('全体は 位置 → ツールチップ → 起動 → 動作', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
       ['ツールチップ', ['tooltipDelayMs']],
       ['起動', ['openAtLogin']],
-      ['描画', ['hardwareAcceleration']],
+      ['動作', ['hardwareAcceleration']],
     ]));
   it('見た目は 明るさ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
