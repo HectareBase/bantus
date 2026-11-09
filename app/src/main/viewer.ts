@@ -19,6 +19,43 @@ const SCROLL_MEMORY = 32;
 const PARTITION = 'viewer';
 /** スクロールの読み書きは隔離した世界で動かす（ページのスクリプトが scrollTo などを書き換えていても影響されない） */
 const WORLD_ID = 1001;
+/** 読み込む前と、背景のない HTML の下地。ダークはウィジェットのカードの色（styles.css の --card-rgb）に合わせ、切り替えで白く光らないようにする */
+const BASE_LIGHT = '#ffffff';
+const BASE_DARK = '#282828';
+/**
+ * スクロールバーを細く控えめにする CSS。user の層で足すので、ページが自分で決めた scrollbar-* が勝つ。
+ * 灰色を半透明にして、明るい背景にも暗い背景にも馴染ませる。scrollbar-color は受け継がれるので :root だけに書く
+ */
+const SCROLLBAR_CSS = ':root { scrollbar-color: rgba(128, 128, 128, 0.45) transparent; } * { scrollbar-width: thin; }';
+/**
+ * ページがスクロールバーを自分で飾っているか（::-webkit-scrollbar や scrollbar-*）。飾っていれば CSS を足さない
+ * （scrollbar-width などを決めると ::-webkit-scrollbar が効かなくなるため）。読めないスタイルシートは飛ばす
+ */
+const HAS_OWN_SCROLLBAR = `(() => {
+  for (const s of document.styleSheets) {
+    let rules;
+    try { rules = s.cssRules; } catch { continue; }
+    for (const r of rules) if (r.cssText.includes('scrollbar')) return true;
+  }
+  return false;
+})()`;
+/**
+ * ページの下地の色。html、なければ body の背景が不透明ならその色。どちらも透明なら、
+ * color-scheme が dark なら 'dark'（ブラウザーが暗く塗る）、そうでなければ 'none'
+ */
+const PAGE_BASE = `(() => {
+  const opaque = (el) => {
+    if (!el) return undefined;
+    const c = getComputedStyle(el).backgroundColor;
+    const m = c.match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return undefined;
+    const [r, g, b, a = '1'] = m[1].split(/[ ,/]+/).filter(Boolean);
+    return Number(a) >= 1 ? '#' + [r, g, b].map((n) => Math.round(Number(n)).toString(16).padStart(2, '0')).join('') : undefined;
+  };
+  const color = opaque(document.documentElement) || opaque(document.body);
+  if (color) return color;
+  return getComputedStyle(document.documentElement).colorScheme.includes('dark') && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'none';
+})()`;
 
 interface Scroll {
   x: number;
@@ -34,12 +71,18 @@ interface Entry {
   reloadTimer?: NodeJS.Timeout;
   /** 次に読み込み終えたときに戻すスクロールの位置 */
   pendingScroll?: Scroll;
+  /** 読み込み終えたページの下地。#rrggbb、'dark'（color-scheme が dark で背景なし）、'none'（背景なし）。読み込む前は undefined */
+  pageBase?: string;
 }
 
 export interface ViewerDeps {
   window: () => BrowserWindow | undefined;
-  /** 表示の拡大率（1 で等倍）。画面から届く座標（CSS px）にかける */
+  /** ウィジェットの表示の拡大率（1 で等倍）。画面から届く座標（CSS px）にかける */
   zoom: () => number;
+  /** ビューアの HTML の拡大率（1 で等倍）。ウィジェットの拡大率とは別 */
+  pageZoom: () => number;
+  /** ダークのテーマで描いているか */
+  dark: () => boolean;
   /** 様子が変わったとき（画面に送る） */
   onState: (state: ViewerState) => void;
   /** ファイルが消えたり現れたりしたときに、出すものを決め直してもらう */
@@ -53,6 +96,8 @@ export interface Viewer {
   setBounds(rect: TipRect | undefined): void;
   /** 拡大率が変わったとき */
   applyZoom(): void;
+  /** テーマ（ライト／ダーク）が変わったとき */
+  applyTheme(): void;
   /** 今のファイルを読み込み直す（スクロールの位置は保つ） */
   reload(): void;
   /** 今のファイルをいつものブラウザーで開く */
@@ -208,6 +253,40 @@ export function createViewer(deps: ViewerDeps): Viewer {
     });
   }
 
+  /**
+   * ビューの下地を塗る。読み込む前はテーマの色（ダークで白く光らないように）。読み込み終えたら、ページの背景の色
+   * （出し直したときに違う色が一瞬見えないように）。背景のないページは、既定の黒い文字が読めるように白
+   */
+  function paintBase(e: Entry) {
+    const base = e.pageBase;
+    const color = base === undefined ? (deps.dark() ? BASE_DARK : BASE_LIGHT) : base === 'dark' ? BASE_DARK : base === 'none' ? BASE_LIGHT : base;
+    e.view.setBackgroundColor(color);
+  }
+
+  async function measureBase(e: Entry) {
+    const wc = e.view.webContents;
+    if (wc.isDestroyed()) return;
+    try {
+      const r: unknown = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: PAGE_BASE }]);
+      if (typeof r !== 'string' || !/^(#[0-9a-f]{6}|dark|none)$/.test(r)) return;
+      if (entries.get(e.key) !== e) return;
+      e.pageBase = r;
+      paintBase(e);
+    } catch {
+      // 読めなければ、今の下地のまま
+    }
+  }
+
+  async function tameScrollbar(wc: WebContents) {
+    if (wc.isDestroyed()) return;
+    try {
+      const own: unknown = await wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: HAS_OWN_SCROLLBAR }]);
+      if (own === false && !wc.isDestroyed()) await wc.insertCSS(SCROLLBAR_CSS, { cssOrigin: 'user' });
+    } catch {
+      // 足せなければ、いつものスクロールバーのまま
+    }
+  }
+
   function create(key: string, file: string, dir: string): Entry | undefined {
     const win = deps.window();
     if (!win || win.isDestroyed()) return undefined;
@@ -216,16 +295,19 @@ export function createViewer(deps: ViewerDeps): Viewer {
       // preload は付けない。表示した HTML から Node や Bantus の API には届かない
       webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, spellcheck: false },
     });
-    // 背景のない HTML でも、ウィジェットの背景が透けて読みにくくならないようにする
-    view.setBackgroundColor('#ffffff');
     const saved = scrolls.get(key);
     scrolls.delete(key);
     const e: Entry = { key, file, dir, view };
+    // 背景のない HTML でも、ウィジェットの背景が透けて読みにくくならないようにする。読み込む前はテーマの色
+    paintBase(e);
     if (saved && saved.file === file) e.pendingScroll = { x: saved.x, y: saved.y };
     const wc = view.webContents;
     guard(wc);
+    // 描き始める前に足して、太いスクロールバーが一瞬見えないようにする
+    wc.on('dom-ready', () => void tameScrollbar(wc));
     wc.on('did-finish-load', () => {
-      wc.setZoomFactor(deps.zoom());
+      wc.setZoomFactor(deps.pageZoom());
+      void measureBase(e);
       const pos = e.pendingScroll;
       e.pendingScroll = undefined;
       if (pos) restoreScroll(wc, pos);
@@ -294,8 +376,15 @@ export function createViewer(deps: ViewerDeps): Viewer {
       layout();
     },
     applyZoom() {
-      for (const e of entries.values()) if (!e.view.webContents.isDestroyed()) e.view.webContents.setZoomFactor(deps.zoom());
+      for (const e of entries.values()) if (!e.view.webContents.isDestroyed()) e.view.webContents.setZoomFactor(deps.pageZoom());
       layout();
+    },
+    applyTheme() {
+      // ページが prefers-color-scheme で色を変えることがあるので、描き直すのを少し待ってから測り直す
+      for (const e of entries.values()) {
+        if (e.pageBase === undefined) paintBase(e);
+        else setTimeout(() => void measureBase(e), 200);
+      }
     },
     reload() {
       if (current) void reloadEntry(current);
