@@ -5,12 +5,12 @@ import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notific
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { foregroundProcessName, raiseClaudeWindow, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
 import { startSelfUpdate } from './self-update';
-import { folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { desktopDataFolders, folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { createViewer, type Viewer } from './viewer';
@@ -40,6 +40,8 @@ const APP_USER_MODEL_ID = 'io.github.hectarebase.bantus';
 const CYCLE_SHORTCUT = 'Control+Alt+N';
 /** Claude デスクトップのプロセス名 */
 const CLAUDE_PROCESS = 'claude';
+/** WM_COPYDATA を送ってから、Claude が前に出たかを確かめるまでの時間 */
+const FRONT_CHECK_MS = 400;
 /** タスクバーを点滅させる長さ。止めたあとはオレンジのまま残さない */
 const FLASH_MS = 3_000;
 
@@ -552,20 +554,30 @@ async function claudeInFront(): Promise<boolean> {
   return (await foregroundProcessName())?.toLowerCase() === CLAUDE_PROCESS;
 }
 
-function openSession(id: unknown) {
-  if (typeof id === 'string' && SESSION_ID.test(id)) {
-    shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
+/**
+ * セッションを開く。claude:// リンクだと毎回 claude.exe がもう 1 つ起動するので（ウイルス対策の検査で遅れることがある）、
+ * 本体に WM_COPYDATA を直接送って切り替える。送れなかったとき（ウィンドウがない、結果が 0、PowerShell が使えない、
+ * 時間切れ）だけリンクで開く。時間切れのあとで送られた場合は同じセッションに 2 回切り替わるだけで、害はない
+ */
+async function openSession(id: unknown) {
+  if (typeof id !== 'string' || !SESSION_ID.test(id)) return;
+  if (await sendOpenToClaude(id, desktopDataFolders())) {
+    // 本体はふつう自分で前に出る。出なかったときだけ、あとから前に出す
+    await new Promise((r) => setTimeout(r, FRONT_CHECK_MS));
+    if (!(await claudeInFront())) await raiseClaudeWindow();
+    return;
   }
+  shell.openExternal(`claude://claude.ai/epitaxy/${id}`);
 }
 
 /**
  * もう開いているセッションの Claude のウィンドウを前に出す。
  * リンクだと 2 つ目の claude.exe が起動して URL を渡すまでに約 260 ms かかるので、直接前に出す。
- * 前に出せなかったとき（Windows に断られた、PowerShell が使えない）は、今までどおりリンクで開く
+ * 前に出せなかったとき（Windows に断られた、PowerShell が使えない）は、openSession で開き直す
  */
 async function raiseSession(id: unknown) {
   if (typeof id !== 'string' || !SESSION_ID.test(id)) return;
-  if (!(await raiseClaudeWindow())) openSession(id);
+  if (!(await raiseClaudeWindow())) await openSession(id);
 }
 
 function isToastRequest(v: unknown): v is ToastRequest {
@@ -585,7 +597,7 @@ function showToast(t: ToastRequest) {
   // 画面側の openRow を通して開く（未確認の帯を消す）。画面がなければここで開く
   n.on('click', () => {
     if (win && !win.isDestroyed()) win.webContents.send('toast-click', t.id);
-    else openSession(t.id);
+    else void openSession(t.id);
   });
   n.on('close', () => toasts.delete(n));
   n.on('failed', () => toasts.delete(n));
@@ -785,7 +797,7 @@ app.whenReady().then(() => {
     if (!ok) console.error(`ショートカット ${CYCLE_SHORTCUT} を登録できませんでした（ほかのアプリが使用中）`);
   }
 
-  ipcMain.on('open-session', (_e, id: unknown) => openSession(id));
+  ipcMain.on('open-session', (_e, id: unknown) => void openSession(id));
   ipcMain.on('raise-session', (_e, id: unknown) => void raiseSession(id));
   ipcMain.on('resize-start', () => {
     dragWidth = getSettings().width;

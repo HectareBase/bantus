@@ -56,6 +56,6 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 - 認証情報を含むファイル（`config.json`、`ssh-remote-server-state.json`、`~/.claude.json`、`sessions/*.key`）は読みません
 - 会話の記録（`~/.claude/projects/*.jsonl`）は、コンテキストの使用量を出すために末尾だけを読み、使用量の数とモデル名のほかは使いません。発言の中身を画面に出したり、ほかへ送ったり、ログに出したりはしません。会話の記録のフォルダは見張りません
 - `git-worktrees.json`、`window-state.json` は読みません。調査はしましたが、今は使っていません
-- UIA（Windows UI Automation）で画面の部品を読んだり、押したりはしません。セッションは `claude://` のリンクで開きます
+- UIA（Windows UI Automation）で画面の部品を読んだり、押したりはしません。セッションは Claude 本体に `WM_COPYDATA` を送って開き、送れなかったときだけ `claude://` のリンクで開きます（[deep-link-and-uia.md](../research/deep-link-and-uia.md#プロセスを起動せずにリンクを渡すwm_copydata)）
 - 読んだ内容をネットワークに送りません。ログにも出しません。取得をオンにしたときの git の通信（リポジトリのリモートとの `git fetch`）だけは除きます。そこでも Bantus が読んだもの（セッション、会話）は送りません
 - 取得の失敗の内容はログに出しません。設定画面に、リポジトリ名と失敗の種類だけを出します
