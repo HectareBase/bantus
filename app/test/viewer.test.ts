@@ -7,7 +7,7 @@ import { describe, it } from 'node:test';
 import { cardKeyOf } from '../src/shared/card-key';
 import { readFixture } from '../src/main/sessions';
 import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from '../src/main/viewer-target';
-import { CATEGORIES, DEFAULT_SETTINGS, SETTING_DEFS, VIEWER_HEIGHT_MIN, clampViewerHeight, normalizeSettings } from '../src/shared/settings';
+import { CATEGORIES, DEFAULT_SETTINGS, SETTING_DEFS, VIEWER_HEIGHT_MIN, autoViewerHeight, clampViewerHeight, normalizeSettings } from '../src/shared/settings';
 import { ja } from '../src/shared/strings/ja';
 import { checkViewerPath, isInside, isViewerPath, viewerFileName } from '../src/shared/viewer-path';
 import { FIXTURES, tempDir, view } from './helpers';
@@ -142,13 +142,17 @@ describe('liveViewerKeys', () => {
 });
 
 describe('ビューアの設定', () => {
-  it('既定は出さない・パスなし・変更を反映する・高さ 240・畳まない', () => {
+  it('既定は出さない・パスなし・変更を反映する・高さは空いた場所に合わせる（手で決めた高さは 240）・畳まない', () => {
     const s = normalizeSettings({});
-    assert.deepEqual([s.viewerEnabled, s.viewerPath, s.viewerAutoReload, s.viewerHeight, s.viewerCollapsed], [false, '', true, 240, false]);
+    assert.deepEqual([s.viewerEnabled, s.viewerPath, s.viewerAutoReload, s.viewerAutoHeight, s.viewerHeight, s.viewerCollapsed], [false, '', true, true, 240, false]);
+  });
+  it('高さの決め方は、真偽値だけを保存する', () => {
+    assert.equal(normalizeSettings({ viewerAutoHeight: false }).viewerAutoHeight, false);
+    assert.equal(normalizeSettings({ viewerAutoHeight: 'no' }).viewerAutoHeight, true);
   });
   it('カテゴリは panel-bottom のアイコン', () => assert.equal(CATEGORIES.find((c) => c.id === 'viewer')?.icon, 'panel-bottom'));
-  it('パスと自動の読み込み直しと拡大率は、出さないとき押せない', () =>
-    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'viewerEnabled').map((d) => d.key), ['viewerPath', 'viewerAutoReload', 'viewerZoom']));
+  it('パスと自動の読み込み直しと拡大率と高さの決め方は、出さないとき押せない', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'viewerEnabled').map((d) => d.key), ['viewerPath', 'viewerAutoReload', 'viewerZoom', 'viewerAutoHeight']));
   it('拡大率は、なければ 100%、ウィジェットの拡大率とは別に 50% から 200% に収める', () => {
     assert.equal(normalizeSettings({}).viewerZoom, 100);
     assert.equal(normalizeSettings({ zoom: 120 }).viewerZoom, 100);
@@ -178,6 +182,24 @@ describe('ビューアの設定', () => {
     assert.equal(clampViewerHeight(300.6, 1000), 301);
     assert.equal(clampViewerHeight(20, 1000), 80);
     assert.equal(clampViewerHeight(300, 200), 80);
+  });
+  it('自動の高さは、分け合える高さからカードの一覧の中身を引いた残り', () => {
+    assert.equal(autoViewerHeight(800, 300), 500);
+    // カードがなければ、ほぼすべてをビューアに渡す（手で決めるときの「− 160px」はかけない）
+    assert.equal(autoViewerHeight(800, 12), 788);
+  });
+  it('自動の高さは、端数を切り捨てる（カードの一覧に 1px のスクロールを出さない）', () => {
+    assert.equal(autoViewerHeight(800.6, 300.2), 500);
+    assert.equal(autoViewerHeight(800, 299.5), 500);
+  });
+  it('自動の高さは、場所が足りなければ下限（カードの一覧がスクロールする）', () => {
+    assert.equal(autoViewerHeight(800, 760), VIEWER_HEIGHT_MIN);
+    assert.equal(autoViewerHeight(800, 2000), VIEWER_HEIGHT_MIN);
+    assert.equal(autoViewerHeight(50, 0), VIEWER_HEIGHT_MIN);
+  });
+  it('自動の高さは、測れなかったときも下限', () => {
+    assert.equal(autoViewerHeight(Number.NaN, 100), VIEWER_HEIGHT_MIN);
+    assert.equal(autoViewerHeight(800, Number.POSITIVE_INFINITY), VIEWER_HEIGHT_MIN);
   });
 });
 

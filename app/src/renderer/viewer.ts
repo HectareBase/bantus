@@ -1,7 +1,8 @@
 // HTML ビューアの画面側（docs/design/html-viewer.md）。つまみ、見出し、HTML の場所（#viewer-slot）を受け持つ。
 // HTML そのものはメインプロセスが別のビューで重ねる。ここでは場所の位置と大きさを測って送り、出せないときの文字を出す。
+// 高さを自動で決めるときは、カードの一覧の中身の高さを測り、残りをビューアに渡す。
 
-import { clampViewerHeight } from '../shared/settings.js';
+import { autoViewerHeight, clampViewerHeight } from '../shared/settings.js';
 import { ja } from '../shared/strings/ja.js';
 import type { TipRect, ViewerState, WidgetLayout } from '../shared/types.js';
 import { viewerFileName } from '../shared/viewer-path.js';
@@ -16,6 +17,7 @@ export interface ViewerPane {
 
 export function initViewer(): ViewerPane {
   const root = document.getElementById('viewer')!;
+  const cards = document.getElementById('cards')!;
   const grip = document.getElementById('viewer-grip')!;
   const slot = document.getElementById('viewer-slot')!;
   const fileEl = root.querySelector<HTMLElement>('.viewer-file')!;
@@ -29,7 +31,11 @@ export function initViewer(): ViewerPane {
   let enabled = false;
   let collapsed = false;
   let path = '';
-  /** 保存された高さ（CSS px） */
+  /** 高さを空いた場所に合わせる */
+  let auto = true;
+  /** 空いた場所から決めた高さ（CSS px）。まだ測っていなければ undefined */
+  let autoHeight: number | undefined;
+  /** 保存された（手で決めた）高さ（CSS px） */
   let savedHeight = 240;
   /** ドラッグ中の高さ。離すまでは保存しない */
   let dragHeight: number | undefined;
@@ -52,10 +58,58 @@ export function initViewer(): ViewerPane {
     window.widget.setViewerBounds(rect);
   }
 
+  /** 今出している高さ（CSS px） */
+  let shownHeight = 0;
+
   function applyHeight() {
-    const h = clampViewerHeight(dragHeight ?? savedHeight, window.innerHeight);
-    root.style.setProperty('--viewer-h', `${h}px`);
+    const h = dragHeight !== undefined ? clampViewerHeight(dragHeight, window.innerHeight)
+      : auto && autoHeight !== undefined ? autoHeight
+        : clampViewerHeight(savedHeight, window.innerHeight);
+    if (h !== shownHeight) {
+      shownHeight = h;
+      root.style.setProperty('--viewer-h', `${h}px`);
+    }
     return h;
+  }
+
+  /**
+   * カードの一覧の中身の高さ（CSS px）。子の下端（下の余白を含む）と一覧の下の余白を足す。
+   * 位置は offsetTop で測る（並べ替えのアニメーションの transform と、一覧のスクロールに左右されない）
+   */
+  function cardsContentHeight(): number {
+    const style = getComputedStyle(cards);
+    const base = cards.offsetTop + cards.clientTop;
+    let bottom = parseFloat(style.paddingTop) || 0;
+    for (const child of cards.children) {
+      if (!(child instanceof HTMLElement) || !child.getClientRects().length) continue;
+      const top = child.offsetParent === cards ? child.offsetTop : child.offsetTop - base;
+      bottom = Math.max(bottom, top + child.offsetHeight + (parseFloat(getComputedStyle(child).marginBottom) || 0));
+    }
+    return bottom + (parseFloat(style.paddingBottom) || 0);
+  }
+
+  /** 空いた場所を測り直して高さを決める。畳んでいるときも測っておく（広げたときにすぐ合う） */
+  function fit() {
+    if (!enabled || !auto || dragHeight !== undefined) return;
+    // カードの一覧とビューアの HTML で分け合える高さ。畳んでいるときは、HTML の分も一覧が使っている。
+    // 一覧が縮みきってビューアがウィンドウの下にはみ出しているときは、はみ出した分を引く（1px までは端数として見逃す）
+    const overflow = root.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(root).marginBottom) || 0) - window.innerHeight;
+    const shared = cards.getBoundingClientRect().height + (collapsed ? 0 : shownHeight) - (overflow > 1 ? overflow : 0);
+    const next = autoViewerHeight(shared, cardsContentHeight());
+    if (next === autoHeight) return;
+    autoHeight = next;
+    applyHeight();
+    report();
+  }
+
+  /** 測り直しを次のコマにまとめる。一度に何度も大きさが変わっても、測るのも送るのも 1 回だけにする */
+  let fitFrame = 0;
+  function scheduleFit() {
+    if (fitFrame || !enabled || !auto) return;
+    fitFrame = requestAnimationFrame(() => {
+      fitFrame = 0;
+      fit();
+    });
   }
 
   function message(s: ViewerState): string {
@@ -93,20 +147,37 @@ export function initViewer(): ViewerPane {
     collapseButton.setAttribute('aria-expanded', String(!collapsed));
     applyHeight();
     report();
+    scheduleFit();
   }
+
+  // カードの一覧の大きさ（ウィンドウの高さ、畳む・広げる）と、中身の大きさ（カードの増減、行の増減）が変わったら測り直す。
+  // 一覧の直下の子（リポジトリのまとまり）を見張る。子が入れ替わったら見張り直す
+  const cardsObserver = new ResizeObserver(() => scheduleFit());
+  const watchCards = () => {
+    cardsObserver.disconnect();
+    cardsObserver.observe(cards);
+    for (const child of cards.children) cardsObserver.observe(child);
+    scheduleFit();
+  };
+  new MutationObserver(watchCards).observe(cards, { childList: true });
+  watchCards();
 
   // 大きさが変わったとき（高さのドラッグ、幅のドラッグ、拡大率）と、位置が変わったとき（ウィンドウの高さ）に送り直す
   new ResizeObserver(() => report()).observe(slot);
   window.addEventListener('resize', () => {
     applyHeight();
     report();
+    scheduleFit();
   });
 
   // つまみを上下にドラッグして高さを変える。カーソルが HTML の上に出ても、ポインターをつかんだまま追う
   let startY = 0;
   let startHeight = 0;
+  // 動かさずに離したとき（クリック、ダブルクリック）は、手で決めた高さに切り替えない
+  let moved = false;
   grip.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || collapsed) return;
+    moved = false;
     grip.setPointerCapture(e.pointerId);
     startY = e.clientY;
     startHeight = applyHeight();
@@ -115,6 +186,8 @@ export function initViewer(): ViewerPane {
   });
   grip.addEventListener('pointermove', (e) => {
     if (!grip.hasPointerCapture(e.pointerId)) return;
+    if (!moved && Math.abs(e.clientY - startY) < 3) return;
+    moved = true;
     dragHeight = clampViewerHeight(startHeight + startY - e.clientY, window.innerHeight);
     applyHeight();
   });
@@ -123,10 +196,23 @@ export function initViewer(): ViewerPane {
     if (dragHeight === undefined) return;
     const h = dragHeight;
     dragHeight = undefined;
-    // 保存した値が onLayout で戻るまで、見た目を保つ
+    if (!moved) {
+      applyHeight();
+      return;
+    }
+    // ドラッグしたら、手で決めた高さに切り替える。保存した値が onLayout で戻るまで、見た目を保つ
     savedHeight = h;
+    auto = false;
     applyHeight();
-    window.widget.setViewerLayout({ viewerHeight: h });
+    window.widget.setViewerLayout({ viewerHeight: h, viewerAutoHeight: false });
+  });
+  // つまみのダブルクリックで、空いた場所に合わせる高さに戻す
+  grip.addEventListener('dblclick', () => {
+    if (collapsed || auto) return;
+    auto = true;
+    autoHeight = undefined;
+    scheduleFit();
+    window.widget.setViewerLayout({ viewerAutoHeight: true });
   });
 
   reloadButton.addEventListener('click', () => window.widget.reloadViewer());
@@ -147,7 +233,11 @@ export function initViewer(): ViewerPane {
       enabled = layout.viewerEnabled;
       collapsed = layout.viewerCollapsed;
       path = layout.viewerPath;
-      if (dragHeight === undefined) savedHeight = layout.viewerHeight;
+      if (dragHeight === undefined) {
+        savedHeight = layout.viewerHeight;
+        if (layout.viewerAutoHeight !== auto) autoHeight = undefined;
+        auto = layout.viewerAutoHeight;
+      }
       draw();
     },
     setTarget(id) {
