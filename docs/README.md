@@ -26,6 +26,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [packaging-plan.md](design/packaging-plan.md) | exe 化とインストーラーの計画（electron-builder、NSIS）と、確かめた結果 |
 | [hold.md](design/hold.md) | 保留（あとで再開するセッションとワークツリーに、ピンクの印と理由のメモを付ける）の実装イメージ |
 | [html-viewer.md](design/html-viewer.md) | HTML ビューア（今開いているセッションの作業フォルダの HTML を、カードの一覧の下に出す） |
+| [gpu.md](design/gpu.md) | GPU（ハードウェア アクセラレーション）を使わない設定と、使うときとの比べ（メモリ、CPU、見た目） |
 
 ## 開発の決まり
 | 文書 | 内容 |
