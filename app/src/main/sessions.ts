@@ -68,32 +68,33 @@ function readJson(path: string): any {
 }
 
 /**
- * 解釈した JSON を、ファイルの更新時刻と大きさが変わるまで使い回す表。一覧を作り直すたびに、
+ * 解釈した JSON を、ファイルの更新時刻、変更時刻、大きさ、ファイルの番号（置き換えると変わる）が変わるまで使い回す表。一覧を作り直すたびに、
  * アーカイブ済みも含めたすべての local_*.json を読み直さないため。
  * 返す値は表の中身そのものなので、呼び出し側で書き換えない（書き換えるなら複製する）。
  * 読めなかったもの（書き込み途中など）は覚えず、次も読み直す
  */
 export function createJsonCache() {
-  const entries = new Map<string, { mtimeMs: number; size: number; data: unknown }>();
+  const entries = new Map<string, { stamp: string; data: unknown }>();
   /** 今回読んだパス（prune で、消えたファイルを表から外すため） */
   let seen = new Set<string>();
   let reads = 0;
   return {
     read(path: string): any {
       seen.add(path);
-      let st: { mtimeMs: number; size: number };
+      let stamp: string;
       try {
-        st = statSync(path);
+        const st = statSync(path);
+        stamp = `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
       } catch {
         entries.delete(path);
         return undefined;
       }
       const hit = entries.get(path);
-      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.data;
+      if (hit?.stamp === stamp) return hit.data;
       reads++;
       const data = readJson(path);
       if (data === undefined) entries.delete(path);
-      else entries.set(path, { mtimeMs: st.mtimeMs, size: st.size, data });
+      else entries.set(path, { stamp, data });
       return data;
     },
     /** 前の prune から今までに読まなかったパスを表から外す */
@@ -108,7 +109,7 @@ export function createJsonCache() {
 
 type JsonCache = ReturnType<typeof createJsonCache>;
 
-/** フォルダ（runningDir と dataBase）ごとの使い回しの表 */
+/** データフォルダ（dataBase）ごとの使い回しの表 */
 const jsonCaches = new Map<string, JsonCache>();
 
 /** テストで、使い回しが効いているかを見るため */
@@ -136,16 +137,17 @@ interface Running {
   cwd?: string;
 }
 
-/** CLI のセッション ID → { status, waitingFor, cwd }。ファイルだけが残っているものは除く */
+/**
+ * CLI のセッション ID → { status, waitingFor, cwd }。ファイルだけが残っているものは除く。
+ * 小さく、状態（busy と idle は同じ長さ）を短い間に書き換えるので、使い回さずに毎回読む
+ */
 function readRunning(runningDir: string): Map<string, Running> {
   const map = new Map<string, Running>();
-  const cache = jsonCacheFor(runningDir);
   for (const file of listFiles(runningDir, /^\d+\.json$/)) {
-    const d = cache.read(file);
+    const d = readJson(file);
     if (!d?.sessionId || !isAlive(d.pid)) continue;
     map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor, cwd: typeof d.cwd === 'string' ? d.cwd : undefined });
   }
-  cache.prune();
   return map;
 }
 
@@ -236,23 +238,26 @@ function findGitAnchor(folder: string): GitAnchor | undefined {
 /**
  * folder から上へ `.git` を探し、作業フォルダの一番上（gitRoot）、HEAD のある場所（gitDir）、ref を共有する場所（commonDir）を返す。
  * `.git` がフォルダならどれも同じリポジトリ。ファイル（`gitdir: <場所>`、ワークツリー）なら gitDir はその場所で、
- * commonDir はそこの `commondir`（なければ `<gitdir>/../..`）。読むだけで、git の外なら undefined
+ * commonDir はそこの `commondir`（なければ `<gitdir>/../..`）。refDir は git と同じ決まりの共有の場所で、`commondir` がなければ
+ * gitDir そのもの（サブモジュールや --separate-git-dir）。ref はここから読む。読むだけで、git の外なら undefined
  */
-export function findGitDirs(folder: string): { gitRoot: string; gitDir: string; commonDir: string } | undefined {
+export function findGitDirs(folder: string): { gitRoot: string; gitDir: string; commonDir: string; refDir: string } | undefined {
   for (let dir = resolve(folder); ; dir = dirname(dir)) {
     const dotGit = join(dir, '.git');
     try {
-      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, gitDir: dotGit, commonDir: dotGit };
+      if (statSync(dotGit).isDirectory()) return { gitRoot: dir, gitDir: dotGit, commonDir: dotGit, refDir: dotGit };
       const m = /^gitdir: (.+)$/m.exec(readFileSync(dotGit, 'utf8'));
       if (!m?.[1]) return undefined;
       const gitDir = resolve(dir, m[1].trim());
       let commonDir: string;
+      let refDir: string;
       try {
-        commonDir = resolve(gitDir, readFileSync(join(gitDir, 'commondir'), 'utf8').trim());
+        commonDir = refDir = resolve(gitDir, readFileSync(join(gitDir, 'commondir'), 'utf8').trim());
       } catch {
         commonDir = resolve(gitDir, '..', '..');
+        refDir = gitDir;
       }
-      return { gitRoot: dir, gitDir, commonDir };
+      return { gitRoot: dir, gitDir, commonDir, refDir };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') return undefined;
     }

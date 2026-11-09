@@ -508,3 +508,41 @@ describe('createBranchReader（ref が変わるまで使い回す）', () => {
     assert.equal(calls.length, n);
   });
 });
+
+describe('readRefs（共有の場所の決め方とたどり方）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const c = 'c'.repeat(40);
+
+  it('commondir のない gitdir（サブモジュールなど）は、ref もその gitdir から読む', () => {
+    const top = join(tmp.path, 'top');
+    const modules = join(top, '.git', 'modules', 'sub');
+    // 上のリポジトリにも同じ名前のブランチがあるが、読んではいけない
+    writeJson(join(top, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    writeJson(join(top, '.git', 'refs', 'heads', 'main'), `${a}\n`);
+    writeJson(join(modules, 'HEAD'), `${b}\n`);
+    writeJson(join(modules, 'refs', 'heads', 'main'), `${c}\n`);
+    writeJson(join(top, 'sub', '.git'), 'gitdir: ../.git/modules/sub\n');
+    assert.deepEqual(readRefs(join(top, 'sub'), ['refs/heads/main', 'refs/heads/develop']), { head: b, refs: [c, null] });
+  });
+
+  it('HEAD が packed-refs にだけあるブランチを指していても読む', () => {
+    const repo = join(tmp.path, 'packed');
+    writeJson(join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    writeJson(join(repo, '.git', 'packed-refs'), `${a} refs/heads/main\n`);
+    assert.deepEqual(readRefs(repo, []), { head: a, refs: [] });
+  });
+
+  it('シンボリックな ref を何段もたどる。輪になっていれば読めないとする', () => {
+    const repo = join(tmp.path, 'chain');
+    writeJson(join(repo, '.git', 'HEAD'), `${a}\n`);
+    writeJson(join(repo, '.git', 'refs', 'heads', 'x'), 'ref: refs/heads/y\n');
+    writeJson(join(repo, '.git', 'refs', 'heads', 'y'), 'ref: refs/heads/z\n');
+    writeJson(join(repo, '.git', 'refs', 'heads', 'z'), `${b}\n`);
+    assert.deepEqual(readRefs(repo, ['refs/heads/x']), { head: a, refs: [b] });
+    writeJson(join(repo, '.git', 'refs', 'heads', 'z'), 'ref: refs/heads/x\n');
+    assert.equal(readRefs(repo, ['refs/heads/x']), undefined);
+  });
+});

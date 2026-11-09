@@ -121,20 +121,20 @@ const OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
 /**
  * 作業フォルダ dir の HEAD と、names に並べた ref（`refs/...`）の先頭のコミットを、`.git` のファイルから読む（git は起動しない）。
- * ref はばらのファイル（commonDir の下）を先に見て、なければ packed-refs から探す。ないものは null。
+ * ref はばらのファイル（共有の場所 refDir の下）を先に見て、なければ packed-refs から探す。ないものは null。
  * HEAD が読めない（git の外、まだコミットがない）、reftable を使っているなど、確かに読めないときは undefined
  */
 export function readRefs(dir: string, names: string[]): { head: string; refs: (string | null)[] } | undefined {
   const dirs = findGitDirs(dir);
   if (!dirs) return undefined;
   // reftable の形式は読めないので、使い回さない（毎回 git に聞く）
-  if (existsSync(join(dirs.commonDir, 'reftable'))) return undefined;
+  if (existsSync(join(dirs.refDir, 'reftable'))) return undefined;
   let packed: Map<string, string> | undefined;
   const fromPacked = (name: string): string | null => {
     if (!packed) {
       packed = new Map();
       try {
-        for (const line of readFileSync(join(dirs.commonDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
+        for (const line of readFileSync(join(dirs.refDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
           const m = /^([0-9a-f]+) (refs\/\S+)$/.exec(line);
           if (m) packed.set(m[2]!, m[1]!);
         }
@@ -149,7 +149,7 @@ export function readRefs(dir: string, names: string[]): { head: string; refs: (s
     if (depth > 5 || !name.startsWith('refs/')) throw new Error('unresolvable ref');
     let text: string;
     try {
-      text = readFileSync(join(dirs.commonDir, name), 'utf8').trim();
+      text = readFileSync(join(dirs.refDir, name), 'utf8').trim();
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       // ない、ref の途中がファイル（refs/heads/a があって refs/heads/a/b を探した）、フォルダだった（refs/heads/a/b があって

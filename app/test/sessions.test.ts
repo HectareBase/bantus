@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
-import { rmSync, utimesSync } from 'node:fs';
+import { renameSync, rmSync, utimesSync } from 'node:fs';
 import { createJsonCache, jsonCacheFor, readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
@@ -384,14 +384,11 @@ describe('readSessions（使い回し）', () => {
     writeJson(file(2), { sessionId: 'local_2', title: 'two', lastActivityAt: 2 });
     writeJson(join(paths.runningDir, '1.json'), { pid: process.pid, sessionId: 'cli-1', status: 'busy' });
     const files = jsonCacheFor(paths.dataBase);
-    const running = jsonCacheFor(paths.runningDir);
     assert.deepEqual(readSessions(paths).map((s) => s.title), ['two', 'one']);
     assert.equal(files.stats().reads, 2);
-    assert.equal(running.stats().reads, 1);
 
     readSessions(paths);
     assert.equal(files.stats().reads, 2);
-    assert.equal(running.stats().reads, 1);
 
     writeJson(file(1), { sessionId: 'local_1', title: 'one renamed', lastActivityAt: 3 });
     rmSync(file(2));
@@ -407,5 +404,24 @@ describe('readSessions（使い回し）', () => {
     const [again] = readSessions(paths);
     assert.equal(again!.title, 'one renamed');
     assert.equal(again!.changes, undefined);
+  });
+});
+
+describe('createJsonCache（置き換え）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+
+  it('同じ大きさ・同じ更新時刻でも、ファイルを置き換えたら読み直す', () => {
+    const file = join(tmp.path, 'a.json');
+    const next = join(tmp.path, 'a.json.tmp');
+    const at = new Date(2_000_000);
+    writeJson(file, { status: 'busy' });
+    utimesSync(file, at, at);
+    const cache = createJsonCache();
+    assert.deepEqual(cache.read(file), { status: 'busy' });
+    writeJson(next, { status: 'idle' });
+    utimesSync(next, at, at);
+    renameSync(next, file);
+    assert.deepEqual(cache.read(file), { status: 'idle' });
   });
 });
