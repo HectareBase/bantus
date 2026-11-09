@@ -534,6 +534,12 @@ function getRow(s: SessionView): RowRefs {
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') openRow(id);
     });
+    // 右クリックで、ID をコピーするメニューを出す（メニューはメインプロセスが出す）。カードの見出しのメニューへは伝えない
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.widget.showSessionMenu(id);
+    });
     rows.set(s.id, refs);
   }
   const prev = refs.data;
@@ -814,7 +820,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
       e.stopPropagation();
       toggleCard(key);
     });
-    // 見出しの右クリックで、作業フォルダを開く・ID をコピーするメニューを出す（メニューはメインプロセスが出す）
+    // 見出しの右クリックで、作業フォルダを開くメニューを出す（メニューはメインプロセスが出す）
     refs.header.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       window.widget.showCardMenu(key);

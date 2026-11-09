@@ -4,7 +4,6 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cardSessions, menuLabel } from './card-sessions';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -12,6 +11,7 @@ import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
 import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
+import { copyableId } from './session-id';
 import { desktopDataFolders, folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
@@ -512,7 +512,7 @@ function createTray(): Tray {
 
 /**
  * カードの見出しの右クリックメニュー。作業フォルダは画面から受け取らず、セッションから探す（画面が任意のパスを開けないように）。
- * フォルダがわからない、またはもうないときは、項目を押せなくする。セッションの ID もコピーできる
+ * フォルダがわからない、またはもうないときは、項目を押せなくする
  */
 function showCardMenu(key: string) {
   if (!win || win.isDestroyed()) return;
@@ -527,26 +527,19 @@ function showCardMenu(key: string) {
       },
     },
     { label: ja.menu.openInTerminal, enabled, click: () => dir && openTerminal(dir) },
-    { type: 'separator' },
-    copyIdItem(key),
   ]).popup({ window: win });
 }
 
 /**
- * 「ID をコピー」の項目。ID は画面から受け取らず、セッションから引く。
- * セッションが 1 つならそのまま、いくつもあるときはタイトルを並べたサブメニューにする。ないときは押せなくする
+ * セッションの行（ウィジェットと一覧）の右クリックメニュー。画面から受け取った ID は、今知っているセッションにあるときだけコピーする。
+ * `local_` の ID がないときは、項目を押せなくする
  */
-function copyIdItem(key: string): Electron.MenuItemConstructorOptions {
-  const sessions = cardSessions(lastSessions, key);
-  const copy = (id: string) => clipboard.writeText(id);
-  if (sessions.length <= 1) {
-    const id = sessions[0]?.id;
-    return { label: ja.menu.copySessionId, enabled: !!id, click: () => id && copy(id) };
-  }
-  return {
-    label: ja.menu.copySessionId,
-    submenu: sessions.map((s) => ({ label: menuLabel(s.title), click: () => copy(s.id) })),
-  };
+function showSessionMenu(target: BrowserWindow, rawId: unknown) {
+  if (target.isDestroyed()) return;
+  const id = copyableId(lastSessions, rawId);
+  Menu.buildFromTemplate([
+    { label: ja.menu.copySessionId, enabled: !!id, click: () => id && clipboard.writeText(id) },
+  ]).popup({ window: target });
 }
 
 /** ウィジェットのタイトルの右クリックメニュー */
@@ -889,6 +882,11 @@ app.whenReady().then(() => {
 
   ipcMain.on('card-menu', (e, key: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string') showCardMenu(key);
+  });
+  // 行の右クリック。ウィジェットと一覧（めくれ）のどちらからも受け取る
+  ipcMain.on('session-menu', (e, id: unknown) => {
+    const target = [win, flyout?.window()].find((w) => w && !w.isDestroyed() && e.sender === w.webContents);
+    if (target) showSessionMenu(target, id);
   });
   ipcMain.on('title-menu', (e) => {
     if (e.sender === win?.webContents) showTitleMenu();

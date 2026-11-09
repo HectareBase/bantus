@@ -152,6 +152,8 @@ export interface WidgetApi {
   setFetchCards(keys: string[]): void;
   /** カードの見出しの右クリックメニュー（作業フォルダをエクスプローラーやターミナルで開く）。フォルダはメインプロセスがセッションから探す */
   showCardMenu(key: string): void;
+  /** セッションの行の右クリックメニュー（ID をコピー）。ID はメインプロセスが自分の一覧にあるか確かめてからコピーする */
+  showSessionMenu(id: string): void;
   /** ウィジェットのタイトルの右クリックメニュー（アプリの終了） */
   showTitleMenu(): void;
   /**
@@ -302,6 +304,8 @@ export interface FlyoutApi {
   /** めくれが押された */
   requestOpen(): void;
   action(action: FlyAction): void;
+  /** 行の右クリックメニュー（ID をコピー）。ウィジェットの showSessionMenu と同じ */
+  showSessionMenu(id: string): void;
   close(): void;
 }
 
