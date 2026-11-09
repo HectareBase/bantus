@@ -4,9 +4,22 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### 追加
+- **GPU で描くかの設定**：設定の「全体」→「描画」で選べる。既定は使わない。GPU を使わないとメモリが 100 MB ほど減る。切り替えると Bantus が起動し直す
+- **HTML ビューアの高さ**：既定で、カードの一覧の残りの場所に合わせる。つまみをドラッグすると手で決めた高さになり、ダブルクリックで合わせる高さに戻る
+- **HTML ビューアの拡大率**：ウィジェットとは別に設定できる
 - **開いている行の濃さ**：デスクトップで今開いているセッションの行の強調を、設定の「見た目」で薄い・標準・濃いから選べる。変えるとすぐ反映する。既定の標準は今までと同じ見た目
 - **ID をコピー**：セッションの行を右クリックすると、そのセッションの ID（`local_…`）をコピーできる。以前のセッションの一覧の行でも使える。Claude との会話でほかのセッションを指すのに使う
+
+### 変更
+- **セッションの開き方**：`claude://` リンクの代わりに、動いている Claude に直接知らせて切り替える。`claude.exe` をもう 1 つ起動しないので速く、プロセスを検査するセキュリティ製品のある PC でも遅れにくい。知らせられないときは、今までどおりリンクで開く
+- **HTML ビューアの見た目**：ダークのテーマで、読み込むあいだ白く光らないようにした。スクロールバーを細くした
+- **軽さ**：セッションのファイルは、変わったものだけを読み直す。カーソルがウィジェットから遠いあいだは、見る間隔を長くする。ブランチの先頭が変わらないあいだは、元のブランチとの比べ直しで git を起動しない
+
+### 修正
+- サブモジュールなど、`commondir` のない作業フォルダで、上のリポジトリのブランチを読んでいた
 
 ## [0.4.0]
 
@@ -84,7 +97,8 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 - Claude デスクトップのデータを読むだけで、書き換えはしない。読むものは [docs/design/data-usage.md](docs/design/data-usage.md) にある
 - 読み取っているファイルの形式は公式には公開されていないので、Claude デスクトップの更新で動かなくなることがある。調べた版は、デスクトップアプリ 4.4212.0、CLI 2.1.309
 
-[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/HectareBase/bantus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/HectareBase/bantus/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HectareBase/bantus/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HectareBase/bantus/releases/tag/v0.2.0
