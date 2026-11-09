@@ -190,11 +190,11 @@ function sidebarBounds() {
 function widgetLayout(s: Settings): WidgetLayout {
   const { edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges } = s;
-  const { viewerEnabled, viewerPath, viewerHeight, viewerCollapsed } = s;
+  const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
     edge, backgroundOpacity, cardOpacity, headerShade, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges,
-    viewerEnabled, viewerPath, viewerHeight, viewerCollapsed,
+    viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
 }
 
@@ -914,9 +914,10 @@ app.whenReady().then(() => {
   });
   ipcMain.on('viewer-layout', (e, patch: unknown) => {
     if (e.sender !== win?.webContents || !patch || typeof patch !== 'object') return;
-    const { viewerHeight, viewerCollapsed } = patch as Record<string, unknown>;
+    const { viewerHeight, viewerAutoHeight, viewerCollapsed } = patch as Record<string, unknown>;
     const next: Partial<Settings> = {};
     if (typeof viewerHeight === 'number' && Number.isFinite(viewerHeight)) next.viewerHeight = viewerHeight;
+    if (typeof viewerAutoHeight === 'boolean') next.viewerAutoHeight = viewerAutoHeight;
     if (typeof viewerCollapsed === 'boolean') next.viewerCollapsed = viewerCollapsed;
     if (Object.keys(next).length) updateSettings(next);
   });

@@ -149,7 +149,7 @@ export const ja = {
   /** HTML ビューア（ウィジェットの下。docs/design/html-viewer.md） */
   viewer: {
     aria: 'HTML ビューア',
-    resize: 'ドラッグで高さを変える',
+    resize: 'ドラッグで高さを変える。ダブルクリックで空いた場所に合わせる',
     reload: '読み込み直す',
     openExternal: 'ブラウザーで開く',
     collapse: '畳む',
@@ -268,6 +268,7 @@ export const ja = {
       },
       viewerAutoReload: { label: 'ファイルを書き換えたとき', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
       viewerZoom: { label: '表示の拡大率', description: 'HTML の文字の大きさ。ウィジェットの拡大率とは別に決める' },
+      viewerAutoHeight: { label: '高さ', description: 'カードの下の空いた場所を埋める。つまみをドラッグすると、手で決めた高さに変わる' },
     },
     /** ファイルの場所を受け付けない理由（入力欄の下に出す） */
     viewerPathProblems: {
@@ -312,6 +313,8 @@ export const ja = {
       noCount: '数えない',
       reload: '反映する',
       noReload: '反映しない',
+      fitHeight: '空いた場所に合わせる',
+      manualHeight: '手で決める',
     },
     /** 「今すぐ取得」の横に出す、取得の様子 */
     fetchStatus: {

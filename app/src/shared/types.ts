@@ -166,7 +166,7 @@ export interface WidgetApi {
   /** 今のファイルをいつものブラウザーで開く */
   openViewerExternal(): void;
   /** ビューアの高さと畳んだ状態を保存する。保存され、onLayout で画面に戻ってくる */
-  setViewerLayout(patch: { viewerHeight?: number; viewerCollapsed?: boolean }): void;
+  setViewerLayout(patch: { viewerHeight?: number; viewerAutoHeight?: boolean; viewerCollapsed?: boolean }): void;
   /** ビューアの様子（何を出しているか、出せない理由）が変わったとき */
   onViewerState(listener: (state: ViewerState) => void): void;
 }
@@ -323,7 +323,7 @@ export type WidgetLayout = Pick<
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
-  | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerHeight' | 'viewerCollapsed'
+  | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerAutoHeight' | 'viewerHeight' | 'viewerCollapsed'
 >;
 
 export interface DisplayOption {

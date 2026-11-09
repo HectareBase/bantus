@@ -98,7 +98,9 @@ export interface Settings {
   viewerAutoReload: boolean;
   /** ビューアの HTML の拡大率（%）。ウィジェットの拡大率（zoom）とは別で、重ねてはかけない */
   viewerZoom: number;
-  /** ビューアの HTML の高さ（CSS px）。設定画面には出さず、つまみのドラッグで変える。上限はウィンドウの高さで決まる（画面側） */
+  /** ビューアの高さを、カードの一覧が使っていない空いた場所に合わせる。つまみをドラッグすると false になる */
+  viewerAutoHeight: boolean;
+  /** 手で決めたビューアの HTML の高さ（CSS px）。設定画面には出さず、つまみのドラッグで変える。上限はウィンドウの高さで決まる（画面側） */
   viewerHeight: number;
   /** ビューアを畳んでいる（見出しだけを出す）。設定画面には出さず、見出しのボタンで切り替える */
   viewerCollapsed: boolean;
@@ -199,6 +201,7 @@ export const DEFAULT_SETTINGS: Settings = {
   viewerPath: '',
   viewerAutoReload: true,
   viewerZoom: 100,
+  viewerAutoHeight: true,
   viewerHeight: 240,
   viewerCollapsed: false,
 };
@@ -231,6 +234,17 @@ export const VIEWER_ROOM = 160;
 /** ウィンドウの高さ（CSS px）に合わせて、ビューアの高さを範囲に収める。ウィンドウが低いときは下限を優先する */
 export function clampViewerHeight(height: number, windowHeight: number): number {
   return Math.max(VIEWER_HEIGHT_MIN, Math.min(Math.round(height), windowHeight - VIEWER_ROOM));
+}
+
+/**
+ * 高さを自動で決めるときの、ビューアの HTML の高さ（CSS px）。
+ * shared はカードの一覧とビューアの HTML で分け合える高さ、cards はカードの一覧の中身の高さ。
+ * 残りをすべてビューアに渡す。足りなければ下限にし、カードの一覧のほうをスクロールさせる。
+ * 端数は切り捨てる（カードの一覧が 1px 足りずにスクロールバーを出さないように）
+ */
+export function autoViewerHeight(shared: number, cards: number): number {
+  if (!Number.isFinite(shared) || !Number.isFinite(cards)) return VIEWER_HEIGHT_MIN;
+  return Math.max(VIEWER_HEIGHT_MIN, Math.floor(shared - cards));
 }
 
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
@@ -288,7 +302,7 @@ export type SettingDef =
       | 'edge' | 'theme' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
-      | 'viewerEnabled' | 'viewerAutoReload'
+      | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -495,6 +509,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'viewerZoom', category: 'viewer', group: T.groups.viewerLook, type: 'slider', enabledBy: 'viewerEnabled',
     ...T.items.viewerZoom,
     min: 50, max: 200, step: 10, unit: '%',
+  },
+  {
+    key: 'viewerAutoHeight', category: 'viewer', group: T.groups.viewerLook, type: 'segmented', enabledBy: 'viewerEnabled',
+    ...T.items.viewerAutoHeight,
+    options: [{ value: true, label: T.options.fitHeight }, { value: false, label: T.options.manualHeight }],
   },
 ];
 
