@@ -72,6 +72,7 @@ CLI が受け付ける値は `busy`、`shell`、`idle`、`waiting` の 4 つで�
 | Monitor | `taskId`。`timeoutMs` と `persistent` が付く |
 
 - 終了：本文が `<task-notification>` で始まる行。中の `<task-id>` が開始の ID と同じで、`<status>` が `completed`、`failed`、`killed`、`stopped` のどれか。`queue-operation`（`enqueue` と `remove`）の行の `content` と、`type:"user"` の行の `message.content`（文字列）の両方に出るので、同じ ID は 1 回だけ数える
+- Claude が `TaskStop` で作業を止めたときは、終了の通知が来ない（手元の記録で止めた 21 件のうち、通知が来たものは 0 件）。代わりに、`TaskStop` の結果（`type:"user"` の行の `toolUseResult`）の `message` が `Successfully stopped task` で始まり、`task_id`（止めた作業の ID）と `task_type`（`local_bash` など）が付く。これを終了と数える。止められなかったときの文（`No task found …` など）は数えない
 - Monitor の途中のイベントの通知には `<status>` がないので、終了と数えない
 - ツールの結果（`message.content` が配列）に同じ文字が出ることがあるので、本文が通知で始まる行だけを見る
 - CLI を再起動すると、終了の通知がないまま作業が消える。古い記録には、開始だけで終了のない ID が実際に残っていた。そのため、`sessions/<pid>.json` の `startedAt` より前に始まった作業（行の `timestamp` で比べる）は数えない

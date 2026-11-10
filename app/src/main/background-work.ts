@@ -21,8 +21,17 @@ export function newBackgroundState(): BackgroundState {
 const END_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
 const NOTIFICATION = '<task-notification>';
 const NOTIFICATION_BLOCK = /<task-notification>([\s\S]*?)<\/task-notification>/g;
-/** 開始の行にだけ出る項目。JSON.parse の前にこれで絞る */
-const START_HINT = /"(?:backgroundTaskId|async_launched|timeoutMs|persistent)"/;
+/** 開始の行と、TaskStop の結果の行にだけ出る項目。JSON.parse の前にこれで絞る */
+const START_HINT = /"(?:backgroundTaskId|async_launched|timeoutMs|persistent|task_type)"/;
+/** TaskStop で止めたときの結果の文。止めた作業には終了の通知が来ないので、これを終了と数える */
+const STOPPED_MESSAGE = 'Successfully stopped task';
+
+/** ツールの結果が TaskStop で作業を止めたものなら、その作業の ID。止められなかったとき、当てはまらないときは undefined */
+function stoppedId(r: any): string | undefined {
+  if (!r || typeof r !== 'object') return undefined;
+  if (typeof r.task_id !== 'string' || !r.task_id || typeof r.task_type !== 'string') return undefined;
+  return typeof r.message === 'string' && r.message.startsWith(STOPPED_MESSAGE) ? r.task_id : undefined;
+}
 
 /** 行の本文が、CLI が入れた終了の通知か。ツールの結果に同じ文字が出ても数えないよう、本文がそれで始まるものだけ */
 function notificationText(d: any): string | undefined {
@@ -43,7 +52,7 @@ function startedId(r: any): string | undefined {
 }
 
 /**
- * 記録の行を state に足す。startedAt（CLI が起動した時刻、Unix ミリ秒）より前に始まった作業は数えない
+ * 記録の行を state に足す。終了は、CLI が入れた終了の通知と、TaskStop で止めた結果の 2 つで数える。startedAt（CLI が起動した時刻、Unix ミリ秒）より前に始まった作業は数えない
  * （CLI を再起動すると、終了の通知がないまま作業が消えるため）
  */
 export function applyLines(state: BackgroundState, lines: Iterable<string>, startedAt?: number): void {
@@ -68,6 +77,11 @@ export function applyLines(state: BackgroundState, lines: Iterable<string>, star
       continue;
     }
     if (d?.type !== 'user') continue;
+    const stopped = stoppedId(d.toolUseResult);
+    if (stopped) {
+      state.ended.add(stopped);
+      continue;
+    }
     const id = startedId(d.toolUseResult);
     if (!id || state.started.has(id)) continue;
     const at = typeof d.timestamp === 'string' ? Date.parse(d.timestamp) : Number.NaN;

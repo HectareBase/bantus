@@ -69,6 +69,17 @@ describe('countBackgroundWork（記録の行から数える）', () => {
     assert.equal(countBackgroundWork([result({ taskId: 't1' })]), 0);
   });
 
+  it('TaskStop で止めた作業は、終了の通知がなくても終わったと数える', () => {
+    const stop = (id: string, message = `Successfully stopped task: ${id} (sleep 600)`) =>
+      result({ message, task_id: id, task_type: 'local_bash', command: 'sleep 600' }, 30);
+    assert.equal(countBackgroundWork([bash('b1'), stop('b1')]), 0);
+    assert.equal(countBackgroundWork([bash('b1'), agent('a1'), stop('a1')]), 1);
+    // 止められなかったときは数え続ける
+    assert.equal(countBackgroundWork([bash('b1'), stop('b1', 'No task found with ID: b1')]), 1);
+    // 別の作業を止めても変わらない
+    assert.equal(countBackgroundWork([bash('b1'), stop('b9')]), 1);
+  });
+
   it('いくつも動いているときは数を足す。同じ ID は 1 回だけ数える', () =>
     assert.equal(countBackgroundWork([bash('b1'), bash('b1'), agent('a1'), monitor('m1'), queued('a1', 'completed'), userNote('a1', 'completed')]), 2));
 

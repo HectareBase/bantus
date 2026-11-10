@@ -32,6 +32,11 @@ describe('見本データの形', () => {
           assert.equal(s.state, 'idle', `${s.id}: background は待機中のときだけ`);
           assert.ok(Number.isInteger(s.background) && s.background > 0, `${s.id}: background は 1 以上の整数`);
         }
+        if (s.plan !== undefined) {
+          assert.equal(s.state, 'busy', `${s.id}: plan は処理中のときだけ`);
+          assert.ok(Array.isArray(s.plan) && s.plan.length >= 2, `${s.id}: plan は 2 つ以上`);
+          for (const step of s.plan) assert.ok(['done', 'active', 'todo'].includes(step), `${s.id}: plan の ${step}`);
+        }
         if (s.worktree) for (const k of ['key', 'label', 'branch']) assert.equal(typeof s.worktree[k], 'string');
         if (s.changes) for (const k of ['changed', 'untracked', 'ahead']) assert.equal(typeof s.changes[k], 'number', `${s.id}: changes.${k}`);
         for (const k of ['hold', 'holdCard']) {
@@ -62,6 +67,11 @@ describe('all-states はすべての表示を含む', () => {
   });
 
   it('バックグラウンドで作業中の待機', () => assert.ok(sessions.some((s) => s.state === 'idle' && (s.background ?? 0) > 0)));
+
+  it('処理中のタスクリスト（3 本と 8 本）と、リストのない処理中', () => {
+    const lengths = sessions.filter((s) => s.state === 'busy').map((s) => s.plan?.length ?? 0);
+    for (const n of [3, 8, 0]) assert.ok(lengths.includes(n), `${n} 本`);
+  });
 
   it('対応が必要とまとめ', () => {
     assert.ok(sessions.some((s) => s.needsAction));

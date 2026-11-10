@@ -380,9 +380,9 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 .row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 /* デスクトップで今開いているセッション：塗りに斜めのストライプの透かしを重ねる（色相は使わない）。
    濃さは設定で変えられ、標準はマウスを乗せたときと同じ濃さの塗りに、ごく薄いストライプ */
-.row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-fill); }
-.row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-hover); }
-.row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-pressed); }
+.row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-fill); }
+.row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-hover); }
+.row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-pressed); }
 
 /* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付けて点滅させる。クリックするか処理中になると消える */
 .row::before {
@@ -433,13 +433,29 @@ html.hide-updated .when { display: none; }
   padding: 0 5px;
   border-radius: 4px;
   line-height: 15px;
+  /* 札の塗りは --pill-bg で決める（状態ごとの規則は変数だけを変える。今開いている行では縞を消す塗りを重ねるため） */
+  background: var(--pill-bg, transparent);
 }
-.row[data-state="busy"] .state-pill { background: var(--busy-bg); color: var(--busy); }
-.row[data-state="waiting"] .state-pill { background: var(--waiting-bg); color: var(--waiting); }
-.row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
-.row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
+.row[data-state="busy"] .state-pill { --pill-bg: var(--busy-bg); color: var(--busy); }
+.row[data-state="waiting"] .state-pill { --pill-bg: var(--waiting-bg); color: var(--waiting); }
+.row[data-state="idle"] .state-pill { --pill-bg: var(--idle-bg); color: var(--idle); }
+.row[data-state="stopped"] .state-pill { --pill-bg: var(--stopped-bg); color: var(--text-secondary); }
 /* 待機中で、バックグラウンドの作業が動いている。放っておいてよいので処理中の色（未確認の帯も、作業が終わるまで付けない） */
-.row[data-background] .state-pill { background: var(--busy-bg); color: var(--busy); }
+.row[data-background] .state-pill { --pill-bg: var(--busy-bg); color: var(--busy); }
+/* 今開いている行の札の中には、縞を見せない（札の文字が読みにくくなるため）。
+   ウィンドウとカードは半透明にできるので、札を不透明にはしない。代わりに、行の縞のすき間だけを同じ濃さで塗り、札の中を縞の色で一様にする。
+   行の縞と札の塗りの位置がずれないよう、どちらも fixed（ウィンドウ基準）で敷く */
+.row[data-focused] .state-pill { background: linear-gradient(var(--pill-bg, transparent), var(--pill-bg, transparent)), repeating-linear-gradient(135deg, transparent 0 5px, var(--stripe) 5px 10px) fixed; }
+/* 処理中のタスクリストの進み具合（docs/design/widget-app-plan.md の表示ルール）。「処理中」の右に手順の数だけ短い棒を並べる。
+   未読に見える塗りつぶした点は使わず、角丸の長方形にする。終わった手順は処理中の色、今の手順は同じ色を薄く、これからの手順は札の背景より少し濃く。
+   札の中の行内の並びなので、幅が足りないときは札ごと「…」で切れる（日時と使用率は残る） */
+/* 行の高さ（札の line-height）と同じ高さの箱を行の上端にそろえ、その中で棒を中央に置く。
+   vertical-align: middle は文字の x-height を基準にするので、日本語の札では少し下にずれる */
+.plan { display: inline-flex; align-items: center; height: 15px; gap: 2px; margin-left: 5px; vertical-align: top; }
+.plan[hidden] { display: none; }
+.plan-step { width: 7px; height: 4px; border-radius: 1px; background: color-mix(in srgb, var(--busy) 24%, transparent); }
+.plan-step[data-step="active"] { background: color-mix(in srgb, var(--busy) 62%, transparent); }
+.plan-step[data-step="done"] { background: var(--busy); }
 html.hide-state .state-pill { display: none; }
 /* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。
    数字の幅を固定し（左寄せでバーに寄せる）、どの行でもバーの位置がそろうようにする。
@@ -550,7 +566,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
   display: inline-flex;
   align-items: center;
   height: var(--hold-h);
-  background: var(--held-bg);
+  --pill-bg: var(--held-bg);
   color: var(--held);
 }
 .row[data-held] .state-pill { flex: none; }
@@ -668,8 +684,8 @@ html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="wait
 }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):hover { background: linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
 /* 未確認の行は、状態の色の 2px の枠と、点灯したままの太い帯 */
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
 html[data-motion="subtle"] .row[data-attention]::before { width: 4px; }

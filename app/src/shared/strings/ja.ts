@@ -97,6 +97,8 @@ export const ja = {
     waiting: (reason: string) => `対応待ち：${reason}`,
     /** 待機中で、バックグラウンドの作業が動いているとき。n は作業の数 */
     background: (n: number) => `バックグラウンドで作業中：${n} 件（終わると Claude が続けます）`,
+    /** 処理中のタスクリストの進み具合（状態の札の中の棒）。n は今の手順の番号、total は手順の数。棒の aria-label にも使う */
+    plan: (n: number, total: number) => `タスクリスト：手順 ${n}/${total}`,
     needsAction: (what: string) => `次にすること：${what}`,
     unknownBranch: '（ブランチ不明）',
     contextPercent: (pct: number, tokens: string, window: string) => `コンテキスト：${pct}%（${tokens} / ${window}）`,
