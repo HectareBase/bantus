@@ -640,7 +640,8 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
    動き続ける表示（処理中の輪、光の帯、対応待ちと未確認の点滅）を止め、状態は行の塗りと枠で示す。
    並べ替え（flip.ts）、一度だけ横切る光（sweep.ts）、ピンの傾きなど、一度きりの動きは残す。
    対応待ちを強く、待機中を弱く塗る。今開いている行は塗りと枠を濃くし、斜線を重ねる。
-   処理中・停止中の行と保留（行もカードも）には塗りと枠を付けない（開いていれば今までの灰色の塗りと斜線） */
+   処理中・停止中の行と保留（行もカードも）には塗りと枠を付けない（開いていれば今までの灰色の塗りと斜線）。
+   待機中でバックグラウンドの作業が動いている行（data-background）も、放っておいてよいので処理中と同じく付けない */
 .progress-still { display: none; }
 html[data-motion="subtle"] .progress-ring { display: none; }
 html[data-motion="subtle"] .progress-still { display: block; }
@@ -657,20 +658,20 @@ html[data-motion="subtle"] .row[data-state="waiting"] { --st: var(--waiting); --
 html[data-motion="subtle"] .row[data-state="idle"] { --st: var(--idle); --st-fill: 4%; --st-edge: 22%; }
 html[data-motion="subtle"] .row[data-state="waiting"][data-focused] { --st-fill: 16%; --st-edge: 60%; }
 html[data-motion="subtle"] .row[data-state="idle"][data-focused] { --st-fill: 13%; --st-edge: 45%; }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]) {
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]) {
   --st-bg: color-mix(in srgb, var(--st) var(--st-fill), transparent);
   --st-line: color-mix(in srgb, var(--st) var(--st-edge), transparent);
   background: var(--st-bg);
   box-shadow: inset 0 0 0 1px var(--st-line);
 }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):hover { background: linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):hover { background: linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
 /* 未確認の行は、状態の色の 2px の枠と、点灯したままの太い帯 */
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
 html[data-motion="subtle"] .row[data-attention]::before { width: 4px; }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
 .resize-handle {
