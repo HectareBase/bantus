@@ -13,7 +13,7 @@ import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
 import { createSystemUsage } from './system-usage';
 import { copyableId } from './session-id';
-import { desktopDataFolders, folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { desktopDataFolders, folderKey, InterruptTracker, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { createViewer, type Viewer } from './viewer';
@@ -714,11 +714,14 @@ function isViewerRect(v: unknown): v is TipRect {
   return isTipRect(v) && v.width >= 0 && v.height >= 0;
 }
 
+/** 中断（処理中か対応待ちのまま止まった）の見分け。ウィジェットが動いている間に見た変化で決める */
+const interrupts = new InterruptTracker();
+
 /** 前回と同じ内容なら送らない（画面の描き直しを減らす） */
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
   // 見本データの作業フォルダ（HTML ビューアの見本）では git を動かさない。見本の changes をそのまま見せる
-  const sessions = process.env.WIDGET_FIXTURE ? readSessions() : gitStatus.apply(readSessions());
+  const sessions = interrupts.apply(process.env.WIDGET_FIXTURE ? readSessions() : gitStatus.apply(readSessions()));
   lastSessions = sessions;
   updateFetchTargets();
   refreshViewer();

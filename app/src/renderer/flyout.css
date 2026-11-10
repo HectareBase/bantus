@@ -205,6 +205,7 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 .node[data-state="waiting"] .status { color: var(--waiting); }
 .node[data-state="busy"] .status { color: var(--busy); }
 .node[data-state="idle"] .status { color: var(--idle); }
+/* stopped は中断だけ（止まっただけの行は data-state="idle"。renderer.ts の flyItem） */
 .node[data-state="stopped"] .status { color: var(--stopped); }
 /* 待機中で、バックグラウンドの作業が動いている（処理中の色） */
 .node[data-background] .status { color: var(--busy); }

@@ -6,8 +6,9 @@ import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, SessionState, Ses
 import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
-export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
-/** 並び順の「優先度」での保留の順位。待機と停止中の間 */
+/** 並び順の「優先度」での順位。停止中は画面では待機中と同じに見せるので、待機と同じ（中断も） */
+export const RANK: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 2 };
+/** 並び順の「優先度」での保留の順位。待機（停止中を含む）の後ろ */
 export const HELD_RANK = 2.5;
 export const WAITING_LABELS: Readonly<Record<string, string>> = ja.waiting;
 
@@ -49,12 +50,12 @@ export function isHeld(s: SessionView, holds: HoldOptions): boolean {
   return !!holds.holds[s.id] || !!holds.heldCards[cardKeyOf(s)];
 }
 
-/** 並べる順位。保留は待機と停止中の間 */
+/** 並べる順位。保留は待機（停止中を含む）の後ろ */
 export function rankOf(s: SessionView, holds: HoldOptions = NO_HOLDS): number {
   return isHeld(s, holds) ? HELD_RANK : RANK[s.state];
 }
 
-/** セッションの比べ方。fixed は新しく作ったものが上、recent は最後に動きがあった順、priority は急ぐ順（保留は待機と停止中の間） */
+/** セッションの比べ方。fixed は新しく作ったものが上、recent は最後に動きがあった順、priority は急ぐ順（保留は待機の後ろ） */
 export function compareSessions(order: SortOrder, holds: HoldOptions = NO_HOLDS) {
   return (a: SessionView, b: SessionView): number => {
     if (order === 'fixed') return b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
@@ -157,14 +158,23 @@ export function waitingLabel(waitingFor: string | undefined): string {
   return WAITING_LABELS[waitingFor ?? ''] ?? waitingFor ?? ja.state.unknown;
 }
 
-const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.stopped };
+/**
+ * 画面に出す状態。停止中（stopped）は、ユーザーがすることが待機中と同じ（デスクトップで開けば再開できる）なので待機中と同じに見せる。
+ * 中断（処理中か対応待ちのまま止まった。interrupted）だけは、作業が終わったように見せないよう stopped のまま返し、「中断」と出す
+ */
+export function displayState(s: Pick<SessionView, 'state' | 'interrupted'>): SessionState {
+  return s.state === 'stopped' && !s.interrupted ? 'idle' : s.state;
+}
+
+/** stopped は displayState が返したもの（中断）だけが来る */
+const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.interrupted };
 
 /** 待機中で、バックグラウンドの作業が動いている（docs/design/widget-app-plan.md の表示ルール） */
 export function hasBackground(state: SessionState, background?: number): boolean {
   return state === 'idle' && (background ?? 0) > 0;
 }
 
-/** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
+/** 行の更新日時の左に出す状態の文字。state は displayState のもの。知らない waitingFor は「その他」（「対応待ち（その他）」） */
 export function stateLabel(state: SessionState, waitingFor?: string, background?: number): string {
   if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
   if (hasBackground(state, background)) return ja.state.background;
@@ -183,7 +193,7 @@ export const PROGRESS_RING = 'progress-ring';
 export type StatusIcon = IconName | typeof PROGRESS_RING;
 const STATE_ICONS: Record<Exclude<SessionState, 'waiting'>, StatusIcon> = { busy: PROGRESS_RING, idle: 'message-square-more', stopped: 'circle-minus' };
 
-/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING）。待機中でバックグラウンドの作業があれば砂時計 */
+/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING）。state は displayState のもの。待機中でバックグラウンドの作業があれば砂時計 */
 export function statusIconName(state: SessionState, waitingFor?: string, background?: number): StatusIcon {
   if (state === 'waiting') return WAITING_ICONS[waitingFor ?? ''] ?? 'circle-alert';
   if (hasBackground(state, background)) return 'hourglass';
@@ -271,15 +281,20 @@ export function attentionStateOf(s: Pick<SessionView, 'state' | 'background'>): 
 
 /** Claude が動いている（処理中か、バックグラウンドで作業中） */
 const isWorking = (state: AttentionState | undefined) => state === 'busy' || state === 'background';
+/** 落ち着いている（待機か停止中） */
+const isSettled = (state: AttentionState | undefined) => state === 'idle' || state === 'stopped';
 
 /**
  * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
  * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中かバックグラウンドで作業中から待機になったとき
  * - 消す：処理中・バックグラウンドで作業中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
+ * - 待機と停止中の行き来では変えない。処理中・バックグラウンドで作業中から停止中になった（中断）ときは付けない
  * - クリックしたときに消すのは renderer
  */
 export function nextAttention(prev: AttentionState | undefined, next: AttentionState, flagged: boolean): boolean {
   if (prev === next) return flagged;
+  // 待機と停止中は画面では同じに見えるので、行き来しても帯はそのまま（完了の帯がプロセスの終わりで消えないように）
+  if (isSettled(prev) && isSettled(next)) return flagged;
   if (next === 'waiting') return true;
   return isWorking(prev) && next === 'idle';
 }

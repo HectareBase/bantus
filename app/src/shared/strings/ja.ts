@@ -65,7 +65,8 @@ export const ja = {
     idle: '待機中',
     /** 待機中で、バックグラウンドの作業が動いている（docs/research/session-status.md） */
     background: 'バックグラウンドで作業中',
-    stopped: '停止中',
+    /** 処理中か対応待ちから、ターンを終えずにプロセスが止まった（停止中のうち、ウィジェットが動いている間に見たもの） */
+    interrupted: '中断',
     /** 知らない waitingFor（「対応待ち（その他）」） */
     waitingOther: 'その他',
     /** waitingFor がないとき */
@@ -365,7 +366,7 @@ export const ja = {
       waiting: { label: '対応待ち', description: '許可や回答など、操作を待っている' },
       idle: { label: '待機中', description: '次の指示を待っている。完了したときの帯もこの色' },
       held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
-      stopped: { label: '停止中', description: '動いていないセッション' },
+      stopped: { label: '中断', description: '処理中や対応待ちのまま、プロセスが止まっている。ただ止まっているだけのセッションは待機中の色' },
       previewAria: 'ウィジェットの見本',
       resetAll: 'すべて既定に戻す',
       reset: '既定に戻す',
@@ -381,7 +382,7 @@ export const ja = {
       input: '質問への回答を待つ',
       idle: '設定画面の文言を直す',
       held: 'ほかのブランチのマージを待つ',
-      stopped: '古いブランチを片付ける',
+      stopped: 'テストを流して結果を見る',
     },
     /** 「情報」のカテゴリ */
     about: {
