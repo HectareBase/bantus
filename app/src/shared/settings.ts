@@ -29,6 +29,11 @@ export interface Settings {
   theme: Theme;
   /** 状態ごとのアイコンの色（#rrggbb）。ライトとダークで同じ色を使う。対応待ちは理由にかかわらず 1 色 */
   statusColors: StatusColors;
+  /**
+   * 動き続ける表示（処理中の輪、光の帯、点滅）。subtle はそれを止め、状態を行の塗りと枠で示す（html[data-motion="subtle"]）。
+   * OS の「動きを減らす」のときも subtle と同じ見た目にする（status-colors.ts の applyMotion）
+   */
+  motion: Motion;
   /** ウィジェットをほかのウィンドウより前に固定する。設定画面には出さず、タイトルバーのピンで切り替える */
   pinned: boolean;
   /** main（元のフォルダ）のセッションを、落ち着いてから自動でアーカイブするまでの分。0 ならしない */
@@ -162,6 +167,9 @@ export function normalizeNote(v: unknown): string {
 /** 今開いている行の強調の濃さ。normal が以前からの見た目 */
 export type ActiveHighlight = 'subtle' | 'normal' | 'strong';
 
+/** アニメーション効果。full（標準）が以前からの見た目 */
+export type Motion = 'full' | 'subtle';
+
 /** 強調の濃さごとの、塗りとストライプの不透明度にかける倍率 */
 export const HIGHLIGHT_SCALE: Record<ActiveHighlight, number> = { subtle: 0.5, normal: 1, strong: 2 };
 
@@ -186,6 +194,7 @@ export const DEFAULT_SETTINGS: Settings = {
   zoom: 100,
   theme: 'system',
   statusColors: DEFAULT_STATUS_COLORS,
+  motion: 'full',
   pinned: true,
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
@@ -317,7 +326,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'activeHighlight' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'openAtLogin' | 'hardwareAcceleration'
+      | 'edge' | 'theme' | 'activeHighlight' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'openAtLogin' | 'hardwareAcceleration'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
       | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
@@ -416,6 +425,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'showSystemUsage', category: 'look', group: T.groups.widget, type: 'segmented',
     ...T.items.showSystemUsage,
     options: SHOW_OPTIONS,
+  },
+  {
+    key: 'motion', category: 'look', group: T.groups.statusColors, type: 'segmented',
+    ...T.items.motion,
+    options: [{ value: 'full', label: T.options.motionFull }, { value: 'subtle', label: T.options.motionSubtle }],
   },
   {
     key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',

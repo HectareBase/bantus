@@ -18,6 +18,8 @@ const NAMES = [
   'palette',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
+  // 処理中の印。アニメーション効果を「ひかえめ」にしたとき（回る輪の代わり）
+  'hourglass',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
   'file-pen-line', 'file-plus', 'arrow-up', 'arrow-down',
   // 保留（docs/design/hold.md）：状態の印、乗せたときの切り替えの印、メモの枠

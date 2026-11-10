@@ -148,6 +148,12 @@ describe('normalizeSettings の開いている行の濃さ', () => {
   it('薄い < 標準 < 濃い', () => assert.ok(HIGHLIGHT_SCALE.subtle < HIGHLIGHT_SCALE.normal && HIGHLIGHT_SCALE.normal < HIGHLIGHT_SCALE.strong));
 });
 
+describe('normalizeSettings のアニメーション効果', () => {
+  it('なければ標準（以前と同じ見た目）', () => assert.equal(normalizeSettings({}).motion, 'full'));
+  it('ひかえめを残す', () => assert.equal(normalizeSettings({ motion: 'subtle' }).motion, 'subtle'));
+  it('知らない値は標準に戻す', () => assert.equal(normalizeSettings({ motion: 'off' }).motion, 'full'));
+});
+
 describe('normalizeSettings の表示の拡大率', () => {
   it('なければ 100%', () => assert.equal(normalizeSettings({}).zoom, 100));
   it('80〜150 に収め、整数にする', () => {
@@ -197,7 +203,7 @@ describe('設定画面のカテゴリ', () => {
     assert.deepEqual(layout('look'), [
       ['明るさ', ['theme']],
       ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom', 'showSystemUsage']],
-      ['状態の色', ['statusColors']],
+      ['状態の色', ['motion', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>
     assert.deepEqual(layout('cards'), [

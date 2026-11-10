@@ -625,12 +625,49 @@ html.floating .card, html.floating .titlebar, html.floating .repo, html.floating
 html.paused .status svg, html.paused .status circle, html.paused .row::before,
 html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 
-/* 動きを減らす設定のときは、帯を出さず、処理中のセッション名を止まった色で出す */
+/* 動きを減らす設定のときは、帯を出さず、処理中のセッション名を止まった色で出す。
+   見た目はアニメーション効果の「ひかえめ」と同じになる（status-colors.ts が data-motion="subtle" を付ける）。ここは JS が動く前の分 */
 @media (prefers-reduced-motion: reduce) {
-  .status svg, .status circle, .row::before { animation: none; }
+  .status svg, .status circle, .row::before, .row[data-state] .status svg { animation: none; }
   .shine { display: none; }
   .row[data-state="busy"] .title { color: var(--text-secondary); }
 }
+
+/* ---- アニメーション効果「ひかえめ」（設定 motion、html[data-motion="subtle"]） ----
+   動き続ける表示（処理中の輪、光の帯、対応待ちと未確認の点滅）を止め、状態は行の塗りと枠で示す。
+   並べ替え（flip.ts）、一度だけ横切る光（sweep.ts）、ピンの傾きなど、一度きりの動きは残す。
+   対応待ちを強く、待機中を弱く塗る。今開いている行は塗りと枠を濃くし、斜線を重ねる。
+   処理中・停止中の行と保留（行もカードも）には塗りと枠を付けない（開いていれば今までの灰色の塗りと斜線） */
+.progress-still { display: none; }
+html[data-motion="subtle"] .progress-ring { display: none; }
+html[data-motion="subtle"] .progress-still { display: block; }
+html[data-motion="subtle"] .row[data-state] .status svg, html[data-motion="subtle"] .row::before { animation: none; }
+html[data-motion="subtle"] .shine { display: none; }
+html[data-motion="subtle"] .row[data-state="busy"] .title { color: var(--text); }
+/* 斜線は状態の塗りの上でも見えるよう濃くする（設定の濃さの倍率 --hl はそのままかける） */
+html[data-motion="subtle"] { --stripe-a: 0.07; }
+@media (prefers-color-scheme: dark) {
+  html[data-motion="subtle"] { --stripe-a: 0.08; }
+}
+/* 状態の色（--st）と、塗り（--st-fill）と枠（--st-edge）の濃さ */
+html[data-motion="subtle"] .row[data-state="waiting"] { --st: var(--waiting); --st-fill: 6%; --st-edge: 30%; }
+html[data-motion="subtle"] .row[data-state="idle"] { --st: var(--idle); --st-fill: 4%; --st-edge: 22%; }
+html[data-motion="subtle"] .row[data-state="waiting"][data-focused] { --st-fill: 16%; --st-edge: 60%; }
+html[data-motion="subtle"] .row[data-state="idle"][data-focused] { --st-fill: 13%; --st-edge: 45%; }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]) {
+  --st-bg: color-mix(in srgb, var(--st) var(--st-fill), transparent);
+  --st-line: color-mix(in srgb, var(--st) var(--st-edge), transparent);
+  background: var(--st-bg);
+  box-shadow: inset 0 0 0 1px var(--st-line);
+}
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):hover { background: linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+/* 未確認の行は、状態の色の 2px の枠と、点灯したままの太い帯 */
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
+html[data-motion="subtle"] .row[data-attention]::before { width: 4px; }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
 .resize-handle {
