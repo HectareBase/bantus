@@ -443,7 +443,9 @@ html.hide-updated .when { display: none; }
 /* 処理中のタスクリストの進み具合（docs/design/widget-app-plan.md の表示ルール）。「処理中」の右に手順の数だけ短い棒を並べる。
    未読に見える塗りつぶした点は使わず、角丸の長方形にする。終わった手順は処理中の色、今の手順は同じ色を薄く、これからの手順は札の背景より少し濃く。
    札の中の行内の並びなので、幅が足りないときは札ごと「…」で切れる（日時と使用率は残る） */
-.plan { display: inline-flex; gap: 2px; margin-left: 5px; vertical-align: middle; }
+/* 行の高さ（札の line-height）と同じ高さの箱を行の上端にそろえ、その中で棒を中央に置く。
+   vertical-align: middle は文字の x-height を基準にするので、日本語の札では少し下にずれる */
+.plan { display: inline-flex; align-items: center; height: 15px; gap: 2px; margin-left: 5px; vertical-align: top; }
 .plan[hidden] { display: none; }
 .plan-step { width: 7px; height: 4px; border-radius: 1px; background: color-mix(in srgb, var(--busy) 24%, transparent); }
 .plan-step[data-step="active"] { background: color-mix(in srgb, var(--busy) 62%, transparent); }
