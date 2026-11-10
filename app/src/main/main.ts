@@ -4,6 +4,8 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createAppBar, type AppBar } from './appbar';
+import { areaWithoutBar, placeWidget, type PlacedBar } from './appbar-place';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -65,6 +67,13 @@ let lastSent = '';
 let appliedZoom = 1;
 /** タスクバーの点滅を止めるタイマー */
 let flashTimer: NodeJS.Timeout | undefined;
+/**
+ * アプリバー（appbar.ts）。固定（pinned）がオンで、ウィジェットが見えている間だけ登録し、ほかのウィンドウの最大化で重ならないようにする。
+ * appBarRect は登録している帯の場所（画面の座標）。fullscreenApp は全画面のアプリが開いている間（最前面を一時的に外す）
+ */
+let appBar: AppBar | undefined;
+let appBarRect: PlacedBar | undefined;
+let fullscreenApp = false;
 /** 本当に終わるところ（トレイの「終了」、OS のシャットダウン）。立っていないときは、ウィジェットを閉じずに隠す */
 let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
@@ -189,12 +198,35 @@ function targetDisplay(s: Settings): Display {
   return screen.getPrimaryDisplay();
 }
 
+/**
+ * ウィジェットを置く作業領域。アプリバーとして登録している間は、Windows の作業領域からウィジェット自身の分が引かれるので、
+ * その分を足し戻す（ツールチップ、めくれ、幅の上限もこれを使う）
+ */
+function widgetArea(s: Settings) {
+  const d = targetDisplay(s);
+  return areaWithoutBar(d.workArea, d.bounds, appBarRect);
+}
+
+/** ウィジェットの幅。ドラッグ中はその幅 */
+function widgetWidth(s: Settings): number {
+  return Math.min(dragWidth ?? s.width, widthLimit(widgetArea(s).width));
+}
+
 function sidebarBounds() {
   const s = getSettings();
-  const area = targetDisplay(s).workArea;
-  const width = Math.min(dragWidth ?? s.width, widthLimit(area.width));
-  const x = s.edge === 'left' ? area.x : area.x + area.width - width;
-  return { x, y: area.y, width, height: area.height };
+  return placeWidget(s.edge, widgetArea(s), widgetWidth(s), appBarRect);
+}
+
+/** 最前面にするか。固定していても、全画面のアプリが開いている間は外す */
+function applyAlwaysOnTop(s: Settings) {
+  if (win && !win.isDestroyed()) win.setAlwaysOnTop(s.pinned && !fullscreenApp);
+}
+
+/** アプリバーにする場所。固定がオンで、ウィジェットが見えている間だけ */
+function appBarWanted() {
+  const s = getSettings();
+  if (!s.pinned || !win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return undefined;
+  return { edge: s.edge, monitor: targetDisplay(s).bounds, width: widgetWidth(s) };
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
@@ -258,7 +290,9 @@ function applySettings(s: Settings) {
   applyZoom();
   win.setBounds(sidebarBounds());
   // 固定を外すと、ほかのウィンドウをクリックしたときにその後ろへ回る
-  win.setAlwaysOnTop(s.pinned);
+  applyAlwaysOnTop(s);
+  // 固定、端、幅、モニターが変わったら、アプリバーを登録し直す（または外す）
+  appBar?.sync();
   // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときに画面側が決める）
   if (s.backgroundOpacity > 0) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
@@ -346,6 +380,12 @@ function createWidget(): BrowserWindow {
   w.on('hide', updateSystemUsage);
   w.on('minimize', updateSystemUsage);
   w.on('restore', updateSystemUsage);
+  // 隠したときと最小化したときはアプリバーを外し、出したら登録し直す
+  const syncAppBar = () => appBar?.sync();
+  w.on('show', syncAppBar);
+  w.on('hide', syncAppBar);
+  w.on('minimize', syncAppBar);
+  w.on('restore', syncAppBar);
   // 読み込み直したら、最後の値を送り直す（値が変わるまで送らないため）
   w.webContents.on('did-finish-load', () => {
     const last = systemUsage.last();
@@ -391,7 +431,7 @@ function placeTip(width: number, height: number) {
   // 画面から届く大きさと位置は CSS px なので、拡大率を掛けて画面の座標にする
   const zoom = zoomFactor();
   const size = { width: width * zoom, height: height * zoom };
-  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), targetDisplay(s).workArea, scaleRect(tipAnchor, zoom), size, zoom));
+  tipWin.setBounds(tipBounds(s.edge, win.getBounds(), widgetArea(s), scaleRect(tipAnchor, zoom), size, zoom));
   if (!tipWin.isVisible()) tipWin.showInactive();
   tipWin.webContents.send('tip:visible', true);
 }
@@ -573,7 +613,7 @@ function showTitleMenu() {
 /** カーソルの位置から、内側の端がそこに来る幅を出す。作業領域の半分で止める（見た目の幅と合わせる） */
 function widthAtCursor(): number {
   const s = getSettings();
-  const area = targetDisplay(s).workArea;
+  const area = widgetArea(s);
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
   return clampWidth(w, area.width);
@@ -809,13 +849,25 @@ app.whenReady().then(() => {
   }
   applyTheme(getSettings());
   win = createWidget();
+  appBar = createAppBar({
+    window: () => win,
+    wanted: appBarWanted,
+    onPlaced: (bar) => {
+      appBarRect = bar;
+      if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+    },
+    onFullscreen: (on) => {
+      fullscreenApp = on;
+      applyAlwaysOnTop(getSettings());
+    },
+  });
   tipWin = createTipWindow();
   flyout = createFlyout({
     preload: PRELOAD,
     web: WEB,
     widget: () => win,
     edge: () => getSettings().edge,
-    area: () => targetDisplay(getSettings()).workArea,
+    area: () => widgetArea(getSettings()),
     zoom: zoomFactor,
     onAction: (action) => win?.webContents.send('fly-action', action),
     onHover: (key) => {
@@ -857,6 +909,7 @@ app.whenReady().then(() => {
     if (dragWidth === undefined) return;
     dragWidth = widthAtCursor();
     win?.setBounds(sidebarBounds());
+    appBar?.sync();
   });
   ipcMain.on('resize-end', () => {
     if (dragWidth === undefined) return;
@@ -1017,7 +1070,10 @@ app.whenReady().then(() => {
   });
 
   // 画面の構成や作業領域が変わったら、端に置き直す
-  const reposition = () => win?.setBounds(sidebarBounds());
+  const reposition = () => {
+    win?.setBounds(sidebarBounds());
+    appBar?.sync();
+  };
   screen.on('display-metrics-changed', reposition);
   screen.on('display-added', reposition);
   screen.on('display-removed', reposition);
@@ -1029,6 +1085,8 @@ app.whenReady().then(() => {
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();
+    // アプリバーを外す（外さないと、ほかのウィンドウの最大化が帯の分だけ狭いまま残る）
+    appBar?.stop();
     tray?.destroy();
   });
 });
