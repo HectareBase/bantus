@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
 import { createBackgroundReader } from './background-work';
 import { createContextReader } from './context-usage';
+import { createPlanReader } from './plan-progress';
 import type { HoldMark } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
 import type { SessionState, SessionView } from '../shared/types';
@@ -373,7 +374,9 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
     const state = STATES[(STATES.indexOf(view.state) + step) % STATES.length]!;
     // 実データと同じく、waitingFor は対応待ちのときだけ
     const waitingFor = state === 'waiting' ? view.waitingFor ?? 'input needed' : undefined;
-    return { ...view, state, waitingFor };
+    // タスクリストは処理中のときだけ
+    const { plan, ...rest } = view;
+    return { ...rest, state, waitingFor, ...(state === 'busy' && plan && { plan }) };
   }));
 }
 
@@ -426,10 +429,26 @@ function backgroundReaderFor(projectsDir: string) {
   return reader;
 }
 
+/** 会話の記録のフォルダごとの、処理中のタスクリストの読み手（読み終えたとき、リストが変わったときは backgroundListeners に知らせる） */
+const planReaders = new Map<string, ReturnType<typeof createPlanReader>>();
+
+function planReaderFor(projectsDir: string) {
+  let reader = planReaders.get(projectsDir);
+  if (!reader) {
+    reader = createPlanReader(projectsDir, () => {
+      for (const listener of backgroundListeners) listener();
+    });
+    planReaders.set(projectsDir, reader);
+  }
+  return reader;
+}
+
 /** テストで、見張りと読む順番を止めるため */
 export function disposeBackgroundReaders(): void {
   for (const reader of backgroundReaders.values()) reader.dispose();
   backgroundReaders.clear();
+  for (const reader of planReaders.values()) reader.dispose();
+  planReaders.clear();
 }
 
 export function readSessions(paths = defaultPaths()): SessionView[] {
@@ -437,6 +456,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   const running = readRunning(paths.runningDir);
   const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
   const backgroundReader = paths.projectsDir ? backgroundReaderFor(paths.projectsDir) : undefined;
+  const planReader = paths.projectsDir ? planReaderFor(paths.projectsDir) : undefined;
   /** 使用量を読んだ CLI のセッション ID（使い回しの表から消えたものを外す） */
   const cliIds = new Set<string>();
   /** バックグラウンドの作業を見ている、動いている CLI のセッション ID */
@@ -552,12 +572,18 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       // バックグラウンドの作業。記録を読むのは待機中のときだけ（docs/research/session-status.md の「バックグラウンドの作業」）
       if (r && typeof d.cliSessionId === 'string' && d.cliSessionId) {
         let background = 0;
+        const folders = [r.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
         if (backgroundReader) {
           liveCliIds.add(d.cliSessionId);
-          if (state === 'idle') {
-            const folders = [r.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
-            background = backgroundReader.read(d.cliSessionId, folders, r.startedAt) ?? 0;
-          } else backgroundReader.pause(d.cliSessionId);
+          if (state === 'idle') background = backgroundReader.read(d.cliSessionId, folders, r.startedAt) ?? 0;
+          else backgroundReader.pause(d.cliSessionId);
+        }
+        // タスクリストの進み具合。記録を読むのは処理中のときだけ（docs/research/work-progress.md）
+        if (planReader) {
+          if (state === 'busy') {
+            const plan = planReader.read(d.cliSessionId, folders);
+            if (plan) view.plan = plan;
+          } else planReader.pause(d.cliSessionId);
         }
         if (state === 'idle' && hasShellWork(r)) background = Math.max(background, 1);
         if (background > 0) view.background = background;
@@ -577,6 +603,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   assignSeq(numbered);
   contextReader?.prune(cliIds);
   backgroundReader?.prune(liveCliIds);
+  planReader?.prune(liveCliIds);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
   for (const view of views) {
     const at = focusedAt.get(view.id);

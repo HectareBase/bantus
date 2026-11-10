@@ -2,7 +2,7 @@
 
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
-import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, SessionState, SessionView } from '../shared/types';
+import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, PlanStep, SessionState, SessionView } from '../shared/types';
 import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
@@ -174,6 +174,18 @@ export function hasBackground(state: SessionState, background?: number): boolean
   return state === 'idle' && (background ?? 0) > 0;
 }
 
+/** 状態の札の中に棒で出すタスクリスト。処理中で、手順が 2 つ以上のときだけ */
+export function planSteps(s: Pick<SessionView, 'state' | 'plan'>): PlanStep[] | undefined {
+  return s.state === 'busy' && s.plan && s.plan.length >= 2 ? s.plan : undefined;
+}
+
+/** 「手順 2/3」の文。今の手順（2 つ以上なら最初のもの）の番号。今の手順がなければ、終わった手順の次（すべて終わったら最後） */
+export function planLabel(steps: readonly PlanStep[]): string {
+  const active = steps.indexOf('active');
+  const n = active >= 0 ? active + 1 : Math.min(steps.length, steps.filter((s) => s === 'done').length + 1);
+  return ja.tooltip.plan(n, steps.length);
+}
+
 /** 行の更新日時の左に出す状態の文字。state は displayState のもの。知らない waitingFor は「その他」（「対応待ち（その他）」） */
 export function stateLabel(state: SessionState, waitingFor?: string, background?: number): string {
   if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
@@ -207,6 +219,8 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   if (s.worktree) lines.push(ja.tooltip.worktree(s.worktree.branch));
   if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
   if (hasBackground(s.state, s.background)) lines.push(ja.tooltip.background(s.background!));
+  const plan = planSteps(s);
+  if (plan) lines.push(planLabel(plan));
   if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes, s.worktree && s.baseBranch);

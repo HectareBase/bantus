@@ -5,7 +5,7 @@
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
 import { initSystemUsage } from './system-usage.js';
-import type { FlyAction, FlyContent, FlyItem, GitChanges, SessionView, WidgetLayout } from '../shared/types';
+import type { FlyAction, FlyContent, FlyItem, GitChanges, PlanStep, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
@@ -41,6 +41,8 @@ import {
   stateLabel,
   statusIconName,
   hasBackground,
+  planLabel,
+  planSteps,
   tooltip,
   type Alert,
   type ArchiveOptions,
@@ -82,6 +84,9 @@ interface RowRefs {
   ctxFill: HTMLElement;
   ctxNum: HTMLElement;
   pill: HTMLElement;
+  /** 札の文字と、その右に並べるタスクリストの棒（処理中でリストがあるときだけ） */
+  pillText: HTMLElement;
+  plan: HTMLElement;
   act: HTMLElement;
   data?: SessionView;
 }
@@ -490,6 +495,29 @@ function setToggle(el: HTMLElement, alt: HTMLElement, held: boolean, can: boolea
   }
 }
 
+/**
+ * 状態の札の中の、タスクリストの棒（docs/design/widget-app-plan.md の表示ルール）。手順ごとに 1 本、状態は data-step に入れる。
+ * 手順の名前は出さず、「手順 2/3」の文を aria-label にする（ツールチップは行のものに入れる）
+ */
+function setPlan(el: HTMLElement, steps: readonly PlanStep[] | undefined) {
+  const key = steps?.join(',') ?? '';
+  if (el.dataset.steps === key) return;
+  el.dataset.steps = key;
+  el.hidden = !steps;
+  if (!steps) {
+    el.replaceChildren();
+    el.removeAttribute('aria-label');
+    return;
+  }
+  el.setAttribute('aria-label', planLabel(steps));
+  el.replaceChildren(...steps.map((step) => {
+    const bar = document.createElement('span');
+    bar.className = 'plan-step';
+    bar.dataset.step = step;
+    return bar;
+  }));
+}
+
 function getRow(s: SessionView): RowRefs {
   let refs = rows.get(s.id);
   if (!refs) {
@@ -515,6 +543,8 @@ function getRow(s: SessionView): RowRefs {
       ctxFill: el.querySelector('.ctx-fill')!,
       ctxNum: el.querySelector('.ctx-num')!,
       pill: el.querySelector('.state-pill')!,
+      pillText: el.querySelector('.pill-text')!,
+      plan: el.querySelector('.plan')!,
       act: el.querySelector('.act')!,
     };
     el.addEventListener('click', () => openRow(id));
@@ -564,7 +594,8 @@ function getRow(s: SessionView): RowRefs {
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
   const label = hold ? ja.state.held : stateLabel(shown, s.waitingFor, s.background);
-  if (refs.pill.textContent !== label) refs.pill.textContent = label;
+  if (refs.pillText.textContent !== label) refs.pillText.textContent = label;
+  setPlan(refs.plan, hold ? undefined : planSteps(s));
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   const ctx = contextLabel(s.context);
   if (refs.ctxNum.textContent !== ctx) refs.ctxNum.textContent = ctx;

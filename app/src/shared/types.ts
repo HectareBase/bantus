@@ -53,6 +53,11 @@ export interface SessionView {
    * ターンは終わっていて入力もできるが、作業が終わると Claude が自分で続ける（src/main/background-work.ts）
    */
   background?: number;
+  /**
+   * state が busy のとき、今のターンのタスクリストの手順ごとの状態（会話の記録から。src/main/plan-progress.ts）。
+   * 手順が 2 つ以上のときだけ。手順の名前は持たない
+   */
+  plan?: PlanStep[];
   /** 最後のターンのまとめで「対応が必要」とされた内容 */
   needsAction?: string;
   /** 最後のターンのまとめ（ツールチップ用） */
@@ -68,6 +73,9 @@ export interface SessionView {
   /** デスクトップで最後に開いた時刻（`lastFocusedAt`、Unix ミリ秒）。サイドチャットで開いたときは親の値にする。開いたことがなければ省く */
   focusedAt?: number;
 }
+
+/** タスクリストの手順の状態：終わった、今の、これからの */
+export type PlanStep = 'done' | 'active' | 'todo';
 
 /** コンテキストの使用量（docs/design/worktree-cards.md の「コンテキストの使用量」） */
 export interface ContextUsage {
