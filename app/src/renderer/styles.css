@@ -437,6 +437,8 @@ html.hide-updated .when { display: none; }
 .row[data-state="waiting"] .state-pill { background: var(--waiting-bg); color: var(--waiting); }
 .row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
 .row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
+/* 待機中で、バックグラウンドの作業が動いている。放っておいてよいので処理中の色（帯は待機のまま） */
+.row[data-background] .state-pill { background: var(--busy-bg); color: var(--busy); }
 html.hide-state .state-pill { display: none; }
 /* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。
    数字の幅を固定し（左寄せでバーに寄せる）、どの行でもバーの位置がそろうようにする。
@@ -525,6 +527,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 .row[data-state="busy"] .status { color: var(--busy); }
 .row[data-state="idle"] .status { color: var(--idle); }
 .row[data-state="stopped"] .status { color: var(--stopped); }
+.row[data-background] .status { color: var(--busy); }
 .row[data-held] .status { color: var(--held); }
 
 /* ---- 保留（docs/design/hold.md） ---- */

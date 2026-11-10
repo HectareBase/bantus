@@ -355,9 +355,9 @@ export const ja = {
     preview: '試聴',
     /** 状態の色 */
     colors: {
-      busy: { label: '処理中', description: 'Claude が作業している' },
+      busy: { label: '処理中', description: 'Claude が作業している。バックグラウンドで作業中のときもこの色' },
       waiting: { label: '対応待ち', description: '許可や回答など、操作を待っている' },
-      idle: { label: '待機中', description: '次の指示を待っている。バックグラウンドで作業中のときと、完了したときの帯もこの色' },
+      idle: { label: '待機中', description: '次の指示を待っている。完了したときの帯もこの色' },
       held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },
       stopped: { label: '停止中', description: '動いていないセッション' },
       previewAria: 'ウィジェットの見本',

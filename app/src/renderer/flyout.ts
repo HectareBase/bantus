@@ -57,6 +57,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   el.dataset.id = item.id;
   el.dataset.state = item.state;
   el.toggleAttribute('data-held', !!item.held);
+  el.toggleAttribute('data-background', !item.held && !item.archived && hasBackground(item.state, item.background));
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);

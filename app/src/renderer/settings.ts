@@ -171,10 +171,18 @@ const PREVIEW_ROWS: { state: SessionState | 'held'; waitingFor?: string; title: 
   { state: 'stopped', title: T.previewRows.stopped },
 ];
 
-function statusIcon(state: SessionState | 'held', waitingFor?: string, background?: number): HTMLElement {
+function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElement {
   const node = el('span', { className: 'status' });
   node.dataset.state = state;
-  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor, background));
+  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor));
+  return node;
+}
+
+/** 待機中でバックグラウンドの作業が動いているときの印。処理中の色で描く */
+function backgroundIcon(): HTMLElement {
+  const node = el('span', { className: 'status' });
+  node.dataset.state = 'busy';
+  setStatus(node, statusIconName('idle', undefined, 1));
   return node;
 }
 
@@ -218,8 +226,8 @@ function statusColors(): HTMLElement {
     const icons = el('div', { className: 'state-icons' },
       state === 'waiting'
         ? WAITING_REASONS.map((w) => statusIcon('waiting', w))
-        : state === 'idle'
-          ? [statusIcon('idle'), statusIcon('idle', undefined, 1)]
+        : state === 'busy'
+          ? [statusIcon('busy'), backgroundIcon()]
           : [statusIcon(state)]);
     const text = el('div', { className: 'label' }, [el('b', { textContent: label }), el('span', { textContent: description })]);
     const reset = el('button', { className: 'text-button', textContent: T.colors.reset });

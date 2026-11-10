@@ -37,6 +37,7 @@ import {
   resolveFocus,
   stateLabel,
   statusIconName,
+  hasBackground,
   tooltip,
   type Alert,
   type ArchiveOptions,
@@ -551,6 +552,7 @@ function getRow(s: SessionView): RowRefs {
   setToggle(refs.status, refs.statusAlt, !!hold, !isRunning(s));
   if (prev?.state !== s.state) refs.el.dataset.state = s.state;
   refs.el.toggleAttribute('data-held', !!hold);
+  refs.el.toggleAttribute('data-background', !hold && hasBackground(s.state, s.background));
   refs.el.toggleAttribute('data-attention', attention.has(s.id));
   refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
