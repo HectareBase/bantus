@@ -222,11 +222,26 @@ function applyAlwaysOnTop(s: Settings) {
   if (win && !win.isDestroyed()) win.setAlwaysOnTop(s.pinned && !fullscreenApp);
 }
 
-/** アプリバーにする場所。固定がオンで、ウィジェットが見えている間だけ */
+/**
+ * アプリバーにする場所。固定がオンで、ウィジェットが見えている間だけ。
+ * 幅はドラッグ中の幅ではなく保存した幅にし、離したとき（設定に保存したとき）に置き直す。ドラッグ中に帯を動かすと、
+ * 作業領域が変わるたびに Windows がウィジェットを新しい作業領域の中へ押し込み、こちらが戻すのとで点滅する
+ */
 function appBarWanted() {
   const s = getSettings();
   if (!s.pinned || !win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return undefined;
-  return { edge: s.edge, monitor: targetDisplay(s).bounds, width: widgetWidth(s) };
+  return { edge: s.edge, monitor: targetDisplay(s).bounds, width: Math.min(s.width, widthLimit(widgetArea(s).width)) };
+}
+
+/**
+ * アプリバーを登録している間に、ウィジェットがこちらの置いた場所から動かされたら戻す。
+ * 帯の分だけ作業領域が縮むと、Windows がウィジェットを作業領域の中へ押し込むことがある
+ */
+function keepAppBarBounds() {
+  if (!appBarRect || !win || win.isDestroyed()) return;
+  const want = sidebarBounds();
+  const now = win.getBounds();
+  if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) win.setBounds(want);
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
@@ -360,6 +375,7 @@ function createWidget(): BrowserWindow {
   w.on('move', () => {
     hideTip();
     flyout?.hide();
+    keepAppBarBounds();
   });
   w.on('resize', () => {
     hideTip();
@@ -909,7 +925,6 @@ app.whenReady().then(() => {
     if (dragWidth === undefined) return;
     dragWidth = widthAtCursor();
     win?.setBounds(sidebarBounds());
-    appBar?.sync();
   });
   ipcMain.on('resize-end', () => {
     if (dragWidth === undefined) return;
