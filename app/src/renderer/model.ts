@@ -159,9 +159,15 @@ export function waitingLabel(waitingFor: string | undefined): string {
 
 const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.stopped };
 
+/** 待機中で、バックグラウンドの作業が動いている（docs/design/widget-app-plan.md の表示ルール） */
+export function hasBackground(state: SessionState, background?: number): boolean {
+  return state === 'idle' && (background ?? 0) > 0;
+}
+
 /** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
-export function stateLabel(state: SessionState, waitingFor?: string): string {
+export function stateLabel(state: SessionState, waitingFor?: string, background?: number): string {
   if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
+  if (hasBackground(state, background)) return ja.state.background;
   return STATE_LABELS[state];
 }
 
@@ -177,9 +183,10 @@ export const PROGRESS_RING = 'progress-ring';
 export type StatusIcon = IconName | typeof PROGRESS_RING;
 const STATE_ICONS: Record<Exclude<SessionState, 'waiting'>, StatusIcon> = { busy: PROGRESS_RING, idle: 'message-square-more', stopped: 'circle-minus' };
 
-/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING） */
-export function statusIconName(state: SessionState, waitingFor?: string): StatusIcon {
+/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING）。待機中でバックグラウンドの作業があれば砂時計 */
+export function statusIconName(state: SessionState, waitingFor?: string, background?: number): StatusIcon {
   if (state === 'waiting') return WAITING_ICONS[waitingFor ?? ''] ?? 'circle-alert';
+  if (hasBackground(state, background)) return 'hourglass';
   return STATE_ICONS[state];
 }
 
@@ -189,6 +196,7 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   if (hold) lines.push(holdTooltip(hold, now));
   if (s.worktree) lines.push(ja.tooltip.worktree(s.worktree.branch));
   if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
+  if (hasBackground(s.state, s.background)) lines.push(ja.tooltip.background(s.background!));
   if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes, s.worktree && s.baseBranch);

@@ -171,10 +171,10 @@ const PREVIEW_ROWS: { state: SessionState | 'held'; waitingFor?: string; title: 
   { state: 'stopped', title: T.previewRows.stopped },
 ];
 
-function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElement {
+function statusIcon(state: SessionState | 'held', waitingFor?: string, background?: number): HTMLElement {
   const node = el('span', { className: 'status' });
   node.dataset.state = state;
-  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor));
+  setStatus(node, state === 'held' ? 'circle-pause' : statusIconName(state, waitingFor, background));
   return node;
 }
 
@@ -216,7 +216,11 @@ function statusColors(): HTMLElement {
   const rows = COLOR_STATES.map((state) => {
     const { label, description } = COLOR_LABELS[state];
     const icons = el('div', { className: 'state-icons' },
-      state === 'waiting' ? WAITING_REASONS.map((w) => statusIcon('waiting', w)) : [statusIcon(state)]);
+      state === 'waiting'
+        ? WAITING_REASONS.map((w) => statusIcon('waiting', w))
+        : state === 'idle'
+          ? [statusIcon('idle'), statusIcon('idle', undefined, 1)]
+          : [statusIcon(state)]);
     const text = el('div', { className: 'label' }, [el('b', { textContent: label }), el('span', { textContent: description })]);
     const reset = el('button', { className: 'text-button', textContent: T.colors.reset });
     reset.addEventListener('click', () => setColor(state, DEFAULT_STATUS_COLORS[state]));

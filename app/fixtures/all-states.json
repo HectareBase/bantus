@@ -94,5 +94,8 @@
     "changes": { "changed": 0, "untracked": 0, "ahead": 0, "behind": 3, "merged": true }, "state": "idle", "minutesAgo": 600 },
   { "id": "local_all-36", "title": "消したワークツリーのセッション", "repoKey": "handoff", "repoName": "handoff", "mainBranch": "main",
     "worktree": { "key": "removed", "label": "removed", "branch": "claude/removed-0c1d2e" },
-    "changes": { "changed": 0, "untracked": 0, "ahead": 0, "behind": 0, "merged": false, "gone": true }, "state": "stopped", "minutesAgo": 3000 }
+    "changes": { "changed": 0, "untracked": 0, "ahead": 0, "behind": 0, "merged": false, "gone": true }, "state": "stopped", "minutesAgo": 3000 },
+  { "id": "local_all-37", "title": "ワークツリー：バックグラウンドで作業中", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
+    "worktree": { "key": "nightly-build", "label": "nightly-build", "branch": "claude/nightly-build-4d5e6f" },
+    "changes": { "changed": 1, "untracked": 0, "ahead": 0 }, "state": "idle", "background": 2, "detail": "Build is running in the background", "minutesAgo": 3 }
 ]

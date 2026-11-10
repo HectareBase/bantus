@@ -547,7 +547,7 @@ function getRow(s: SessionView): RowRefs {
   // 保留の行は、状態の印を circle-pause にし、2 行目を「保留」とメモの枠にする（処理中・対応待ちになったら外れる）
   const hold = isRunning(s) ? undefined : holds[s.id];
   if (hold) setIcon(refs.statusNow, 'circle-pause');
-  else setStatus(refs.statusNow, statusIconName(s.state, s.waitingFor));
+  else setStatus(refs.statusNow, statusIconName(s.state, s.waitingFor, s.background));
   setToggle(refs.status, refs.statusAlt, !!hold, !isRunning(s));
   if (prev?.state !== s.state) refs.el.dataset.state = s.state;
   refs.el.toggleAttribute('data-held', !!hold);
@@ -555,7 +555,7 @@ function getRow(s: SessionView): RowRefs {
   refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
-  const label = hold ? ja.state.held : stateLabel(s.state, s.waitingFor);
+  const label = hold ? ja.state.held : stateLabel(s.state, s.waitingFor, s.background);
   if (refs.pill.textContent !== label) refs.pill.textContent = label;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   const ctx = contextLabel(s.context);
@@ -609,6 +609,7 @@ function flyItem(t: TimelineItem): FlyItem {
     title: s.title,
     state: s.state,
     waitingFor: s.waitingFor,
+    ...(s.background && { background: s.background }),
     archived: t.archived,
     held: !t.archived && !isRunning(s) && !!holds[s.id],
     origin: t.origin,

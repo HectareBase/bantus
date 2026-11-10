@@ -99,14 +99,14 @@ interface Cached {
 }
 
 /**
- * セッションごとの使用量を読む。読んだ結果は、ファイルの大きさと更新時刻が変わるまで使い回す。
- * ファイルの場所は作業フォルダから決め、なければ `projects` の下のフォルダを探す
+ * 会話の記録（`<projectsDir>/<フォルダ>/<cliSessionId>.jsonl`）の場所を探す。作業フォルダの候補から決め、なければ `projects` の下のフォルダを探す。
+ * 見つからなかったセッションは、しばらく探し直さない。使用量（ここ）とバックグラウンドの作業（background-work.ts）で使い回す
  */
-export function createContextReader(projectsDir: string) {
-  const cache = new Map<string, Cached>();
+export function createTranscriptLocator(projectsDir: string) {
   const missing = new Map<string, number>();
 
-  function locate(cliSessionId: string, folders: string[], now: number): string | undefined {
+  function locate(cliSessionId: string, folders: string[], now = Date.now()): string | undefined {
+    if (!/^[0-9a-zA-Z-]+$/.test(cliSessionId)) return undefined;
     const name = `${cliSessionId}.jsonl`;
     for (const folder of folders) {
       const p = join(projectsDir, projectDirName(folder), name);
@@ -130,6 +130,23 @@ export function createContextReader(projectsDir: string) {
     missing.set(cliSessionId, now);
     return undefined;
   }
+
+  /** 今ないセッションを、見つからなかったものの表から外す */
+  function prune(keep: ReadonlySet<string>) {
+    for (const id of missing.keys()) if (!keep.has(id)) missing.delete(id);
+  }
+
+  return { locate, prune };
+}
+
+/**
+ * セッションごとの使用量を読む。読んだ結果は、ファイルの大きさと更新時刻が変わるまで使い回す。
+ * ファイルの場所は createTranscriptLocator で探す
+ */
+export function createContextReader(projectsDir: string) {
+  const cache = new Map<string, Cached>();
+  const locator = createTranscriptLocator(projectsDir);
+  const locate = locator.locate;
 
   /**
    * cliSessionId のセッションの使用量。model は local_*.json の値（なければ記録の値を使う）。
@@ -177,7 +194,7 @@ export function createContextReader(projectsDir: string) {
   /** 今ないセッションを使い回しの表から外す */
   function prune(keep: ReadonlySet<string>) {
     for (const id of cache.keys()) if (!keep.has(id)) cache.delete(id);
-    for (const id of missing.keys()) if (!keep.has(id)) missing.delete(id);
+    locator.prune(keep);
   }
 
   return { read, prune };
