@@ -628,7 +628,7 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 /* 動きを減らす設定のときは、帯を出さず、処理中のセッション名を止まった色で出す。
    見た目はアニメーション効果の「ひかえめ」と同じになる（status-colors.ts が data-motion="subtle" を付ける）。ここは JS が動く前の分 */
 @media (prefers-reduced-motion: reduce) {
-  .status svg, .status circle, .row::before { animation: none; }
+  .status svg, .status circle, .row::before, .row[data-state] .status svg { animation: none; }
   .shine { display: none; }
   .row[data-state="busy"] .title { color: var(--text-secondary); }
 }
@@ -641,7 +641,7 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 .progress-still { display: none; }
 html[data-motion="subtle"] .progress-ring { display: none; }
 html[data-motion="subtle"] .progress-still { display: block; }
-html[data-motion="subtle"] .status svg, html[data-motion="subtle"] .row::before { animation: none; }
+html[data-motion="subtle"] .row[data-state] .status svg, html[data-motion="subtle"] .row::before { animation: none; }
 html[data-motion="subtle"] .shine { display: none; }
 html[data-motion="subtle"] .row[data-state="busy"] .title { color: var(--text); }
 /* 斜線は状態の塗りの上でも見えるよう濃くする（設定の濃さの倍率 --hl はそのままかける） */
