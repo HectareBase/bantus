@@ -145,6 +145,11 @@ export const ja = {
     badgeWaiting: (n: number) => `対応待ち ${n}`,
     badgeBusy: (n: number) => `処理中 ${n}`,
     badgeHeld: (n: number) => `保留 ${n}`,
+    /** タイトルバーの PC 全体の使用率。ラベルは短い英字のまま */
+    cpuLabel: 'CPU',
+    memLabel: 'MEM',
+    cpuTip: (pct: number) => `CPU ${pct}%`,
+    memTip: (used: string, total: string, pct: number) => `MEM ${used} / ${total} GB（${pct}%）`,
   },
 
   /** HTML ビューア（ウィジェットの下。docs/design/html-viewer.md） */
@@ -250,6 +255,7 @@ export const ja = {
       rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
       showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
+      showSystemUsage: { label: 'CPU と MEM', description: 'タイトルバーに出す PC 全体の使用率。3 秒ごとに更新し、ウィジェットが隠れている間は止める' },
       showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。上限がわからないモデルはトークン数' },
       gitFetch: {
         label: '定期的に取得する',

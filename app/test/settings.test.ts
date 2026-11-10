@@ -196,7 +196,7 @@ describe('設定画面のカテゴリ', () => {
   it('見た目は 明るさ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['明るさ', ['theme']],
-      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
+      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom', 'showSystemUsage']],
       ['状態の色', ['statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>

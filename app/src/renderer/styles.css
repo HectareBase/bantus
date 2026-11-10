@@ -140,6 +140,38 @@ button { font: inherit; color: inherit; }
 .icon-button:active { background: var(--pressed); }
 /* アイコンは lucide（icon.ts）。線の太さなどは SVG の属性に入っているので、ここでは大きさだけを決める */
 .icon-button svg { width: 14px; height: 14px; }
+/* PC 全体の CPU とメモリ。2 段のグリッドで、各段はラベル・短いバー・数字（バーと段階はセッションの行の .ctx と同じ）。
+   色は状態だけを表すので、ふだんは灰色。多いと濃い太字、とても多いと赤 */
+.titlebar { container: titlebar / inline-size; }
+.usage {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 32px 2.8em;
+  column-gap: 4px;
+  row-gap: 1px;
+  margin-right: 4px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.usage[hidden], html.hide-system-usage .usage { display: none; }
+.usage-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; outline: none; }
+.usage-label { color: var(--text-tertiary); }
+.usage-num { text-align: right; }
+.usage-bar { height: 4px; border-radius: 2px; background: var(--ctx-track); overflow: hidden; }
+.usage-fill { display: block; height: 100%; border-radius: 2px; background: var(--text-tertiary); transform: scaleX(0); transform-origin: left; }
+.usage-row[data-level="high"] { color: var(--text); font-weight: 600; }
+.usage-row[data-level="high"] .usage-fill { background: var(--text); }
+.usage-row[data-level="full"] { color: var(--ctx-full); font-weight: 600; }
+.usage-row[data-level="full"] .usage-fill { background: var(--ctx-full); }
+/* 狭いとき（最小幅 200px のあたり）は、ラベルと数字を落としてバー 2 本だけを縦に積む。数字はツールチップで見る */
+@container titlebar (max-width: 240px) {
+  .usage { grid-template-columns: 28px; row-gap: 4px; }
+  .usage-label, .usage-num { display: none; }
+  .usage-row { padding: 1px 0; }
+}
+
 /* 固定を外したら、ピンを傾ける（抜けかけて、留まっていない見た目） */
 #pin svg { transition: transform 0.15s cubic-bezier(0, 0, 0, 1); }
 #pin[aria-pressed="false"] svg { transform: rotate(45deg); }

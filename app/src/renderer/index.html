@@ -11,6 +11,11 @@
     <img class="app-icon" src="icon.svg" alt="">
     <span class="app-name">Bantus</span>
     <span class="spacer"></span>
+    <!-- PC 全体の CPU とメモリ（system-usage.ts）。各段はラベル・短いバー・数字。狭いときはバー 2 本だけにする -->
+    <div id="usage" class="usage" hidden>
+      <div id="usage-cpu" class="usage-row" tabindex="-1"><span class="usage-label" data-i18n="widget.cpuLabel"></span><span class="usage-bar"><span class="usage-fill"></span></span><span class="usage-num"></span></div>
+      <div id="usage-mem" class="usage-row" tabindex="-1"><span class="usage-label" data-i18n="widget.memLabel"></span><span class="usage-bar"><span class="usage-fill"></span></span><span class="usage-num"></span></div>
+    </div>
     <button id="pin" class="icon-button" data-i18n-tip="widget.pinned" data-i18n-aria-label="widget.pinAria" aria-pressed="true" data-icon="pin"></button>
     <button id="settings" class="icon-button" data-i18n-tip="widget.settings" data-i18n-aria-label="widget.settings" data-icon="settings"></button>
   </header>

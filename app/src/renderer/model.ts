@@ -94,11 +94,29 @@ export function contextPercent(c: ContextUsage | undefined): number | undefined 
   return Math.round((c.tokens / c.window) * 100);
 }
 
-/** 色の段階。割合がわからなければ normal */
-export function contextLevel(c: ContextUsage | undefined): 'normal' | 'high' | 'full' {
-  const pct = contextPercent(c);
+/** 使用率（%）の段階。コンテキストとタイトルバーの CPU・MEM で同じ境目を使う。割合がわからなければ normal */
+export function percentLevel(pct: number | undefined): 'normal' | 'high' | 'full' {
   if (pct === undefined || pct < CONTEXT_HIGH) return 'normal';
   return pct < CONTEXT_FULL ? 'high' : 'full';
+}
+
+/** 色の段階。割合がわからなければ normal */
+export function contextLevel(c: ContextUsage | undefined): 'normal' | 'high' | 'full' {
+  return percentLevel(contextPercent(c));
+}
+
+// ---- タイトルバーの PC 全体の使用率 ----
+
+const GIB = 2 ** 30;
+
+/** メモリの使用率（%、整数） */
+export function memPercent(used: number, total: number): number {
+  return total > 0 ? Math.min(100, Math.max(0, Math.round((used / total) * 100))) : 0;
+}
+
+/** メモリのツールチップの数字。使用量は小数 1 桁、総量は整数（GB は 2^30 バイト。タスク マネージャーと同じ） */
+export function memGb(used: number, total: number): { used: string; total: string } {
+  return { used: (used / GIB).toFixed(1), total: String(Math.round(total / GIB)) };
 }
 
 /** 1234 → 1.2k、123456 → 123k、1234567 → 1.2M */

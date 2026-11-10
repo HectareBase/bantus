@@ -11,6 +11,7 @@ import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
 import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
+import { createSystemUsage } from './system-usage';
 import { copyableId } from './session-id';
 import { desktopDataFolders, folderKey, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
@@ -197,11 +198,11 @@ function sidebarBounds() {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards } = s;
+  const { edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, archive, archivedCards, holds, heldCards,
+    edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -261,6 +262,17 @@ function applySettings(s: Settings) {
   // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときに画面側が決める）
   if (s.backgroundOpacity > 0) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
+  updateSystemUsage();
+}
+
+/** タイトルバーの CPU とメモリ。取得のタイマーは 1 つだけで、出す設定で、ウィジェットが見えている間だけ動かす */
+const systemUsage = createSystemUsage((usage) => {
+  if (win && !win.isDestroyed()) win.webContents.send('system-usage', usage);
+});
+
+function updateSystemUsage() {
+  const shown = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+  systemUsage.setActive(shown && getSettings().showSystemUsage);
 }
 
 function displayOptions(): DisplayOption[] {
@@ -329,6 +341,16 @@ function createWidget(): BrowserWindow {
   // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
   w.on('show', () => flyout?.setWidgetVisible(true));
   w.on('restore', () => flyout?.setWidgetVisible(true));
+  // CPU とメモリの取得は、見えている間だけ
+  w.on('show', updateSystemUsage);
+  w.on('hide', updateSystemUsage);
+  w.on('minimize', updateSystemUsage);
+  w.on('restore', updateSystemUsage);
+  // 読み込み直したら、最後の値を送り直す（値が変わるまで送らないため）
+  w.webContents.on('did-finish-load', () => {
+    const last = systemUsage.last();
+    if (last && getSettings().showSystemUsage) w.webContents.send('system-usage', last);
+  });
   return w;
 }
 
@@ -1000,6 +1022,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     stopWatching();
     clearInterval(fetchTimer);
+    systemUsage.setActive(false);
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();

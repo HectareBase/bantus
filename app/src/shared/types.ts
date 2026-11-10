@@ -171,6 +171,15 @@ export interface WidgetApi {
   setViewerLayout(patch: { viewerHeight?: number; viewerAutoHeight?: boolean; viewerCollapsed?: boolean }): void;
   /** ビューアの様子（何を出しているか、出せない理由）が変わったとき */
   onViewerState(listener: (state: ViewerState) => void): void;
+  /** PC 全体の CPU とメモリの使用率。出す設定で、ウィジェットが見えている間だけ、値が変わったときに届く */
+  onSystemUsage(listener: (usage: SystemUsage) => void): void;
+}
+
+/** PC 全体の CPU とメモリ。cpu は使用率（%、整数）、メモリはバイト */
+export interface SystemUsage {
+  cpu: number;
+  memUsed: number;
+  memTotal: number;
 }
 
 /**
@@ -325,7 +334,7 @@ export interface FlyShow {
 export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'pinned' | 'mainArchiveMinutes'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
   | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerAutoHeight' | 'viewerHeight' | 'viewerCollapsed'
 >;
