@@ -633,7 +633,7 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .status svg, .status circle, .row::before, .row[data-state] .status svg { animation: none; }
   .shine { display: none; }
-  .row[data-state="busy"] .title { color: var(--text-secondary); }
+  .row[data-state="busy"] .title { color: var(--text-tertiary); }
 }
 
 /* ---- アニメーション効果「ひかえめ」（設定 motion、html[data-motion="subtle"]） ----
@@ -647,7 +647,8 @@ html[data-motion="subtle"] .progress-ring { display: none; }
 html[data-motion="subtle"] .progress-still { display: block; }
 html[data-motion="subtle"] .row[data-state] .status svg, html[data-motion="subtle"] .row::before { animation: none; }
 html[data-motion="subtle"] .shine { display: none; }
-html[data-motion="subtle"] .row[data-state="busy"] .title { color: var(--text); }
+/* 処理中のセッション名は、標準の光の帯の下地と同じ薄い色で出す */
+html[data-motion="subtle"] .row[data-state="busy"] .title { color: var(--text-tertiary); }
 /* 斜線は状態の塗りの上でも見えるよう濃くする（設定の濃さの倍率 --hl はそのままかける） */
 html[data-motion="subtle"] { --stripe-a: 0.07; }
 @media (prefers-color-scheme: dark) {
