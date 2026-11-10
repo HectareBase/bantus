@@ -2,14 +2,20 @@
 
 import { ja } from './strings/ja.js';
 import { checkViewerPath } from './viewer-path.js';
+import { normalizeDisplayByLayout } from './display-layout.js';
 
 const T = ja.settings;
 
 export interface Settings {
   /** ウィジェットを置く画面の端 */
   edge: 'left' | 'right';
-  /** 置くモニター。'primary' か、モニターの ID（文字列） */
+  /**
+   * 古い版の、置くモニターの単一の設定（'primary' か、モニターの ID の文字列）。今は displayByLayout を使い、
+   * これは覚えのない構成で使う値として残す。今つながっている構成へ移したら 'primary' に戻す（display-layout.ts）
+   */
   display: string;
+  /** モニターの接続状態（構成のキー）ごとに、置くモニター（'primary' かモニターのしるし）。設定画面の「表示するモニター」で変わる */
+  displayByLayout: Record<string, string>;
   /** 広げたときのウィジェットの幅（px）。設定画面には出さず、ウィジェットの内側の端をドラッグして変える */
   width: number;
   /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
@@ -197,6 +203,7 @@ export interface WindowBounds {
 export const DEFAULT_SETTINGS: Settings = {
   edge: 'right',
   display: 'primary',
+  displayByLayout: {},
   width: 264,
   backgroundOpacity: 100,
   cardOpacity: 50,
@@ -586,6 +593,7 @@ export function normalizeSettings(input: unknown): Settings {
   const w = src.width;
   if (typeof w === 'number' && Number.isFinite(w)) out.width = Math.min(WIDTH_MAX, Math.max(WIDTH_MIN, Math.round(w)));
   if (typeof src.pinned === 'boolean') out.pinned = src.pinned;
+  out.displayByLayout = normalizeDisplayByLayout(src.displayByLayout);
   const vh = src.viewerHeight;
   if (typeof vh === 'number' && Number.isFinite(vh)) out.viewerHeight = Math.min(VIEWER_HEIGHT_MAX, Math.max(VIEWER_HEIGHT_MIN, Math.round(vh)));
   if (typeof src.viewerCollapsed === 'boolean') out.viewerCollapsed = src.viewerCollapsed;

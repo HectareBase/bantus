@@ -368,6 +368,12 @@ export interface DisplayOption {
   label: string;
 }
 
+/** 設定画面のモニターの選択肢と、今の構成で選んでいるもの */
+export interface DisplayChoices {
+  options: DisplayOption[];
+  selected: string;
+}
+
 export interface AboutInfo {
   version: string;
   settingsFile: string;
@@ -393,7 +399,11 @@ export interface SettingsApi {
   get(): Promise<Settings>;
   set(patch: Partial<Settings>): void;
   onChange(listener: (settings: Settings) => void): void;
-  displays(): Promise<DisplayOption[]>;
+  displays(): Promise<DisplayChoices>;
+  /** 表示するモニターを選んだ。今のモニターの構成に結びつけて覚える */
+  setDisplay(value: string): void;
+  /** モニターの構成が変わった（選択肢を出し直す） */
+  onDisplaysChange(listener: () => void): void;
   about(): Promise<AboutInfo>;
   /** 設定画面のボタン（type: 'action'）を押した */
   runAction(id: ActionId): void;

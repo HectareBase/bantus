@@ -106,6 +106,10 @@ const settingsApi: SettingsApi = {
     ipcRenderer.on('settings:changed', (_e, settings: Settings) => listener(settings));
   },
   displays: () => ipcRenderer.invoke('settings:displays'),
+  setDisplay: (value) => ipcRenderer.send('settings:set-display', value),
+  onDisplaysChange: (listener) => {
+    ipcRenderer.on('settings:displays-changed', () => listener());
+  },
   about: () => ipcRenderer.invoke('settings:about'),
   runAction: (id) => ipcRenderer.send('settings:action', id),
   fetchStatus: () => ipcRenderer.invoke('fetch:status'),
