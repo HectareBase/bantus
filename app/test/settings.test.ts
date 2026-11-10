@@ -72,10 +72,10 @@ describe('normalizeSettings の hardwareAcceleration', () => {
   it('なければ GPU を使わない', () => assert.equal(normalizeSettings({}).hardwareAcceleration, false));
   it('true を残す', () => assert.equal(normalizeSettings({ hardwareAcceleration: true }).hardwareAcceleration, true));
   it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ hardwareAcceleration: 'true' }).hardwareAcceleration, false));
-  it('一般のカテゴリに、オン・オフの 2 つで出す', () => {
+  it('一般のカテゴリに、トグルスイッチで出す', () => {
     const def = SETTING_DEFS.find((d) => d.key === 'hardwareAcceleration');
     assert.equal(def?.category, 'general');
-    assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
+    assert.equal(def?.type, 'toggle');
   });
 });
 
@@ -181,6 +181,15 @@ describe('normalizeSettings の行の上下の余白', () => {
     assert.equal(normalizeSettings({ rowPadding: 6.6 }).rowPadding, 7);
   });
   it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ rowPadding: '8' }).rowPadding, 4));
+});
+
+describe('設定画面のトグルスイッチ', () => {
+  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 は選択肢のまま）', () => {
+    for (const d of SETTING_DEFS) {
+      if (d.type === 'action' || d.key === 'viewerAutoHeight') continue;
+      if (typeof DEFAULT_SETTINGS[d.key] === 'boolean') assert.equal(d.type, 'toggle', d.key);
+    }
+  });
 });
 
 describe('設定画面のカテゴリ', () => {

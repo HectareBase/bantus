@@ -74,7 +74,7 @@ function previewSound() {
   previewTimer = window.setTimeout(() => playSound(settings.soundType, 'done', settings.soundVolume), 1_500);
 }
 
-/** disabled なら、値は見せるが押せなくする（segmented、text、action が使う） */
+/** disabled なら、値は見せるが押せなくする（segmented、toggle、text、action が使う） */
 async function control(def: SettingDef, disabled: boolean): Promise<Node> {
   switch (def.type) {
     case 'segmented': {
@@ -94,6 +94,23 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
       const preview = el('button', { className: 'preview-button', disabled }, [createIcon('volume-2'), T.preview]);
       preview.addEventListener('click', previewSound);
       return el('div', { className: 'control' }, [group, preview]);
+    }
+    case 'toggle': {
+      const text = (on: boolean) => (on ? T.options.on : T.options.off);
+      const state = el('span', { className: 'toggle-state', textContent: text(settings[def.key]) });
+      const button = el('button', { className: 'toggle', disabled }, [el('span', { className: 'toggle-thumb' })]);
+      button.setAttribute('role', 'switch');
+      button.setAttribute('aria-label', def.label);
+      button.setAttribute('aria-checked', String(settings[def.key]));
+      button.addEventListener('click', () => {
+        const on = !settings[def.key];
+        button.setAttribute('aria-checked', String(on));
+        state.textContent = text(on);
+        set(def.key, on);
+      });
+      // 「オン」「オフ」の文字を押しても切り替える
+      state.addEventListener('click', () => { if (!button.disabled) button.click(); });
+      return el('div', { className: 'control toggle-field' }, [state, button]);
     }
     case 'display': {
       const select = el('select');
