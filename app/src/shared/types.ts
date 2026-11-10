@@ -2,7 +2,10 @@
 
 import type { ActionId, ActiveHighlight, ArchiveMark, HoldMark, Motion, Settings, StatusColors } from './settings';
 
-/** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
+/**
+ * セッションの状態（docs/research/session-status.md）。stopped（CLI のプロセスが動いていない）は、画面では待機中と同じに見せる。
+ * ただし interrupted が付いたものは「中断」と出す（src/renderer/model.ts の displayState）
+ */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
 
 export interface SessionView {
@@ -38,6 +41,11 @@ export interface SessionView {
   /** 作業フォルダのコミットされていない変更。まだ調べていない、または調べられなかったときは undefined */
   changes?: GitChanges;
   state: SessionState;
+  /**
+   * state が stopped のとき、処理中か対応待ちからターンを終えずに止まったものだけ true（src/main/sessions.ts の InterruptTracker）。
+   * ウィジェットが動いている間に見た変化だけで決めるので、起動した時点で止まっていたものには付かない
+   */
+  interrupted?: boolean;
   /** state が waiting のときの理由（`permission prompt` など） */
   waitingFor?: string;
   /**
@@ -227,6 +235,7 @@ export interface TipApi {
 export interface FlyItem {
   id: string;
   title: string;
+  /** 画面に出す状態（src/renderer/model.ts の displayState。停止中は idle、中断だけ stopped） */
   state: SessionState;
   waitingFor?: string;
   /** 待機中のときの、バックグラウンドで動いている作業の数（SessionView.background） */

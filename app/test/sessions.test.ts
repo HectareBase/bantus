@@ -4,12 +4,41 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { renameSync, rmSync, utimesSync } from 'node:fs';
-import { createJsonCache, jsonCacheFor, readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
+import { createJsonCache, InterruptTracker, jsonCacheFor, readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
 
 /** Windows の PID は 4 の倍数なので、奇数の PID のプロセスはない */
 const DEAD_PID = 2_147_483_645;
+
+describe('InterruptTracker（中断の見分け）', () => {
+  const v = (id: string, state: SessionView['state'], extra: Partial<SessionView> = {}): SessionView =>
+    ({ id, title: id, repoKey: 'r', repoName: 'r', state, createdAt: 0, lastActivityAt: 0, ...extra });
+  it('処理中か対応待ちから止まったものに付け、止まっている間は残す', () => {
+    const t = new InterruptTracker();
+    t.apply([v('a', 'busy'), v('b', 'waiting'), v('c', 'idle')]);
+    const stopped = t.apply([v('a', 'stopped'), v('b', 'stopped'), v('c', 'stopped')]);
+    assert.deepEqual(stopped.map((s) => !!s.interrupted), [true, true, false]);
+    assert.equal(t.apply([v('a', 'stopped')])[0]?.interrupted, true);
+  });
+  it('起動した時点で止まっていたものには付けない', () => {
+    assert.equal(new InterruptTracker().apply([v('a', 'stopped')])[0]?.interrupted, undefined);
+  });
+  it('動き出したら外す', () => {
+    const t = new InterruptTracker();
+    t.apply([v('a', 'busy')]);
+    t.apply([v('a', 'stopped')]);
+    assert.equal(t.apply([v('a', 'idle')])[0]?.interrupted, undefined);
+    assert.equal(t.apply([v('a', 'stopped')])[0]?.interrupted, undefined);
+  });
+  it('読めずに空のときは覚えたまま。見本データの印は残す', () => {
+    const t = new InterruptTracker();
+    t.apply([v('a', 'busy')]);
+    t.apply([]);
+    assert.equal(t.apply([v('a', 'stopped')])[0]?.interrupted, true);
+    assert.equal(new InterruptTracker().apply([v('x', 'stopped', { interrupted: true })])[0]?.interrupted, true);
+  });
+});
 
 describe('toState', () => {
   it('動いていなければ停止中', () => assert.equal(toState(undefined), 'stopped'));
@@ -139,10 +168,11 @@ describe('readSessions（偽のデータフォルダ）', () => {
     ]);
   });
 
-  it('対応待ち → 処理中 → 待機 → 停止中 の順', () => {
-    assert.deepEqual(sessions.map((s) => s.state), [
-      'waiting', 'busy', 'idle', 'idle', 'idle', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped', 'stopped',
-    ]);
+  it('対応待ち → 処理中 → 待機と停止中（混ぜて新しい順）', () => {
+    assert.deepEqual(sessions.slice(0, 2).map((s) => s.state), ['waiting', 'busy']);
+    const rest = sessions.slice(2);
+    assert.deepEqual([...new Set(rest.map((s) => s.state))].sort(), ['idle', 'stopped']);
+    assert.deepEqual(rest.map((s) => s.lastActivityAt), [...rest].map((s) => s.lastActivityAt).sort((a, b) => b - a));
   });
 
   it('lastFocusedAt が一番新しいセッションだけが focused。サイドチャットなら親', () => {
@@ -297,7 +327,8 @@ describe('readFixture', () => {
 
   it('minutesAgo から時刻を出し、実データと同じ順に並べる', () => {
     const list = readFixture(file, now, 0);
-    assert.deepEqual(list.map((s) => s.id), ['local_b', 'local_c', 'local_a']);
+    // 停止中は待機と同じ順位で、新しい順
+    assert.deepEqual(list.map((s) => s.id), ['local_b', 'local_a', 'local_c']);
     assert.equal(list[0]?.lastActivityAt, now - 5 * 60_000);
     assert.equal('minutesAgo' in list[0]!, false);
   });

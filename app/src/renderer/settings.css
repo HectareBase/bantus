@@ -214,6 +214,7 @@ input[type="range"] { width: 200px; accent-color: var(--accent); }
 /* ウィジェットの行の見本 */
 .color-preview { display: block; min-height: 0; padding: 8px; }
 .preview-row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; font-size: 13px; }
+/* stopped は中断の行（止まっただけの行は待機中と同じ） */
 .preview-row[data-state="stopped"] span { color: var(--text-secondary); }
 /* アニメーション効果が「ひかえめ」なら、ウィジェットと同じく回る輪を砂時計にし、対応待ちと待機中の行に塗りと枠を付ける（styles.css の data-motion） */
 .progress-still { display: none; }

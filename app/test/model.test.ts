@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
+  NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
@@ -455,6 +455,15 @@ describe('nextAttention', () => {
     assert.equal(nextAttention('waiting', 'idle', true), false);
     assert.equal(nextAttention('waiting', 'stopped', true), false);
   });
+  it('待機と停止中の行き来では今のまま（完了の帯はプロセスが止まっても残す）', () => {
+    assert.equal(nextAttention('idle', 'stopped', true), true);
+    assert.equal(nextAttention('stopped', 'idle', true), true);
+    assert.equal(nextAttention('stopped', 'idle', false), false);
+  });
+  it('処理中のまま止まった（中断）ときは付けない', () => {
+    assert.equal(nextAttention('busy', 'stopped', false), false);
+    assert.equal(nextAttention('background', 'stopped', false), false);
+  });
   it('状態が同じなら今のまま', () => {
     assert.equal(nextAttention('idle', 'idle', true), true);
     assert.equal(nextAttention('idle', 'idle', false), false);
@@ -573,11 +582,19 @@ describe('Claude 本体で開いたか（openedInClaude）', () => {
   it('時刻がないままなら開いていない', () => assert.equal(openedInClaude(0, undefined), false));
 });
 
+describe('displayState', () => {
+  it('停止中は待機中と同じに見せる', () => assert.equal(displayState({ state: 'stopped' }), 'idle'));
+  it('中断だけは stopped のまま', () => assert.equal(displayState({ state: 'stopped', interrupted: true }), 'stopped'));
+  it('ほかの状態は変えない', () => {
+    assert.deepEqual((['waiting', 'busy', 'idle'] as const).map((state) => displayState({ state })), ['waiting', 'busy', 'idle']);
+  });
+});
+
 describe('stateLabel', () => {
-  it('処理中、待機中、停止', () => {
+  it('処理中、待機中、中断（stopped は displayState が中断のときだけ返す）', () => {
     assert.equal(stateLabel('busy'), '処理中');
     assert.equal(stateLabel('idle'), '待機中');
-    assert.equal(stateLabel('stopped'), '停止中');
+    assert.equal(stateLabel('stopped'), '中断');
   });
   it('対応待ちは理由を言葉にする', () => {
     assert.equal(stateLabel('waiting', 'permission prompt'), '許可待ち');
@@ -876,17 +893,17 @@ describe('保留：動き出したら外す', () => {
 });
 
 describe('保留：並び順と巡回', () => {
-  it('優先度では、待機と停止中の間', () => {
+  it('優先度では、待機（停止中を含む）の後ろ', () => {
     const h = { holds: { held: { note: '', since: 0 } }, heldCards: {} };
     const sessions = [
-      view({ id: 'stopped', state: 'stopped', lastActivityAt: 50 }),
+      view({ id: 'stopped', state: 'stopped', lastActivityAt: 5 }),
       view({ id: 'held', state: 'idle', lastActivityAt: 40 }),
       view({ id: 'idle', state: 'idle', lastActivityAt: 10 }),
       view({ id: 'busy', state: 'busy', lastActivityAt: 20 }),
     ];
-    assert.deepEqual([...sessions].sort(compareSessions('priority', h)).map((s) => s.id), ['busy', 'idle', 'held', 'stopped']);
+    assert.deepEqual([...sessions].sort(compareSessions('priority', h)).map((s) => s.id), ['busy', 'idle', 'stopped', 'held']);
     assert.equal(rankOf(sessions[1]!, h), HELD_RANK);
-    assert.ok(HELD_RANK > rankOf(sessions[2]!, h) && HELD_RANK < rankOf(sessions[0]!, h));
+    assert.ok(HELD_RANK > rankOf(sessions[2]!, h) && HELD_RANK > rankOf(sessions[0]!, h));
   });
 
   it('固定・更新日時では今のまま', () => {
@@ -898,11 +915,12 @@ describe('保留：並び順と巡回', () => {
   it('カードの並びの優先度にも使う', () => {
     const sessions = [
       view({ id: 'p', repoKey: 'r', worktree: wt('p'), state: 'idle', lastActivityAt: 99 }),
-      view({ id: 'q', repoKey: 'r', worktree: wt('q'), state: 'stopped', lastActivityAt: 1 }),
+      view({ id: 'q', repoKey: 'r', worktree: wt('q'), state: 'stopped', lastActivityAt: 2 }),
       view({ id: 'i', repoKey: 'r', worktree: wt('i'), state: 'idle', lastActivityAt: 1 }),
     ];
     const repo = buildRepos(sessions, opts({ heldCards: { 'r|p': { note: '', since: 0 } } }))[0]!;
-    assert.deepEqual(repo.cards.map((c) => c.label), ['i', 'p', 'q']);
+    // 停止中は待機と同じ順位で、新しい順に並ぶ
+    assert.deepEqual(repo.cards.map((c) => c.label), ['q', 'i', 'p']);
   });
 
   describe('巡回（Ctrl+Alt+N）からは外す', () => {

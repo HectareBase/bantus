@@ -280,7 +280,7 @@ describe('保留の色', () => {
     assert.equal(DEFAULT_STATUS_COLORS.held, '#e05aa8');
     assert.ok(COLOR_SWATCHES.includes(DEFAULT_STATUS_COLORS.held));
   });
-  it('設定画面では待機と停止中の間に並べる', () => assert.deepEqual(COLOR_STATES, ['busy', 'waiting', 'idle', 'held', 'stopped']));
+  it('設定画面では待機と中断の間に並べる', () => assert.deepEqual(COLOR_STATES, ['busy', 'waiting', 'idle', 'held', 'stopped']));
   it('保存されている色に held がなければ既定の色。あれば残す', () => {
     assert.equal(normalizeSettings({ statusColors: { busy: '#000000' } }).statusColors.held, '#e05aa8');
     assert.equal(normalizeSettings({ statusColors: { held: '#A371F7' } }).statusColors.held, '#a371f7');

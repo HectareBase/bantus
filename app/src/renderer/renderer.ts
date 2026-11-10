@@ -13,6 +13,7 @@ import {
   alertDelay,
   attentionReason,
   attentionStateOf,
+  displayState,
   type AttentionState,
   buildRepos,
   changeItems,
@@ -550,17 +551,19 @@ function getRow(s: SessionView): RowRefs {
   const prev = refs.data;
   // 保留の行は、状態の印を circle-pause にし、2 行目を「保留」とメモの枠にする（処理中・対応待ちになったら外れる）
   const hold = isRunning(s) ? undefined : holds[s.id];
+  // 停止中は待機中と同じに見せ、中断だけを stopped として描く（displayState）
+  const shown = displayState(s);
   if (hold) setIcon(refs.statusNow, 'circle-pause');
-  else setStatus(refs.statusNow, statusIconName(s.state, s.waitingFor, s.background));
+  else setStatus(refs.statusNow, statusIconName(shown, s.waitingFor, s.background));
   setToggle(refs.status, refs.statusAlt, !!hold, !isRunning(s));
-  if (prev?.state !== s.state) refs.el.dataset.state = s.state;
+  if (refs.el.dataset.state !== shown) refs.el.dataset.state = shown;
   refs.el.toggleAttribute('data-held', !!hold);
   refs.el.toggleAttribute('data-background', !hold && hasBackground(s.state, s.background));
   refs.el.toggleAttribute('data-attention', attention.has(s.id));
   refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
-  const label = hold ? ja.state.held : stateLabel(s.state, s.waitingFor, s.background);
+  const label = hold ? ja.state.held : stateLabel(shown, s.waitingFor, s.background);
   if (refs.pill.textContent !== label) refs.pill.textContent = label;
   if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
   const ctx = contextLabel(s.context);
@@ -612,7 +615,7 @@ function flyItem(t: TimelineItem): FlyItem {
   return {
     id: s.id,
     title: s.title,
-    state: s.state,
+    state: displayState(s),
     waitingFor: s.waitingFor,
     ...(s.background && { background: s.background }),
     archived: t.archived,

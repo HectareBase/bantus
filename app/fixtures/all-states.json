@@ -23,8 +23,8 @@
     "worktree": { "key": "spike", "label": "spike", "branch": "claude/spike-7a8b9c" },
     "changes": { "changed": 1, "untracked": 1, "ahead": 0 }, "state": "stopped", "minutesAgo": 1500,
     "holdCard": { "note": "本命の方式の結果を見てから、どちらで進めるか決める", "minutesAgo": 4320 } },
-  { "id": "local_all-10", "context": { "tokens": 503000, "window": 1000000, "model": "claude-opus-5-5" }, "title": "メイン：停止中", "workDir": "viewer/my-app", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
-    "changes": { "changed": 3, "untracked": 2, "ahead": 1 }, "state": "stopped", "detail": "Done", "minutesAgo": 50000 },
+  { "id": "local_all-10", "context": { "tokens": 503000, "window": 1000000, "model": "claude-opus-5-5" }, "title": "メイン：中断（処理中のまま止まった）", "workDir": "viewer/my-app", "repoKey": "my-app", "repoName": "my-app", "mainBranch": "main",
+    "changes": { "changed": 3, "untracked": 2, "ahead": 1 }, "state": "stopped", "interrupted": true, "minutesAgo": 45 },
 
   { "id": "local_all-11", "title": "許可待ち", "repoKey": "waiting-reasons", "repoName": "waiting-reasons", "mainBranch": "develop",
     "state": "waiting", "waitingFor": "permission prompt", "minutesAgo": 1 },

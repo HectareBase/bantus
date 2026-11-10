@@ -286,8 +286,10 @@ export function shortBranch(branch: string): string {
   return branch.replace(/^claude\//, '').replace(/-[0-9a-f]{6}$/, '');
 }
 
-const ORDER: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 3 };
-const STATES = Object.keys(ORDER) as SessionState[];
+/** 並び順。停止中は画面では待機中と同じに見せるので、待機と同じ順位 */
+const ORDER: Record<SessionState, number> = { waiting: 0, busy: 1, idle: 2, stopped: 2 };
+/** 見本データの状態を進める順（WIDGET_FIXTURE_CYCLE） */
+const STATES: SessionState[] = ['waiting', 'busy', 'idle', 'stopped'];
 
 function sortSessions(views: SessionView[]): SessionView[] {
   return views.sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.lastActivityAt - a.lastActivityAt);
@@ -314,6 +316,37 @@ export function assignSeq(views: SessionView[]): void {
 /** 開発用の巡回の間隔（ミリ秒）。WIDGET_FIXTURE_CYCLE（秒）がなければ 0 */
 function cycleMs(): number {
   return Math.max(0, Number(process.env.WIDGET_FIXTURE_CYCLE) || 0) * 1000;
+}
+
+/**
+ * 中断（処理中か対応待ちから、ターンを終えずにプロセスが止まった）を見分ける。
+ * 読むたびに前の状態と比べ、busy / waiting から stopped になったものに interrupted を付け、止まっている間は付けたままにする。
+ * 動き出したら外す。前の状態を知らない（ウィジェットを起動した時点で止まっていた）ものには付けない。
+ * 見本データで interrupted を書いたものは、そのまま残す
+ */
+export class InterruptTracker {
+  private last = new Map<string, SessionState>();
+  private interrupted = new Set<string>();
+
+  apply(views: SessionView[]): SessionView[] {
+    // 読めずに空のときは、覚えている状態を捨てない
+    if (!views.length) return views;
+    const next = new Map<string, SessionState>();
+    for (const view of views) {
+      const prev = this.last.get(view.id);
+      next.set(view.id, view.state);
+      if (view.state !== 'stopped') {
+        this.interrupted.delete(view.id);
+        delete view.interrupted;
+        continue;
+      }
+      if (prev === 'busy' || prev === 'waiting') this.interrupted.add(view.id);
+      if (view.interrupted || this.interrupted.has(view.id)) view.interrupted = true;
+    }
+    for (const id of this.interrupted) if (!next.has(id)) this.interrupted.delete(id);
+    this.last = next;
+    return views;
+  }
 }
 
 /**

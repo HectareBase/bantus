@@ -27,6 +27,7 @@
   --waiting: #e6a100;
   --busy: #3b8eea;
   --idle: #4caf50;
+  /* 中断（処理中か対応待ちのまま止まった）。設定の鍵が stopped なので名前はそのまま。止まっただけの行は data-state="idle" で待機中と同じに描く */
   --stopped: #8b8b8b;
   /* 保留（docs/design/hold.md）。セッションの状態ではないが、5 つめの状態の色として設定で変えられる */
   --held: #e05aa8;
@@ -532,7 +533,7 @@ html.hide-updated.hide-state:not(.hide-context) .row:not([data-held]) .meta:has(
 
 /* ---- 保留（docs/design/hold.md） ---- */
 /* 押して保留を切り替えるアイコン（行の状態の印、カードのブランチの印）。乗せたときだけ印を替え、丸い背景を付ける。
-   待機・停止中は薄いピンクの circle-pause、保留は circle-play。処理中・対応待ち（data-can なし）は変えない */
+   待機（停止中を含む）・中断は薄いピンクの circle-pause、保留は circle-play。処理中・対応待ち（data-can なし）は変えない */
 .toggle { display: grid; place-items: center; border-radius: 4px; }
 .toggle-ic { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; }
 .toggle .now, .toggle .alt { display: grid; place-items: center; }
@@ -640,7 +641,7 @@ html.paused .shine, html.paused .shine-text { animation-play-state: paused; }
    動き続ける表示（処理中の輪、光の帯、対応待ちと未確認の点滅）を止め、状態は行の塗りと枠で示す。
    並べ替え（flip.ts）、一度だけ横切る光（sweep.ts）、ピンの傾きなど、一度きりの動きは残す。
    対応待ちを強く、待機中を弱く塗る。今開いている行は塗りと枠を濃くし、斜線を重ねる。
-   処理中・停止中の行と保留（行もカードも）には塗りと枠を付けない（開いていれば今までの灰色の塗りと斜線）。
+   処理中・中断の行と保留（行もカードも）には塗りと枠を付けない（開いていれば今までの灰色の塗りと斜線）。
    待機中でバックグラウンドの作業が動いている行（data-background）も、放っておいてよいので処理中と同じく付けない */
 .progress-still { display: none; }
 html[data-motion="subtle"] .progress-ring { display: none; }

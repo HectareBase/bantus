@@ -122,13 +122,16 @@ export interface Settings {
   settingsWindow?: WindowBounds;
 }
 
-/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機 → 保留 → 停止中、同じなら recent */
+/** 並び順。fixed は位置が動かない順、recent は最後に動きがあった順、priority は対応待ち → 処理中 → 待機（停止中を含む）→ 保留、同じなら recent */
 export type SortOrder = 'fixed' | 'recent' | 'priority';
 
 /** テーマ。system は Windows の設定に従う */
 export type Theme = 'system' | 'light' | 'dark';
 
-/** 色を設定できる状態。held は保留（Bantus の中だけの印で、セッションの状態ではない） */
+/**
+ * 色を設定できる状態。held は保留（Bantus の中だけの印で、セッションの状態ではない）。
+ * stopped は中断（処理中か対応待ちのまま止まった）の色。前は停止中の色だったので、保存した設定を生かすため鍵の名前はそのまま
+ */
 export type ColorState = 'busy' | 'waiting' | 'idle' | 'stopped' | 'held';
 export type StatusColors = Record<ColorState, string>;
 
