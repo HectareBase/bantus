@@ -47,6 +47,8 @@ const SAMPLES = {
   'widget.badgeWaiting': [[2]],
   'widget.badgeBusy': [[2]],
   'widget.badgeHeld': [[2]],
+  'widget.cpuTip': [[12]],
+  'widget.memTip': [['9.3', '16', 58]],
   'flyout.continuedIn': [['feature-x']],
   'flyout.startedIn': [['C:/work/my-app']],
   'tooltip.base': [['develop']],

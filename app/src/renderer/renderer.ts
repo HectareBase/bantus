@@ -4,6 +4,7 @@
 // 行・カード・見出しの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
+import { initSystemUsage } from './system-usage.js';
 import type { FlyAction, FlyContent, FlyItem, GitChanges, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
@@ -1034,11 +1035,13 @@ function applyLayout(layout: WidgetLayout) {
   root.classList.toggle('hide-updated', !layout.showUpdated);
   root.classList.toggle('hide-state', !layout.showState);
   root.classList.toggle('hide-context', !layout.showContext);
+  root.classList.toggle('hide-system-usage', !layout.showSystemUsage);
   floating = backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
   if (!floating) clickThrough = false;
 }
 window.widget.onLayout(applyLayout);
+initSystemUsage();
 window.widget.getLayout().then(applyLayout);
 window.widget.onSessions((sessions) => {
   render(sessions);

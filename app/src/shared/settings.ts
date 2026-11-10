@@ -47,6 +47,8 @@ export interface Settings {
   showState: boolean;
   /** 行の 2 行目に、コンテキストの使用率（「12%」）を出す */
   showContext: boolean;
+  /** タイトルバーに PC 全体の CPU とメモリの使用率を出す。出さないときは取得のタイマーも止める */
+  showSystemUsage: boolean;
   /**
    * リモートを定期的に取得する（git fetch）。既定はオフ。オンにしたときだけ git の通信をする（docs/design/git-fetch.md）。
    * 元のフォルダのカードの遅れと、リモートでマージしたワークツリーのマージ済みを出すのに使う
@@ -193,6 +195,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showUpdated: true,
   showState: true,
   showContext: true,
+  showSystemUsage: true,
   gitFetch: false,
   gitFetchMinutes: 10,
   showChanges: true,
@@ -314,7 +317,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'activeHighlight' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'openAtLogin' | 'hardwareAcceleration'
+      | 'edge' | 'theme' | 'activeHighlight' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'openAtLogin' | 'hardwareAcceleration'
       | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
       | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
       | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
@@ -408,6 +411,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'zoom', category: 'look', group: T.groups.widget, type: 'slider',
     ...T.items.zoom,
     min: 80, max: 150, step: 5, unit: '%',
+  },
+  {
+    key: 'showSystemUsage', category: 'look', group: T.groups.widget, type: 'segmented',
+    ...T.items.showSystemUsage,
+    options: SHOW_OPTIONS,
   },
   {
     key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',

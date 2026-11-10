@@ -3,7 +3,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ActiveHighlight, Settings, StatusColors } from '../shared/settings';
-import type { FetchStatus, FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, TipApi, ViewerState, WidgetApi, WidgetLayout } from '../shared/types';
+import type { FetchStatus, FlyAction, FlyContent, FlyShow, FlyoutApi, SessionView, SettingsApi, SystemUsage, TipApi, ViewerState, WidgetApi, WidgetLayout } from '../shared/types';
 
 const widget: WidgetApi = {
   onSessions: (listener) => {
@@ -60,6 +60,9 @@ const widget: WidgetApi = {
   setViewerLayout: (patch) => ipcRenderer.send('viewer-layout', patch),
   onViewerState: (listener) => {
     ipcRenderer.on('viewer:state', (_e, state: ViewerState) => listener(state));
+  },
+  onSystemUsage: (listener) => {
+    ipcRenderer.on('system-usage', (_e, usage: SystemUsage) => listener(usage));
   },
 };
 
