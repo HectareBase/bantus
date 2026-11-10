@@ -215,6 +215,14 @@ input[type="range"] { width: 200px; accent-color: var(--accent); }
 .color-preview { display: block; min-height: 0; padding: 8px; }
 .preview-row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; font-size: 13px; }
 .preview-row[data-state="stopped"] span { color: var(--text-secondary); }
+/* アニメーション効果が「ひかえめ」なら、ウィジェットと同じく回る輪を砂時計にし、対応待ちと待機中の行に塗りと枠を付ける（styles.css の data-motion） */
+.progress-still { display: none; }
+html[data-motion="subtle"] .progress-ring { display: none; }
+html[data-motion="subtle"] .progress-still { display: block; }
+.preview-row + .preview-row { margin-top: 1px; }
+html[data-motion="subtle"] .preview-row { border-radius: 6px; }
+html[data-motion="subtle"] .preview-row[data-state="waiting"] { background: color-mix(in srgb, var(--waiting) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--waiting) 30%, transparent); }
+html[data-motion="subtle"] .preview-row[data-state="idle"] { background: color-mix(in srgb, var(--idle) 4%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--idle) 22%, transparent); }
 
 /* 状態ごとの行。四角を押すと、カードの下に候補が開く */
 .color-card { display: block; padding: 0; }

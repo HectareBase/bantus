@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { ActionId, ActiveHighlight, ArchiveMark, HoldMark, Settings, StatusColors } from './settings';
+import type { ActionId, ActiveHighlight, ArchiveMark, HoldMark, Motion, Settings, StatusColors } from './settings';
 
 /** 表示上の状態。並び順もこの順（docs/research/session-status.md） */
 export type SessionState = 'waiting' | 'busy' | 'idle' | 'stopped';
@@ -309,7 +309,7 @@ export interface FlyoutApi {
   /** クリックを受け取る場所（ウィンドウの中の座標）。ほかはクリックを下へ通す */
   reportSolid(rects: TipRect[]): void;
   /** 状態の色と、今開いている行の強調の濃さ（設定）。読み込んだときと、設定が変わったときに届く */
-  onColors(listener: (colors: StatusColors, highlight: ActiveHighlight) => void): void;
+  onColors(listener: (colors: StatusColors, highlight: ActiveHighlight, motion: Motion) => void): void;
   /** めくれが押された */
   requestOpen(): void;
   action(action: FlyAction): void;
@@ -335,7 +335,7 @@ export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
-  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors'
+  | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors' | 'motion'
   | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerAutoHeight' | 'viewerHeight' | 'viewerCollapsed'
 >;
 

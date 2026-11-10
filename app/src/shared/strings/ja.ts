@@ -245,6 +245,10 @@ export const ja = {
       activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線' },
       zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
+      motion: {
+        label: 'アニメーション効果',
+        description: 'ひかえめにすると回転や点滅を止め、状態を色と枠で示す。CPU の負担が減る。並べ替えの動きは残す',
+      },
       mainArchiveMinutes: {
         label: '元のフォルダを自動でアーカイブ',
         description: '待機になってからこの時間が過ぎたセッションを隠す。デスクトップのアーカイブには影響しない',
@@ -308,6 +312,8 @@ export const ja = {
       highlightSubtle: '薄い',
       highlightNormal: '標準',
       highlightStrong: '濃い',
+      motionFull: '標準',
+      motionSubtle: 'ひかえめ',
       themeSystem: 'システム',
       themeLight: 'ライト',
       themeDark: 'ダーク',

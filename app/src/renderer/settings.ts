@@ -10,7 +10,7 @@ import { createIcon } from './icon.js';
 import type { IconName } from './icons.js';
 import { fetchStatusLines, statusIconName } from './model.js';
 import { playSound } from './sound.js';
-import { applyStatusColors } from './status-colors.js';
+import { applyMotion, applyStatusColors } from './status-colors.js';
 import { setStatus } from './status-icon.js';
 import { fillStrings } from './strings.js';
 
@@ -41,6 +41,8 @@ function card(label: string, description: string | undefined, control: Node, sta
 function set<K extends keyof Settings>(key: K, value: Settings[K]) {
   settings = { ...settings, [key]: value };
   api.set({ [key]: value } as Partial<Settings>);
+  // 状態の色の見本の行を、アニメーション効果に合わせて描く
+  if (key === 'motion') applyMotion(value as Settings['motion']);
   // この設定で押せるかが決まる項目があれば、描き直す
   if (SETTING_DEFS.some((d) => d.enabledBy === key)) void renderContent();
 }
@@ -324,6 +326,7 @@ function renderNav() {
 
 async function start() {
   settings = await api.get();
+  applyMotion(settings.motion);
   api.onFetchStatus((s) => {
     fetchStatus = s;
     showFetchStatus();
