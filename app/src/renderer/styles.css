@@ -437,7 +437,7 @@ html.hide-updated .when { display: none; }
 .row[data-state="waiting"] .state-pill { background: var(--waiting-bg); color: var(--waiting); }
 .row[data-state="idle"] .state-pill { background: var(--idle-bg); color: var(--idle); }
 .row[data-state="stopped"] .state-pill { background: var(--stopped-bg); color: var(--text-secondary); }
-/* 待機中で、バックグラウンドの作業が動いている。放っておいてよいので処理中の色（帯は待機のまま） */
+/* 待機中で、バックグラウンドの作業が動いている。放っておいてよいので処理中の色（未確認の帯も、作業が終わるまで付けない） */
 .row[data-background] .state-pill { background: var(--busy-bg); color: var(--busy); }
 html.hide-state .state-pill { display: none; }
 /* コンテキストの使用率（docs/design/worktree-cards.md）。短いバーと数字を 2 行目の右端にそろえる。

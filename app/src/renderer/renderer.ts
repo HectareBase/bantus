@@ -12,6 +12,8 @@ import {
   alertActions,
   alertDelay,
   attentionReason,
+  attentionStateOf,
+  type AttentionState,
   buildRepos,
   changeItems,
   changesTooltip,
@@ -126,7 +128,7 @@ const cards = new Map<string, CardRefs>();
 const repos = new Map<string, RepoRefs>();
 /** 未確認（左端の帯を出す）セッションの ID と、それを決めるために覚えておく前の状態 */
 const attention = new Set<string>();
-const seenState = new Map<string, SessionView['state']>();
+const seenState = new Map<string, AttentionState>();
 /** 前に見た、Claude 本体で最後に開いた時刻。進んだら本体で開いたものとして帯を消す */
 const seenFocusedAt = new Map<string, number>();
 /** 帯が消えた（確認した）時刻。main の自動アーカイブを数え始める時刻に使う。ウィジェットの中だけで覚える */
@@ -398,12 +400,13 @@ function updateAttention(sessions: SessionView[]): Alert[] {
   const fresh: Alert[] = [];
   for (const s of sessions) {
     const prev = seenState.get(s.id);
-    if (prev !== s.state) {
-      if (nextAttention(prev, s.state, attention.has(s.id))) attention.add(s.id);
+    const next = attentionStateOf(s);
+    if (prev !== next) {
+      if (nextAttention(prev, next, attention.has(s.id))) attention.add(s.id);
       else clearAttention(s.id);
-      const reason = attentionReason(prev, s.state);
+      const reason = attentionReason(prev, next);
       if (reason) fresh.push({ id: s.id, reason });
-      seenState.set(s.id, s.state);
+      seenState.set(s.id, next);
     }
     if (openedInClaude(seenFocusedAt.get(s.id), s.focusedAt)) clearAttention(s.id);
     seenFocusedAt.set(s.id, s.focusedAt ?? 0);

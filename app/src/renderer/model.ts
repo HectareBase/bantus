@@ -260,15 +260,28 @@ export function changesTooltip(c: GitChanges | undefined, base?: string): string
 }
 
 /**
+ * 未確認の帯と知らせの判定に使う状態。待機中でバックグラウンドの作業が動いているもの（background）は、
+ * 作業が終われば Claude が続けるので、処理中と同じく扱う
+ */
+export type AttentionState = SessionState | 'background';
+
+export function attentionStateOf(s: Pick<SessionView, 'state' | 'background'>): AttentionState {
+  return hasBackground(s.state, s.background) ? 'background' : s.state;
+}
+
+/** Claude が動いている（処理中か、バックグラウンドで作業中） */
+const isWorking = (state: AttentionState | undefined) => state === 'busy' || state === 'background';
+
+/**
  * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
- * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中から待機になったとき
- * - 消す：処理中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
+ * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中かバックグラウンドで作業中から待機になったとき
+ * - 消す：処理中・バックグラウンドで作業中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
  * - クリックしたときに消すのは renderer
  */
-export function nextAttention(prev: SessionState | undefined, next: SessionState, flagged: boolean): boolean {
+export function nextAttention(prev: AttentionState | undefined, next: AttentionState, flagged: boolean): boolean {
   if (prev === next) return flagged;
   if (next === 'waiting') return true;
-  return prev === 'busy' && next === 'idle';
+  return isWorking(prev) && next === 'idle';
 }
 
 /**
@@ -282,7 +295,7 @@ export function newlyFlagged(before: ReadonlySet<string>, after: Iterable<string
 
 // ---- 音とトーストで知らせる ----
 
-/** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中から待機になった） */
+/** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中かバックグラウンドで作業中から待機になった） */
 export type AlertReason = 'waiting' | 'done';
 
 export interface Alert {
@@ -300,10 +313,10 @@ export const ALERT_GAP_MS = 4_000;
  * 完了の帯が残ったまま対応待ちになったときも、対応待ちとして知らせる。
  * 起動直後の最初の読み込みで知らせないのは renderer が決める
  */
-export function attentionReason(prev: SessionState | undefined, next: SessionState): AlertReason | undefined {
+export function attentionReason(prev: AttentionState | undefined, next: AttentionState): AlertReason | undefined {
   if (prev === next) return undefined;
   if (next === 'waiting') return 'waiting';
-  return prev === 'busy' && next === 'idle' ? 'done' : undefined;
+  return isWorking(prev) && next === 'idle' ? 'done' : undefined;
 }
 
 /** まだ知らせていないものに、新しいものを足す。同じセッションなら対応待ちのほうを残す */
