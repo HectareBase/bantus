@@ -1,6 +1,6 @@
 // メインプロセスと画面の両方で使う型
 
-import type { ActionId, ActiveHighlight, ArchiveMark, HoldMark, Motion, Settings, StatusColors } from './settings';
+import type { ActionId, ArchiveMark, HoldMark, Motion, Settings, StatusColors } from './settings';
 
 /**
  * セッションの状態（docs/research/session-status.md）。stopped（CLI のプロセスが動いていない）は、画面では待機中と同じに見せる。
@@ -333,7 +333,7 @@ export interface FlyoutApi {
   /** クリックを受け取る場所（ウィンドウの中の座標）。ほかはクリックを下へ通す */
   reportSolid(rects: TipRect[]): void;
   /** 状態の色と、今開いている行の強調の濃さ（設定）。読み込んだときと、設定が変わったときに届く */
-  onColors(listener: (colors: StatusColors, highlight: ActiveHighlight, motion: Motion) => void): void;
+  onColors(listener: (colors: StatusColors, highlight: number, motion: Motion) => void): void;
   /** めくれが押された */
   requestOpen(): void;
   action(action: FlyAction): void;

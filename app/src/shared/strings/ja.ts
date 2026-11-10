@@ -39,7 +39,7 @@ export const ja = {
 
   /** 自動の切り替え（self-update）のお知らせ */
   update: {
-    reinstall: '依存パッケージが変わりました。npm run setup を実行してから起動し直してください',
+    reinstall: '依存パッケージが変わりました。npm run setup を実行してから再起動してください',
     buildFailed: '新しいコードをビルドできませんでした。今の版のまま動きます',
   },
 
@@ -72,7 +72,7 @@ export const ja = {
     /** waitingFor がないとき */
     unknown: '不明',
     held: '保留',
-    /** 対応待ちと、その理由（トーストの本文、以前のセッションの一覧） */
+    /** 対応待ちと、その理由（通知バナーの本文、以前のセッションの一覧） */
     waitingWithReason: (reason: string) => `対応待ち（${reason}）`,
   },
 
@@ -91,7 +91,7 @@ export const ja = {
   /** ツールチップの行 */
   tooltip: {
     worktree: (branch: string) => `ワークツリー：${branch}`,
-    origin: (branch: string) => `元のフォルダ：${branch}`,
+    origin: (branch: string) => `メインの作業フォルダ：${branch}`,
     /** ワークツリーのカードの見出し。遅れと未マージを比べている先 */
     base: (branch: string) => `分岐元：${branch}`,
     waiting: (reason: string) => `対応待ち：${reason}`,
@@ -108,7 +108,7 @@ export const ja = {
   /** コミットされていない変更（docs/design/git-changes.md） */
   changes: {
     merged: 'マージ済み',
-    /** 分岐元ではなく main（元のフォルダのブランチ）に入っていたとき。base は分岐元（わからなければ undefined） */
+    /** 分岐元ではなく main（メインの作業フォルダのブランチ）に入っていたとき。base は分岐元（わからなければ undefined） */
     mergedInto: (into: string, base?: string) => (base ? `${into} にマージ済み（${base} には未マージ）` : `${into} にマージ済み`),
     changed: (n: number) => `変更 ${n}`,
     untracked: (n: number) => `未追跡 ${n}`,
@@ -120,11 +120,11 @@ export const ja = {
     aheadOfNamedBase: (base: string, n: number) => `${base} に未マージのコミット：${n}`,
     unpushed: (n: number) => `push していないコミット：${n}`,
     behind: (n: number) => `元のブランチからの遅れ：${n}`,
-    /** 比べている分岐元がわかるとき。元のフォルダの追跡するブランチ（`origin/main` など）にも使う */
+    /** 比べている分岐元がわかるとき。メインの作業フォルダの追跡するブランチ（`origin/main` など）にも使う */
     behindNamed: (base: string, n: number) => `${base} からの遅れ：${n}`,
   },
 
-  /** トースト通知の本文 */
+  /** 通知バナー（Windows のトースト通知）の本文 */
   toast: {
     done: '完了',
     withRest: (reason: string, rest: number) => `${reason}。ほかに ${rest} 件`,
@@ -145,10 +145,10 @@ export const ja = {
     holdOn: '保留する',
     archivedCount: (n: number) => `アーカイブ済み ${n} 件`,
     /** カードの名前。main のブランチがわからないとき */
-    originFolder: '元のフォルダ',
+    originFolder: 'メインの作業フォルダ',
     /** 一覧の分岐元の行のツールチップ */
     branchedFromTip: (branch: string, mainBranch: string) =>
-      `分岐元：${branch}\n遅れと未マージのコミットは、このブランチと比べている（元のフォルダは ${mainBranch}）`,
+      `分岐元：${branch}\n遅れと未マージのコミットは、このブランチと比べている（メインの作業フォルダは ${mainBranch}）`,
     badgeWaiting: (n: number) => `対応待ち ${n}`,
     badgeBusy: (n: number) => `処理中 ${n}`,
     badgeHeld: (n: number) => `保留 ${n}`,
@@ -163,7 +163,7 @@ export const ja = {
   viewer: {
     aria: 'HTML ビューア',
     resize: 'ドラッグで高さを変える。ダブルクリックで自動に戻す',
-    reload: '読み込み直す',
+    reload: '再読み込みする',
     openExternal: 'ブラウザーで開く',
     collapse: '畳む',
     expand: '広げる',
@@ -179,9 +179,9 @@ export const ja = {
   flyout: {
     startedOnMain: 'main で始めたセッション',
     continuedIn: (branch: string) => `ワークツリー（${branch}）で続けている`,
-    /** 起点の行のツールチップ。folder は元のフォルダの場所。分岐元と取り違えないよう、ブランチ名は出さない */
-    startedIn: (folder: string) => `元のフォルダで始めたセッション\n${folder}`,
-    startedInUnknown: '元のフォルダで始めたセッション',
+    /** 起点の行のツールチップ。folder はメインの作業フォルダの場所。分岐元と取り違えないよう、ブランチ名は出さない */
+    startedIn: (folder: string) => `メインの作業フォルダで始めたセッション\n${folder}`,
+    startedInUnknown: 'メインの作業フォルダで始めたセッション',
     /** タイムラインの根（分岐元）の下の段 */
     baseRoot: '分岐元',
     /** 分岐元ではなく main に入ってマージ済みにしたとき */
@@ -201,29 +201,30 @@ export const ja = {
   settings: {
     navAria: '設定のカテゴリ',
     categories: {
-      general: '全体',
-      look: '見た目',
+      general: '一般',
+      look: 'デザイン',
       cards: 'カードの表示',
-      git: 'git',
       notify: '通知',
+      git: 'git',
       viewer: 'HTML ビューア',
-      about: '情報',
+      about: 'このアプリについて',
     },
     groups: {
       position: '位置',
       tooltip: 'ツールチップ',
       startup: '起動',
-      performance: '動作',
-      brightness: '明るさ',
+      performance: 'パフォーマンス',
+      titleBar: 'タイトルバー',
+      theme: 'テーマ',
       widget: 'ウィジェット',
       statusColors: '状態の色',
       archive: 'アーカイブ',
       order: '並び順',
       rowSize: '行の大きさ',
-      rowContent: '行に出すもの',
+      rowContent: '行に表示する項目',
       fetch: 'リモートの取得',
-      changesMark: '変更の印',
-      notifyWhen: '知らせるとき',
+      changes: '変更の数',
+      notifyWhen: '通知するタイミング',
       sound: '音',
       windowsNotify: 'Windows の通知',
       viewerShow: '表示',
@@ -241,56 +242,56 @@ export const ja = {
       display: { label: 'モニター' },
       openAtLogin: { label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える' },
       hardwareAcceleration: {
-        label: 'GPU',
-        description: '使うとメモリが 100 MB ほど増える。切り替えると Bantus が起動し直す',
+        label: 'ハードウェアアクセラレーション',
+        description: 'GPU で描く。オンにするとメモリが 100 MB ほど増える。切り替えると Bantus が再起動する',
       },
-      tooltipDelayMs: { label: '表示までの時間', description: 'ポインタを載せてから出るまで。右端にすると出さない' },
+      tooltipDelayMs: { label: '表示までの時間', description: 'マウスポインターを合わせてから出るまで。右端にすると表示しない' },
       theme: { label: 'テーマ', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
       headerShade: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% で区切り線だけになる' },
-      activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線' },
+      activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線。50% が標準、0% で塗らない' },
       zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
       motion: {
         label: 'アニメーション効果',
-        description: 'ひかえめにすると回転や点滅を止め、状態を色と枠で示す。CPU の負担が減る。並べ替えの動きは残す',
+        description: '控えめにすると回転や点滅を止め、状態を色と枠で示す。CPU の負担が減る。並べ替えの動きは残す',
       },
       mainArchiveMinutes: {
-        label: '元のフォルダを自動でアーカイブ',
+        label: 'メインの作業フォルダを自動でアーカイブ',
         description: '待機になってからこの時間が過ぎたセッションを隠す。デスクトップのアーカイブには影響しない',
       },
-      projectOrder: { label: 'プロジェクト', description: 'カードの並び。固定は名前順' },
-      worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。固定は元のフォルダを先頭に、あとは名前順' },
-      sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。固定は新しく作ったものが上' },
+      projectOrder: { label: 'プロジェクト', description: 'カードの並び' },
+      worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。名前順では、メインの作業フォルダを先頭にする' },
+      sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。作成順では、新しく作ったものが上' },
       rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
       showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
-      showSystemUsage: { label: 'CPU と MEM', description: 'タイトルバーに出す、PC 全体の使用率' },
+      showSystemUsage: { label: 'CPU とメモリ', description: 'PC 全体の使用率を表示する' },
       showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。上限がわからないモデルはトークン数' },
       gitFetch: {
         label: '定期的に取得する',
-        description: 'git fetch でリモートのブランチを取ってくる。元のフォルダの遅れと、GitHub でマージしたワークツリーがわかる。作業中のファイルとローカルのブランチには触れない',
+        description: 'git fetch でリモートのブランチを取ってくる。メインの作業フォルダの遅れと、GitHub でマージしたワークツリーがわかる。作業中のファイルとローカルのブランチには触れない',
       },
       gitFetchMinutes: { label: '間隔', description: 'リポジトリごとに、最後に試してから数える' },
       gitFetchNow: { label: '今すぐ取得', description: '表示しているカードのリポジトリを取得する', button: '取得' },
-      showChanges: { label: 'カードに変更の印を出す', description: '見出しの右の、変更、未追跡、コミットの数' },
-      countUntracked: { label: '未追跡のファイルを数える', description: '数えないと、大きなリポジトリで調べるのが速くなる' },
+      showChanges: { label: 'カードに変更の数を表示する', description: '見出しの右の、変更、未追跡、コミットの数' },
+      countUntracked: { label: '未追跡のファイルを数える', description: 'オフにすると、大きなリポジトリで調べるのが速くなる' },
       notifyWaiting: { label: '対応待ちになったとき', description: '許可や回答を待っているとき' },
       notifyDone: { label: '完了したとき', description: '処理中から待機になったとき。Claude 本体の通知と重なることがある' },
-      muteWhenOpen: { label: '開いているセッション', description: 'Claude が前面にあり、そのセッションを開いているとき' },
+      muteWhenOpen: { label: '開いているセッションは通知しない', description: 'Claude が前面にあり、そのセッションを開いているとき' },
       sound: { label: '音を鳴らす' },
       soundType: { label: '音の種類', description: '対応待ちは高め、完了は低めの音になる' },
       soundVolume: { label: '音量' },
-      toast: { label: 'トースト通知', description: 'クリックするとそのセッションを開く。音は上の「音」の設定に従う' },
+      toast: { label: '通知バナー', description: '画面の隅に出る Windows の通知。クリックするとそのセッションを開く。音は上の「音」の設定に従う' },
       flash: { label: 'タスクバーの点滅', description: '3 秒ほどで止まる。ウィジェットが前面にあるときは点滅しない' },
-      viewerEnabled: { label: 'カードの下の HTML', description: '今開いているセッションの作業フォルダにある HTML ファイルを表示する' },
+      viewerEnabled: { label: 'HTML を表示する', description: 'カードの下に、今開いているセッションの作業フォルダにある HTML ファイルを表示する' },
       viewerPath: {
         label: 'ファイルの場所',
         description: '作業フォルダから見た相対パス。すべてのリポジトリで共通',
         placeholder: 'docs/index.html',
       },
-      viewerAutoReload: { label: 'ファイルを書き換えたとき', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま読み込み直す' },
+      viewerAutoReload: { label: '変更時に自動で再読み込み', description: 'ファイルが書き換わったら、スクロールの位置を保ったまま再読み込みする' },
       viewerZoom: { label: '表示の拡大率', description: 'HTML の文字の大きさ。ウィジェットの拡大率とは別に決める' },
       viewerAutoHeight: { label: 'HTML の高さ', description: '自動では、カードの下の空きを HTML で埋める。境目をドラッグすると手動になる' },
     },
@@ -303,47 +304,25 @@ export const ja = {
     },
     /** 選択肢の文字 */
     options: {
-      show: '表示',
-      hide: '非表示',
-      notify: '知らせる',
-      noNotify: '知らせない',
-      orderFixed: '固定',
-      orderRecent: '更新日時',
-      orderPriority: '優先度',
+      on: 'オン',
+      off: 'オフ',
+      orderName: '名前順',
+      orderCreated: '作成順',
+      orderRecent: '更新順',
+      orderPriority: '優先度順',
       left: '左',
       right: '右',
-      open: '開く',
-      noOpen: '開かない',
-      useGpu: '使う',
-      noGpu: '使わない',
-      highlightSubtle: '薄い',
-      highlightNormal: '標準',
-      highlightStrong: '濃い',
       motionFull: '標準',
-      motionSubtle: 'ひかえめ',
+      motionSubtle: '控えめ',
       themeSystem: 'システム',
       themeLight: 'ライト',
       themeDark: 'ダーク',
       minutes: (n: number) => `${n} 分`,
       hours: (n: number) => `${n} 時間`,
       never: 'しない',
-      ring: '鳴らす',
-      noRing: '鳴らさない',
       soundChime: 'チャイム',
       soundBell: 'ベル',
       soundPop: 'ポン',
-      showToast: '出す',
-      noToast: '出さない',
-      flash: '点滅させる',
-      noFlash: '点滅させない',
-      fetch: '取得する',
-      noFetch: '取得しない',
-      showMark: '出す',
-      hideMark: '出さない',
-      count: '数える',
-      noCount: '数えない',
-      reload: '反映する',
-      noReload: '反映しない',
       fitHeight: '自動',
       manualHeight: '手動',
     },
@@ -361,7 +340,7 @@ export const ja = {
         offline: '通信できません',
       },
     },
-    preview: '試聴',
+    preview: 'テスト',
     /** 状態の色 */
     colors: {
       busy: { label: '処理中', description: 'Claude が作業している。バックグラウンドで作業中のときもこの色' },
@@ -372,8 +351,8 @@ export const ja = {
       previewAria: 'ウィジェットの見本',
       resetAll: 'すべて既定に戻す',
       reset: '既定に戻す',
-      custom: '自由に選ぶ',
-      customAria: (state: string) => `${state}の色を自由に選ぶ`,
+      custom: 'カスタム',
+      customAria: (state: string) => `${state}のカスタムの色`,
       choicesAria: (state: string) => `${state}の色の候補`,
       currentAria: (state: string, color: string) => `${state}の色：${color}`,
     },
@@ -386,13 +365,13 @@ export const ja = {
       held: 'ほかのブランチのマージを待つ',
       stopped: 'テストを流して結果を見る',
     },
-    /** 「情報」のカテゴリ */
+    /** 「このアプリについて」のカテゴリ */
     about: {
       app: 'このアプリ',
       version: 'バージョン',
-      data: '読み取っているデータ',
+      data: '参照しているデータ',
       folder: 'フォルダ',
-      readOnly: '読むだけで、書き換えはしません',
+      readOnly: '読み取り専用',
       settingsFile: '設定の保存先',
       file: 'ファイル',
     },

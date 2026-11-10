@@ -38,6 +38,8 @@ rules:
     pattern: /モニタ(?!ー)/
   - expected: ウィンドウ
     pattern: ウインドウ
+  - expected: ポインター
+    pattern: /ポインタ(?!ー)/
   # ---- ひらがなで書く言葉 ----
   # 文言は「わからない」、docs/ には「分かる」がある
   - expected: わか
@@ -51,6 +53,22 @@ rules:
     pattern: 出来る
   - expected: ください
     pattern: 下さい
+  # ---- 設定画面の言い方（一般的なアプリの言葉にそろえる）----
+  - expected: 控えめ
+    pattern: ひかえめ
+  - expected: 再起動
+    pattern: /起動し直/
+    specs:
+      - from: 起動し直す
+        to: 再起動す
+  - expected: 再読み込み
+    pattern: /読み込み直/
+    specs:
+      - from: 読み込み直す
+        to: 再読み込みす
+  # Windows のトーストは、画面では「通知バナー」と呼ぶ（設定の項目名）
+  - expected: 通知バナー
+    pattern: トースト通知
   # ---- 製品名の書き方 ----
   # 文の中の製品名。URL やメールアドレスの小文字は文言に出さない
   - expected: GitHub

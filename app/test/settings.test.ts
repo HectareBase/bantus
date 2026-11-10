@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HIGHLIGHT_SCALE, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, normalizeColor, normalizeNote, normalizeSettings,
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, highlightScale, normalizeColor, normalizeNote, normalizeSettings,
 } from '../src/shared/settings';
 
 describe('git の設定', () => {
@@ -62,7 +62,7 @@ describe('normalizeSettings の openAtLogin', () => {
   it('なければ開かない', () => assert.equal(normalizeSettings({}).openAtLogin, false));
   it('true を残す', () => assert.equal(normalizeSettings({ openAtLogin: true }).openAtLogin, true));
   it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ openAtLogin: 'true' }).openAtLogin, false));
-  it('全体のカテゴリに、インストール版だけの項目として出す', () => {
+  it('一般のカテゴリに、インストール版だけの項目として出す', () => {
     const def = SETTING_DEFS.find((d) => d.key === 'openAtLogin');
     assert.deepEqual([def?.category, def?.packagedOnly], ['general', true]);
   });
@@ -72,7 +72,7 @@ describe('normalizeSettings の hardwareAcceleration', () => {
   it('なければ GPU を使わない', () => assert.equal(normalizeSettings({}).hardwareAcceleration, false));
   it('true を残す', () => assert.equal(normalizeSettings({ hardwareAcceleration: true }).hardwareAcceleration, true));
   it('真偽値でなければ既定値に戻す', () => assert.equal(normalizeSettings({ hardwareAcceleration: 'true' }).hardwareAcceleration, false));
-  it('全体のカテゴリに、使う・使わないの 2 つで出す', () => {
+  it('一般のカテゴリに、オン・オフの 2 つで出す', () => {
     const def = SETTING_DEFS.find((d) => d.key === 'hardwareAcceleration');
     assert.equal(def?.category, 'general');
     assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
@@ -136,16 +136,24 @@ describe('normalizeSettings の見出しの濃さ', () => {
 });
 
 describe('normalizeSettings の開いている行の濃さ', () => {
-  it('なければ標準で、倍率は 1（以前と同じ見た目）', () => {
-    assert.equal(normalizeSettings({}).activeHighlight, 'normal');
-    assert.equal(HIGHLIGHT_SCALE.normal, 1);
+  it('なければ 50% で、倍率は 1（以前と同じ見た目）', () => {
+    assert.equal(normalizeSettings({}).activeHighlight, 50);
+    assert.equal(highlightScale(50), 1);
   });
-  it('薄い・濃いを残す', () => {
-    assert.equal(normalizeSettings({ activeHighlight: 'subtle' }).activeHighlight, 'subtle');
-    assert.equal(normalizeSettings({ activeHighlight: 'strong' }).activeHighlight, 'strong');
+  it('0〜100 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ activeHighlight: 0 }).activeHighlight, 0);
+    assert.equal(normalizeSettings({ activeHighlight: 150 }).activeHighlight, 100);
+    assert.equal(normalizeSettings({ activeHighlight: 32.6 }).activeHighlight, 33);
   });
-  it('知らない値は標準に戻す', () => assert.equal(normalizeSettings({ activeHighlight: 'max' }).activeHighlight, 'normal'));
-  it('薄い < 標準 < 濃い', () => assert.ok(HIGHLIGHT_SCALE.subtle < HIGHLIGHT_SCALE.normal && HIGHLIGHT_SCALE.normal < HIGHLIGHT_SCALE.strong));
+  it('前の版の薄い・標準・濃いは、同じ倍率の濃さに置き換える', () => {
+    const scale = (v: string) => highlightScale(normalizeSettings({ activeHighlight: v }).activeHighlight);
+    assert.deepEqual([scale('subtle'), scale('normal'), scale('strong')], [0.5, 1, 2]);
+  });
+  it('知らない値は 50% に戻す', () => {
+    assert.equal(normalizeSettings({ activeHighlight: 'max' }).activeHighlight, 50);
+    assert.equal(normalizeSettings({ activeHighlight: 'toString' }).activeHighlight, 50);
+  });
+  it('0% で強調しない', () => assert.equal(highlightScale(0), 0));
 });
 
 describe('normalizeSettings のアニメーション効果', () => {
@@ -184,37 +192,43 @@ describe('設定画面のカテゴリ', () => {
     }
     return out;
   };
-  it('左の一覧は 全体 → 見た目 → カードの表示 → git → 通知 → HTML ビューア → 情報', () =>
-    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'git', 'notify', 'viewer', 'about']));
-  it('git は リモートの取得 → 変更の印', () =>
+  it('左の一覧は 一般 → デザイン → カードの表示 → 通知 → git → HTML ビューア → このアプリについて', () =>
+    assert.deepEqual(CATEGORIES.map((c) => c.id), ['general', 'look', 'cards', 'notify', 'git', 'viewer', 'about']));
+  it('項目の並びもカテゴリの順', () => {
+    const order = CATEGORIES.map((c) => c.id);
+    const seen = SETTING_DEFS.map((d) => order.indexOf(d.category));
+    assert.deepEqual(seen, [...seen].sort((a, b) => a - b));
+  });
+  it('git は リモートの取得 → 変更の数', () =>
     assert.deepEqual(layout('git'), [
       ['リモートの取得', ['gitFetch', 'gitFetchMinutes', 'gitFetchNow']],
-      ['変更の印', ['showChanges', 'countUntracked']],
+      ['変更の数', ['showChanges', 'countUntracked']],
     ]));
   it('git のアイコンは git-branch', () => assert.equal(CATEGORIES.find((c) => c.id === 'git')?.icon, 'git-branch'));
-  it('全体は 位置 → ツールチップ → 起動 → 動作', () =>
+  it('一般は 位置 → ツールチップ → タイトルバー → 起動 → パフォーマンス', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
       ['ツールチップ', ['tooltipDelayMs']],
+      ['タイトルバー', ['showSystemUsage']],
       ['起動', ['openAtLogin']],
-      ['動作', ['hardwareAcceleration']],
+      ['パフォーマンス', ['hardwareAcceleration']],
     ]));
-  it('見た目は 明るさ → ウィジェット → 状態の色', () =>
+  it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
-      ['明るさ', ['theme']],
-      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom', 'showSystemUsage']],
+      ['テーマ', ['theme']],
+      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
       ['状態の色', ['motion', 'statusColors']],
     ]));
-  it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に出すもの', () =>
+  it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>
     assert.deepEqual(layout('cards'), [
       ['アーカイブ', ['mainArchiveMinutes']],
       ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
       ['行の大きさ', ['rowPadding']],
-      ['行に出すもの', ['showUpdated', 'showState', 'showContext']],
+      ['行に表示する項目', ['showUpdated', 'showState', 'showContext']],
     ]));
-  it('通知は 知らせるとき → 音 → Windows の通知', () =>
+  it('通知は 通知するタイミング → 音 → Windows の通知', () =>
     assert.deepEqual(layout('notify'), [
-      ['知らせるとき', ['notifyWaiting', 'notifyDone', 'muteWhenOpen']],
+      ['通知するタイミング', ['notifyWaiting', 'notifyDone', 'muteWhenOpen']],
       ['音', ['sound', 'soundType', 'soundVolume']],
       ['Windows の通知', ['toast', 'flash']],
     ]));
