@@ -54,7 +54,7 @@ import { createIcon, fillIcons, setIcon } from './icon.js';
 import { createMemo, type MemoBox } from './memo.js';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
-import { applyHighlight, applyStatusColors } from './status-colors.js';
+import { applyHighlight, applyMotion, applyStatusColors } from './status-colors.js';
 import { fillStrings } from './strings.js';
 import { sweep } from './sweep.js';
 import { initTooltips } from './tooltip.js';
@@ -1035,6 +1035,7 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
   applyStatusColors(layout.statusColors);
   applyHighlight(layout.activeHighlight);
+  applyMotion(layout.motion);
   root.classList.toggle('hide-updated', !layout.showUpdated);
   root.classList.toggle('hide-state', !layout.showState);
   root.classList.toggle('hide-context', !layout.showContext);

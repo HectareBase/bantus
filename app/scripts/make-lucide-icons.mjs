@@ -18,7 +18,7 @@ const NAMES = [
   'palette',
   // 状態の印（renderer/model.ts の statusIconName）
   'shield', 'keyboard', 'app-window', 'circle-alert', 'message-square-more', 'circle-minus',
-  // 待機中で、バックグラウンドの作業が動いている（renderer/model.ts の statusIconName）
+  // 処理中の印（アニメーション効果を「ひかえめ」にしたとき、回る輪の代わり）と、待機中でバックグラウンドの作業が動いている印
   'hourglass',
   // コミットされていない変更の内訳の印（renderer/model.ts の changeItems）
   'file-pen-line', 'file-plus', 'arrow-up', 'arrow-down',

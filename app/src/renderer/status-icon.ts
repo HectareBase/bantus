@@ -1,6 +1,6 @@
 // 状態の印。ウィジェットの行と、一覧（flyout）の行で使う。
 
-import { setIcon } from './icon.js';
+import { createIcon, setIcon } from './icon.js';
 import { PROGRESS_RING, type StatusIcon } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -19,9 +19,15 @@ function progressRing(): SVGElement {
   return root;
 }
 
+/**
+ * 処理中は、回る輪と砂時計（hourglass）の両方を入れておく。どちらを見せるかは CSS が html[data-motion] で決める。
+ * 隠したほう（display: none）の輪は動かないので CPU を使わない。設定を切り替えても作り直さずに済む
+ */
 export function setStatus(el: HTMLElement, name: StatusIcon) {
   if (name !== PROGRESS_RING) return setIcon(el, name);
   if (el.dataset.icon === name) return;
   el.dataset.icon = name;
-  el.replaceChildren(progressRing());
+  const still = createIcon('hourglass');
+  still.classList.add('progress-still');
+  el.replaceChildren(progressRing(), still);
 }
