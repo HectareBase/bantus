@@ -239,7 +239,7 @@ export const ja = {
     /** 項目ごとの名前と説明 */
     items: {
       edge: { label: '画面の端', description: 'ウィジェットを置く側' },
-      display: { label: 'モニター' },
+      display: { label: 'モニター', description: '外部モニターのつなぎ方ごとに覚える' },
       openAtLogin: { label: 'Windows の起動時に開く', description: 'サインインしたときにウィジェットを開く。インストール版でだけ使える' },
       hardwareAcceleration: {
         label: 'ハードウェアアクセラレーション',

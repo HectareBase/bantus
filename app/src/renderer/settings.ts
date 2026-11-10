@@ -115,10 +115,11 @@ async function control(def: SettingDef, disabled: boolean): Promise<Node> {
     case 'display': {
       const select = el('select');
       select.setAttribute('aria-label', def.label);
-      for (const d of await api.displays()) select.append(el('option', { value: d.id, textContent: d.label }));
-      // 保存されたモニターが今つながっていなければ、メインのモニターを選んだ状態で見せる
-      select.value = [...select.options].some((o) => o.value === settings.display) ? settings.display : 'primary';
-      select.addEventListener('change', () => set('display', select.value));
+      // 選んだモニターは、今のモニターの構成ごとに覚える（メインプロセスの display-layout.ts）
+      const { options, selected } = await api.displays();
+      for (const d of options) select.append(el('option', { value: d.id, textContent: d.label }));
+      select.value = selected;
+      select.addEventListener('change', () => api.setDisplay(select.value));
       return select;
     }
     case 'slider': {
@@ -361,6 +362,8 @@ async function start() {
     showFetchStatus();
   });
   fetchStatus = await api.fetchStatus();
+  // モニターをつないだり外したりしたら、モニターの選択肢を出し直す
+  api.onDisplaysChange(() => void renderContent());
   // 「◯分前」を進める
   window.setInterval(showFetchStatus, 30_000);
   renderNav();

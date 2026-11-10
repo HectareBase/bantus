@@ -1,7 +1,7 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
@@ -23,8 +23,9 @@ import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from './viewer-tar
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
 import { SESSION_KEY_ID, clampWidth, isCardKey, widthLimit, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { DISPLAY_SETTLE_MS, PRIMARY, RESUME_SETTLE_MS, currentChoice, displayChoices, migrateLegacyDisplay, pickMonitor, rememberChoice, settleTimers } from '../shared/display-layout';
 import { ja } from '../shared/strings/ja';
-import type { AboutInfo, DisplayOption, SessionView, TipRect, ToastRequest, ViewerState, WidgetLayout } from '../shared/types';
+import type { AboutInfo, DisplayChoices, SessionView, TipRect, ToastRequest, ViewerState, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
@@ -190,12 +191,21 @@ function applyLoginItem(s: Settings) {
 
 // ---- 位置と見た目 ----
 
+/**
+ * ウィジェットを置くモニター。モニターの接続状態（構成）ごとに覚えた選択を使い、覚えがなければメインのモニター。
+ * 構成の見分け方は display-layout.ts
+ */
 function targetDisplay(s: Settings): Display {
-  if (s.display !== 'primary') {
-    const found = screen.getAllDisplays().find((d) => String(d.id) === s.display);
-    if (found) return found;
-  }
-  return screen.getPrimaryDisplay();
+  const all = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  const id = pickMonitor(currentChoice(s, all), all, primary.id);
+  return all.find((d) => d.id === id) ?? primary;
+}
+
+/** 古い版の単一のモニターの設定を、今の構成の覚えに移す（その id のモニターが今つながっているときだけ） */
+function migrateDisplaySetting() {
+  const migrated = migrateLegacyDisplay(getSettings(), screen.getAllDisplays());
+  if (migrated) updateSettings(migrated);
 }
 
 /**
@@ -324,13 +334,16 @@ function updateSystemUsage() {
   systemUsage.setActive(shown && getSettings().showSystemUsage);
 }
 
-function displayOptions(): DisplayOption[] {
-  const primaryId = screen.getPrimaryDisplay().id;
-  const others = screen.getAllDisplays().filter((d) => d.id !== primaryId);
-  return [
-    { id: 'primary', label: ja.monitor.primary },
-    ...others.map((d, i) => ({ id: String(d.id), label: ja.monitor.other(i + 2, d.size.width, d.size.height) })),
-  ];
+/** 設定画面のモニターの選択肢。値はメインが 'primary'、ほかはモニターのしるし（抜き差しで変わる id は使わない） */
+function displayOptions(): DisplayChoices {
+  const all = screen.getAllDisplays();
+  const { values, selected } = displayChoices(getSettings(), all, screen.getPrimaryDisplay().id);
+  const options = values.map(({ id, value }, i) => {
+    if (value === PRIMARY) return { id: value, label: ja.monitor.primary };
+    const d = all.find((x) => x.id === id)!;
+    return { id: value, label: ja.monitor.other(i + 1, d.size.width, d.size.height) };
+  });
+  return { options, selected };
 }
 
 // ---- ウィンドウ ----
@@ -1052,6 +1065,10 @@ app.whenReady().then(() => {
     if (patch && typeof patch === 'object') updateSettings(patch as Partial<Settings>);
   });
   ipcMain.handle('settings:displays', () => displayOptions());
+  ipcMain.on('settings:set-display', (_e, value: unknown) => {
+    if (typeof value !== 'string' || !value || value.length > 300) return;
+    updateSettings(rememberChoice(getSettings(), screen.getAllDisplays(), value));
+  });
   ipcMain.on('settings:action', (_e, id: unknown) => {
     if (id === 'gitFetchNow') gitFetch.fetchNow();
   });
@@ -1084,14 +1101,25 @@ app.whenReady().then(() => {
     settingsWin?.webContents.send('settings:changed', s);
   });
 
-  // 画面の構成や作業領域が変わったら、端に置き直す
+  // 画面の構成や作業領域が変わったら、端に置き直す。モニターの構成が変わったら、その構成で覚えたモニターへ移る
+  migrateDisplaySetting();
   const reposition = () => {
-    win?.setBounds(sidebarBounds());
+    migrateDisplaySetting();
+    if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
     appBar?.sync();
+    if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('settings:displays-changed');
   };
-  screen.on('display-metrics-changed', reposition);
-  screen.on('display-added', reposition);
-  screen.on('display-removed', reposition);
+  // つないだ・外した直後は、モニターの一覧や作業領域が何度か続けて変わる。すぐ置き直し、落ち着いたころにもう一度読み直す
+  const settle = settleTimers(reposition);
+  screen.on('display-metrics-changed', () => {
+    if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+    appBar?.sync();
+  });
+  screen.on('display-added', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
+  screen.on('display-removed', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
+  // スタンバイからの復帰やロックの解除のあとは、モニターがつながり直すまで時間がかかる。何度か間をあけて読み直す
+  powerMonitor.on('resume', () => settle(RESUME_SETTLE_MS));
+  powerMonitor.on('unlock-screen', () => settle(RESUME_SETTLE_MS));
 
   app.on('before-quit', () => {
     stopWatching();
