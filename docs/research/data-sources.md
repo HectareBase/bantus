@@ -8,7 +8,7 @@
 |---|---|---|
 | サイドバーのセッション一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\<id>\<id>\local_*.json` | タイトル、作業フォルダ、最終更新、アーカイブの有無、最後のターンのまとめ |
 | 実行中のセッションの状態 | `%USERPROFILE%\.claude\sessions\<pid>.json` | `busy` / `idle` / `waiting`、待ちの理由 → [session-status.md](session-status.md) |
-| 会話の全記録 | `%USERPROFILE%\.claude\projects\<フォルダ名>\<CLIのセッションID>.jsonl` | 発言、ツール呼び出し、タイトルの変更 |
+| 会話の全記録 | `%USERPROFILE%\.claude\projects\<フォルダ名>\<CLIのセッションID>.jsonl` | 発言、ツール呼び出し、タイトルの変更、タスクリスト → [work-progress.md](work-progress.md) |
 | ワークツリーの一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\git-worktrees.json` | ワークツリーの名前、場所、ブランチ、使っているセッション（`leasedBy`） |
 | ウィンドウの位置と大きさ | `%LOCALAPPDATA%\Claude-Data\claude_*\window-state.json` | `x`, `y`, `width`, `height`, `isMaximized` |
 | 画面の部品 | UIA（Windows UI Automation） | → [deep-link-and-uia.md](deep-link-and-uia.md) |

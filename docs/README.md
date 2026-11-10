@@ -9,6 +9,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 |---|---|
 | [data-sources.md](research/data-sources.md) | 読み取れるファイルの場所と項目、触ってはいけないファイル |
 | [session-status.md](research/session-status.md) | セッションの状態（`busy` / `idle` / `waiting`）の仕様と、検証の記録 |
+| [work-progress.md](research/work-progress.md) | 作業状況（終わったターンのまとめと、処理中のタスクリスト）の取り方 |
 | [deep-link-and-uia.md](research/deep-link-and-uia.md) | `claude://` リンク、UIA で見える部品、今開いているセッションの見分け方、ホットキー、PowerShell 5.1 での注意 |
 
 調査したのは、デスクトップアプリ 4.4212.0、CLI 2.1.309 です。アプリを更新したら、まず [data-sources.md](research/data-sources.md) に書いたパスと項目が変わっていないか確かめてください。
