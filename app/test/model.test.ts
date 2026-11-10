@@ -39,7 +39,7 @@ describe('buildRepos：カードの分け方', () => {
     ]);
     assert.deepEqual(repos.map((r) => [r.name, r.cards.map((c) => [c.label, c.isMain])]), [
       ['app', [['main', true], ['x', false]]],
-      ['docs', [['元のフォルダ', true]]],
+      ['docs', [['メインの作業フォルダ', true]]],
     ]);
   });
 
@@ -93,7 +93,7 @@ describe('buildRepos：カードの分け方', () => {
       [view({ worktree: wt('zeta'), state: 'waiting' }), view({}), view({ worktree: wt('alpha') })],
       opts({ sort: { project: 'fixed', worktree: 'fixed', session: 'fixed' } }),
     );
-    assert.deepEqual(repo!.cards.map((c) => c.label), ['元のフォルダ', 'alpha', 'zeta']);
+    assert.deepEqual(repo!.cards.map((c) => c.label), ['メインの作業フォルダ', 'alpha', 'zeta']);
   });
 
   it('見出しの git の印は、そのカードの作業フォルダの結果', () => {
@@ -183,7 +183,7 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
     const x = repo!.cards.find((c) => c.key === cardKeyOf(sessions[2]!))!;
     assert.deepEqual(x.timeline.map((t) => [t.session.id, t.place]), [
       ['w1', undefined],
-      ['origin', { icon: 'house', label: '元のフォルダ', tip: '元のフォルダで始めたセッション' }],
+      ['origin', { icon: 'house', label: 'メインの作業フォルダ', tip: 'メインの作業フォルダで始めたセッション' }],
     ]);
     const y = repo!.cards.find((c) => c.key === cardKeyOf(sessions[3]!))!;
     assert.ok(y.timeline.every((t) => !t.origin), '行き先ではないカードには起点を出さない');
@@ -192,7 +192,7 @@ describe('buildRepos：起点（main で始めたセッション）', () => {
   it('元のフォルダのブランチがわからなければ「元のフォルダ」と出す', () => {
     const [repo] = buildRepos(list('busy'));
     const x = repo!.cards.find((c) => !c.isMain)!;
-    assert.deepEqual(x.timeline.find((t) => t.origin)!.place?.label, '元のフォルダ');
+    assert.deepEqual(x.timeline.find((t) => t.origin)!.place?.label, 'メインの作業フォルダ');
   });
 
   it('処理中・対応待ちのうちは main に出す（タイムラインの一番下にも出す）', () => {

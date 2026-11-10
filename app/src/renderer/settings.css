@@ -132,7 +132,37 @@ h2 { font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
 .segmented button:hover { background: var(--hover); }
 .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 .segmented button:disabled { pointer-events: none; }
-/* 音の試聴のボタン */
+/* オンオフのトグルスイッチ（Windows 11 の設定アプリの形）。左に「オン」「オフ」の文字を出す */
+.toggle-field { gap: 12px; }
+.toggle-state { min-width: 2em; text-align: right; cursor: default; user-select: none; }
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--text-secondary);
+  border-radius: 10px;
+  background: var(--control);
+}
+.toggle:hover { background: var(--hover); }
+.toggle-thumb {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transform: translateY(-50%);
+  transition: left 0.15s ease, width 0.15s ease;
+}
+.toggle:hover .toggle-thumb { width: 14px; height: 14px; }
+.toggle[aria-checked="true"] { border-color: var(--accent); background: var(--accent); }
+.toggle[aria-checked="true"] .toggle-thumb { left: 23px; background: var(--on-accent); }
+.toggle[aria-checked="true"]:hover .toggle-thumb { left: 21px; }
+.toggle:disabled { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .toggle-thumb { transition: none; } }
+/* 音のテストのボタン */
 .preview-button {
   display: flex;
   align-items: center;

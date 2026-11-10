@@ -18,8 +18,11 @@ export interface Settings {
   cardOpacity: number;
   /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
   headerShade: number;
-  /** デスクトップで今開いているセッションの行（とめくれの一覧の行）の強調の濃さ。HIGHLIGHT_SCALE の倍率を CSS の --hl に入れる */
-  activeHighlight: ActiveHighlight;
+  /**
+   * デスクトップで今開いているセッションの行（とめくれの一覧の行）の強調の濃さ（%）。
+   * highlightScale で倍率にして CSS の --hl に入れる。50 が以前からの見た目（倍率 1）、0 で強調しない
+   */
+  activeHighlight: number;
   /**
    * ウィジェット・ツールチップ・めくれの表示の拡大率（%）。Windows のディスプレイの拡大とは別に、その上からかける。
    * 設定ウィンドウにはかけない。幅（width）は画面の座標のままなので、拡大すると中身が窮屈になる
@@ -167,14 +170,19 @@ export function normalizeNote(v: unknown): string {
   return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
 }
 
-/** 今開いている行の強調の濃さ。normal が以前からの見た目 */
-export type ActiveHighlight = 'subtle' | 'normal' | 'strong';
-
 /** アニメーション効果。full（標準）が以前からの見た目 */
 export type Motion = 'full' | 'subtle';
 
-/** 強調の濃さごとの、塗りとストライプの不透明度にかける倍率 */
-export const HIGHLIGHT_SCALE: Record<ActiveHighlight, number> = { subtle: 0.5, normal: 1, strong: 2 };
+/** 強調の濃さ（%）の既定値。倍率 1（以前からの見た目） */
+export const HIGHLIGHT_NORMAL = 50;
+
+/** 強調の濃さ（%）から、塗りとストライプの不透明度にかける倍率を出す。0% で 0、50% で 1、100% で 2 */
+export function highlightScale(percent: number): number {
+  return Number.isFinite(percent) ? Math.max(0, percent) / HIGHLIGHT_NORMAL : 1;
+}
+
+/** 前の版の 3 択（薄い・標準・濃い）の値を、同じ倍率になる濃さ（%）に置き換える（倍率 0.5・1・2） */
+const LEGACY_HIGHLIGHT: Record<string, number> = { subtle: 25, normal: 50, strong: 100 };
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -193,7 +201,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
-  activeHighlight: 'normal',
+  activeHighlight: HIGHLIGHT_NORMAL,
   zoom: 100,
   theme: 'system',
   statusColors: DEFAULT_STATUS_COLORS,
@@ -280,7 +288,7 @@ export function autoViewerHeight(shared: number, cards: number): number {
 /** ツールチップの時間のスライダー。右端（この値）は「出さない」 */
 export const TOOLTIP_OFF_MS = 2000;
 
-export type CategoryId = 'general' | 'look' | 'cards' | 'git' | 'notify' | 'viewer' | 'about';
+export type CategoryId = 'general' | 'look' | 'cards' | 'notify' | 'git' | 'viewer' | 'about';
 
 export interface Category {
   id: CategoryId;
@@ -294,8 +302,8 @@ export const CATEGORIES: Category[] = [
   { id: 'general', label: T.categories.general, icon: 'app-window' },
   { id: 'look', label: T.categories.look, icon: 'palette' },
   { id: 'cards', label: T.categories.cards, icon: 'list' },
-  { id: 'git', label: T.categories.git, icon: 'git-branch' },
   { id: 'notify', label: T.categories.notify, icon: 'bell' },
+  { id: 'git', label: T.categories.git, icon: 'git-branch' },
   { id: 'viewer', label: T.categories.viewer, icon: 'panel-bottom' },
   { id: 'about', label: T.categories.about, icon: 'info' },
 ];
@@ -314,7 +322,7 @@ interface Base<K extends keyof Settings> {
 }
 
 /** オンかオフの設定 */
-type BooleanKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+type BooleanKey = { [K in keyof Settings]-?: Settings[K] extends boolean ? K : never }[keyof Settings];
 
 /** ボタンで動かすこと（設定の値は持たない）。gitFetchNow は「今すぐ取得」 */
 export type ActionId = 'gitFetchNow';
@@ -329,18 +337,17 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      | 'edge' | 'theme' | 'activeHighlight' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'openAtLogin' | 'hardwareAcceleration'
-      | 'gitFetch' | 'gitFetchMinutes' | 'showChanges' | 'countUntracked'
-      | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'toast' | 'flash' | 'muteWhenOpen'
-      | 'viewerEnabled' | 'viewerAutoReload' | 'viewerAutoHeight'
+      'edge' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
-      /** 'sound' にすると、右に「試聴」のボタンを付ける。選んだときにもその音を鳴らす */
+      /** 'sound' にすると、右に「テスト」のボタンを付ける。選んだときにもその音を鳴らす */
       preview?: 'sound';
     })
+  /** オンかオフ。トグルスイッチで描き、横に「オン」「オフ」を出す。ラベルは「〜する」か、オンオフで意味が通る名前にする */
+  | (Base<BooleanKey> & { type: 'toggle' })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -351,18 +358,9 @@ export type SettingDef =
   /** ボタン。押すとメインプロセスで action を動かし、横に最後の結果を出す。設定の値は持たない */
   | (Omit<Base<keyof Settings>, 'key'> & { type: 'action'; key: ActionId; button: string });
 
-const SHOW_OPTIONS = [
-  { value: true, label: T.options.show },
-  { value: false, label: T.options.hide },
-];
-
-const NOTIFY_OPTIONS = [
-  { value: true, label: T.options.notify },
-  { value: false, label: T.options.noNotify },
-];
-
-const ORDER_OPTIONS = [
-  { value: 'fixed', label: T.options.orderFixed },
+/** 並び順。fixed の名前は中身に合わせて変える（カードは名前順、行は作成順） */
+const orderOptions = (fixed: string) => [
+  { value: 'fixed', label: fixed },
   { value: 'recent', label: T.options.orderRecent },
   { value: 'priority', label: T.options.orderPriority },
 ];
@@ -381,17 +379,19 @@ export const SETTING_DEFS: SettingDef[] = [
     format: (v) => (v >= TOOLTIP_OFF_MS ? T.tooltipDelay.off : T.tooltipDelay.seconds(v / 1000)),
   },
   {
-    key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'segmented', packagedOnly: true,
+    key: 'showSystemUsage', category: 'general', group: T.groups.titleBar, type: 'toggle',
+    ...T.items.showSystemUsage,
+  },
+  {
+    key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'toggle', packagedOnly: true,
     ...T.items.openAtLogin,
-    options: [{ value: true, label: T.options.open }, { value: false, label: T.options.noOpen }],
   },
   {
-    key: 'hardwareAcceleration', category: 'general', group: T.groups.performance, type: 'segmented',
+    key: 'hardwareAcceleration', category: 'general', group: T.groups.performance, type: 'toggle',
     ...T.items.hardwareAcceleration,
-    options: [{ value: true, label: T.options.useGpu }, { value: false, label: T.options.noGpu }],
   },
   {
-    key: 'theme', category: 'look', group: T.groups.brightness, type: 'segmented',
+    key: 'theme', category: 'look', group: T.groups.theme, type: 'segmented',
     ...T.items.theme,
     options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
   },
@@ -411,23 +411,14 @@ export const SETTING_DEFS: SettingDef[] = [
     min: 0, max: 20, step: 1, unit: '%',
   },
   {
-    key: 'activeHighlight', category: 'look', group: T.groups.widget, type: 'segmented',
+    key: 'activeHighlight', category: 'look', group: T.groups.widget, type: 'slider',
     ...T.items.activeHighlight,
-    options: [
-      { value: 'subtle', label: T.options.highlightSubtle },
-      { value: 'normal', label: T.options.highlightNormal },
-      { value: 'strong', label: T.options.highlightStrong },
-    ],
+    min: 0, max: 100, step: 5, unit: '%',
   },
   {
     key: 'zoom', category: 'look', group: T.groups.widget, type: 'slider',
     ...T.items.zoom,
     min: 80, max: 150, step: 5, unit: '%',
-  },
-  {
-    key: 'showSystemUsage', category: 'look', group: T.groups.widget, type: 'segmented',
-    ...T.items.showSystemUsage,
-    options: SHOW_OPTIONS,
   },
   {
     key: 'motion', category: 'look', group: T.groups.statusColors, type: 'segmented',
@@ -446,17 +437,17 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'projectOrder', category: 'cards', group: T.groups.order, type: 'segmented',
     ...T.items.projectOrder,
-    options: ORDER_OPTIONS,
+    options: orderOptions(T.options.orderName),
   },
   {
     key: 'worktreeOrder', category: 'cards', group: T.groups.order, type: 'segmented',
     ...T.items.worktreeOrder,
-    options: ORDER_OPTIONS,
+    options: orderOptions(T.options.orderName),
   },
   {
     key: 'sessionOrder', category: 'cards', group: T.groups.order, type: 'segmented',
     ...T.items.sessionOrder,
-    options: ORDER_OPTIONS,
+    options: orderOptions(T.options.orderCreated),
   },
   {
     key: 'rowPadding', category: 'cards', group: T.groups.rowSize, type: 'slider',
@@ -464,63 +455,32 @@ export const SETTING_DEFS: SettingDef[] = [
     min: 0, max: 12, step: 1, unit: 'px',
   },
   {
-    key: 'showUpdated', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    key: 'showUpdated', category: 'cards', group: T.groups.rowContent, type: 'toggle',
     ...T.items.showUpdated,
-    options: SHOW_OPTIONS,
   },
   {
-    key: 'showState', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    key: 'showState', category: 'cards', group: T.groups.rowContent, type: 'toggle',
     ...T.items.showState,
-    options: SHOW_OPTIONS,
   },
   {
-    key: 'showContext', category: 'cards', group: T.groups.rowContent, type: 'segmented',
+    key: 'showContext', category: 'cards', group: T.groups.rowContent, type: 'toggle',
     ...T.items.showContext,
-    options: SHOW_OPTIONS,
   },
   {
-    key: 'gitFetch', category: 'git', group: T.groups.fetch, type: 'segmented',
-    ...T.items.gitFetch,
-    options: [{ value: true, label: T.options.fetch }, { value: false, label: T.options.noFetch }],
-  },
-  {
-    key: 'gitFetchMinutes', category: 'git', group: T.groups.fetch, type: 'segmented', enabledBy: 'gitFetch',
-    ...T.items.gitFetchMinutes,
-    options: [5, 10, 30].map((n) => ({ value: n, label: T.options.minutes(n) })),
-  },
-  {
-    key: 'gitFetchNow', category: 'git', group: T.groups.fetch, type: 'action', enabledBy: 'gitFetch',
-    ...T.items.gitFetchNow,
-  },
-  {
-    key: 'showChanges', category: 'git', group: T.groups.changesMark, type: 'segmented',
-    ...T.items.showChanges,
-    options: [{ value: true, label: T.options.showMark }, { value: false, label: T.options.hideMark }],
-  },
-  {
-    key: 'countUntracked', category: 'git', group: T.groups.changesMark, type: 'segmented',
-    ...T.items.countUntracked,
-    options: [{ value: true, label: T.options.count }, { value: false, label: T.options.noCount }],
-  },
-  {
-    key: 'notifyWaiting', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    key: 'notifyWaiting', category: 'notify', group: T.groups.notifyWhen, type: 'toggle',
     ...T.items.notifyWaiting,
-    options: NOTIFY_OPTIONS,
   },
   {
-    key: 'notifyDone', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    key: 'notifyDone', category: 'notify', group: T.groups.notifyWhen, type: 'toggle',
     ...T.items.notifyDone,
-    options: NOTIFY_OPTIONS,
   },
   {
-    key: 'muteWhenOpen', category: 'notify', group: T.groups.notifyWhen, type: 'segmented',
+    key: 'muteWhenOpen', category: 'notify', group: T.groups.notifyWhen, type: 'toggle',
     ...T.items.muteWhenOpen,
-    options: [{ value: false, label: T.options.notify }, { value: true, label: T.options.noNotify }],
   },
   {
-    key: 'sound', category: 'notify', group: T.groups.sound, type: 'segmented',
+    key: 'sound', category: 'notify', group: T.groups.sound, type: 'toggle',
     ...T.items.sound,
-    options: [{ value: true, label: T.options.ring }, { value: false, label: T.options.noRing }],
   },
   {
     key: 'soundType', category: 'notify', group: T.groups.sound, type: 'segmented', preview: 'sound',
@@ -532,19 +492,37 @@ export const SETTING_DEFS: SettingDef[] = [
     ...T.items.soundVolume, min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'toast', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    key: 'toast', category: 'notify', group: T.groups.windowsNotify, type: 'toggle',
     ...T.items.toast,
-    options: [{ value: true, label: T.options.showToast }, { value: false, label: T.options.noToast }],
   },
   {
-    key: 'flash', category: 'notify', group: T.groups.windowsNotify, type: 'segmented',
+    key: 'flash', category: 'notify', group: T.groups.windowsNotify, type: 'toggle',
     ...T.items.flash,
-    options: [{ value: true, label: T.options.flash }, { value: false, label: T.options.noFlash }],
   },
   {
-    key: 'viewerEnabled', category: 'viewer', group: T.groups.viewerShow, type: 'segmented',
+    key: 'gitFetch', category: 'git', group: T.groups.fetch, type: 'toggle',
+    ...T.items.gitFetch,
+  },
+  {
+    key: 'gitFetchMinutes', category: 'git', group: T.groups.fetch, type: 'segmented', enabledBy: 'gitFetch',
+    ...T.items.gitFetchMinutes,
+    options: [5, 10, 30].map((n) => ({ value: n, label: T.options.minutes(n) })),
+  },
+  {
+    key: 'gitFetchNow', category: 'git', group: T.groups.fetch, type: 'action', enabledBy: 'gitFetch',
+    ...T.items.gitFetchNow,
+  },
+  {
+    key: 'showChanges', category: 'git', group: T.groups.changes, type: 'toggle',
+    ...T.items.showChanges,
+  },
+  {
+    key: 'countUntracked', category: 'git', group: T.groups.changes, type: 'toggle',
+    ...T.items.countUntracked,
+  },
+  {
+    key: 'viewerEnabled', category: 'viewer', group: T.groups.viewerShow, type: 'toggle',
     ...T.items.viewerEnabled,
-    options: [{ value: true, label: T.options.showMark }, { value: false, label: T.options.hideMark }],
   },
   {
     key: 'viewerPath', category: 'viewer', group: T.groups.viewerFile, type: 'text', enabledBy: 'viewerEnabled',
@@ -555,9 +533,8 @@ export const SETTING_DEFS: SettingDef[] = [
     },
   },
   {
-    key: 'viewerAutoReload', category: 'viewer', group: T.groups.viewerFile, type: 'segmented', enabledBy: 'viewerEnabled',
+    key: 'viewerAutoReload', category: 'viewer', group: T.groups.viewerFile, type: 'toggle', enabledBy: 'viewerEnabled',
     ...T.items.viewerAutoReload,
-    options: [{ value: true, label: T.options.reload }, { value: false, label: T.options.noReload }],
   },
   {
     key: 'viewerZoom', category: 'viewer', group: T.groups.viewerLook, type: 'slider', enabledBy: 'viewerEnabled',
@@ -576,10 +553,15 @@ export function normalizeSettings(input: unknown): Settings {
   const src = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const out: Settings = { ...DEFAULT_SETTINGS };
   for (const def of SETTING_DEFS) {
-    const v = src[def.key];
+    let v = src[def.key];
+    // 前の版の開いている行の濃さ（薄い・標準・濃い）は、近い濃さ（%）に置き換える
+    if (def.key === 'activeHighlight' && typeof v === 'string') v = LEGACY_HIGHLIGHT[v];
     switch (def.type) {
       case 'segmented':
         if (def.options.some((o) => o.value === v)) (out as any)[def.key] = v;
+        break;
+      case 'toggle':
+        if (typeof v === 'boolean') out[def.key] = v;
         break;
       case 'display':
         if (typeof v === 'string' && v) out.display = v;

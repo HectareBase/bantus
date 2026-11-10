@@ -2,15 +2,15 @@
 // CSS の --busy などを上書きする。薄い背景（--busy-bg など）は CSS が color-mix でこの色から作る。
 // 今開いている行の強調の濃さも、ここで CSS の --hl（倍率）に入れる。アニメーション効果は <html> の data-motion に入れる。
 
-import { COLOR_STATES, HIGHLIGHT_SCALE, type ActiveHighlight, type Motion, type StatusColors } from '../shared/settings.js';
+import { COLOR_STATES, highlightScale, type Motion, type StatusColors } from '../shared/settings.js';
 
 export function applyStatusColors(colors: StatusColors, el: HTMLElement = document.documentElement) {
   for (const state of COLOR_STATES) el.style.setProperty(`--${state}`, colors[state]);
 }
 
-/** 今開いている行の強調の濃さ。CSS が塗りとストライプの不透明度に --hl をかける */
-export function applyHighlight(level: ActiveHighlight, el: HTMLElement = document.documentElement) {
-  el.style.setProperty('--hl', String(HIGHLIGHT_SCALE[level] ?? 1));
+/** 今開いている行の強調の濃さ（%）。倍率にして入れ、CSS が塗りとストライプの不透明度に --hl をかける */
+export function applyHighlight(percent: number, el: HTMLElement = document.documentElement) {
+  el.style.setProperty('--hl', String(highlightScale(percent)));
 }
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
