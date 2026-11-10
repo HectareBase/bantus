@@ -29,6 +29,7 @@ const SAMPLES = {
   'tooltip.worktree': [['feature-x']],
   'tooltip.origin': [['main']],
   'tooltip.waiting': [['許可待ち']],
+  'tooltip.background': [[1], [3]],
   'tooltip.needsAction': [['ファイルの書き込みの許可']],
   'tooltip.contextPercent': [[12, '24k', '200k']],
   'tooltip.contextUnknownWindow': [['24k', 'claude-x'], ['24k']],

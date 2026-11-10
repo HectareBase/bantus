@@ -9,6 +9,7 @@ CLI 2.1.309 の `claude.exe` の中のコードを読み、実際のファイル
 | `idle` | 待機中（ターンが終わった） | 記録 |
 | `waiting` | ユーザーの対応待ち。理由は `waitingFor` に入る | 記録 |
 | （空・項目なし） | 起動した直後の一瞬だけ（約 0.3 秒） | 記録 |
+| `shell` | 待機中で、バックグラウンドの Bash が動いている。端末版の画面（REPL）の経路だけが書き、デスクトップ版では書かれない | コードのみ（CLI 2.1.317） |
 
 コード上の判定はこの順番です（CLI 2.1.309 の `JRe` / `DOo` 関数）。
 1. 待ちの理由があれば → `waiting`
@@ -52,6 +53,34 @@ CLI 2.1.309 の `claude.exe` の中のコードを読み、実際のファイル
 | +48.4 秒 | `idle` | ユーザーが拒否 → ターンが止まり、そのまま `idle` に戻った |
 
 生のログにはセッションのタイトルが入るので、リポジトリには入れていません（`local/` に保存）。
+
+## バックグラウンドの作業
+CLI 2.1.317 のコードを読み、実際にも試しました。
+
+### デスクトップ版では `idle` になる
+デスクトップ版の CLI は SDK の経路で状態を書きます。SDK の状態との対応は `running` → `busy`、`requires_action` → `waiting`、`idle` → `idle` です。ターンが終わると、バックグラウンドの作業（Bash の `run_in_background`、バックグラウンドのサブエージェント、Monitor）が動いていても `idle` になります。バックグラウンドで 25 秒動くコマンドを残してターンを終えたところ、その間ずっと `idle` でした。作業が終わると通知が入り、Claude が自分で次のターンを始めます（`busy` に戻る）。
+
+CLI が受け付ける値は `busy`、`shell`、`idle`、`waiting` の 4 つです。`shell` は上の表のとおり、デスクトップ版では書かれません。来ても困らないよう、ウィジェットでは `idle` と同じに扱い、作業が 1 つ以上あるものとして表示します。
+
+### 会話の記録での見分け方
+`~/.claude/projects/<フォルダ>/<cliSessionId>.jsonl` に、作業の開始と終了が残ります。
+
+| 種類 | 開始（`type:"user"` の行の `toolUseResult`） |
+|---|---|
+| Bash | `backgroundTaskId`。2 分を超えて自動でバックグラウンドに回ったときも同じで、`timedOutAfterMs` が付く |
+| サブエージェント | `status` が `async_launched` で、`agentId` |
+| Monitor | `taskId`。`timeoutMs` と `persistent` が付く |
+
+- 終了：本文が `<task-notification>` で始まる行。中の `<task-id>` が開始の ID と同じで、`<status>` が `completed`、`failed`、`killed`、`stopped` のどれか。`queue-operation`（`enqueue` と `remove`）の行の `content` と、`type:"user"` の行の `message.content`（文字列）の両方に出るので、同じ ID は 1 回だけ数える
+- Monitor の途中のイベントの通知には `<status>` がないので、終了と数えない
+- ツールの結果（`message.content` が配列）に同じ文字が出ることがあるので、本文が通知で始まる行だけを見る
+- CLI を再起動すると、終了の通知がないまま作業が消える。古い記録には、開始だけで終了のない ID が実際に残っていた。そのため、`sessions/<pid>.json` の `startedAt` より前に始まった作業（行の `timestamp` で比べる）は数えない
+
+### 読み方と負荷
+- 待機中のセッションの記録だけを読む（処理中から待機になったときと、その後に記録が変わったとき）。前回読んだ位置を覚えて、増えた分だけ読む。注意点は [work-progress.md](work-progress.md) と同じ（最初の 1 回は全体、小さくなったら最初から、改行で終わっていない最後の行は残す）
+- 全体の読み込みは 17 MB で約 36 ms。起動したときに 1 セッションにつき 1 回で、メインプロセスを長く止めないよう 1 MB ずつ間を空けて読む。差分の読み取りは約 0.2 ms（Defender が有効だと、書き換わった直後のファイルは約 6 ms）
+- 作業が 1 つ以上ある待機中のセッションだけ、記録のファイルを見張る
+- 実装は `app/src/main/background-work.ts`（数え方）と `app/src/main/jsonl-tail.ts`（差分の読み取り）
 
 ## ウィジェットでの使い方
 ウィジェットがこの状態をどう表示するか（色と印、並び順）は、設計の資料 [widget-app-plan.md](../design/widget-app-plan.md) の「表示ルール」にあります。どの項目を読むかは [data-usage.md](../design/data-usage.md) にあります。

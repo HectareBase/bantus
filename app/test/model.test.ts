@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import {
   NO_ARCHIVE, buildRepos, cardBadge, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
-  ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, mergeAlerts, pickAlerts, toastContent, type Alert,
+  ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
   HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds, startupConfirmedAt,
 } from '../src/renderer/model';
@@ -474,6 +474,31 @@ describe('attentionReason', () => {
     assert.equal(attentionReason('idle', 'busy'), undefined);
     assert.equal(attentionReason('busy', 'stopped'), undefined);
     assert.equal(attentionReason(undefined, 'idle'), undefined);
+  });
+});
+
+describe('バックグラウンドで作業中の待機（未確認と知らせ）', () => {
+  it('attentionStateOf：待機中で作業があれば background', () => {
+    assert.equal(attentionStateOf({ state: 'idle', background: 2 }), 'background');
+    assert.equal(attentionStateOf({ state: 'idle' }), 'idle');
+    assert.equal(attentionStateOf({ state: 'busy', background: 2 }), 'busy');
+  });
+  it('処理中からバックグラウンドで作業中になっても、帯を付けず知らせない', () => {
+    assert.equal(nextAttention('busy', 'background', false), false);
+    assert.equal(attentionReason('busy', 'background'), undefined);
+  });
+  it('バックグラウンドで作業中になったら、残っていた帯を消す', () => {
+    assert.equal(nextAttention('idle', 'background', true), false);
+    assert.equal(nextAttention('waiting', 'background', true), false);
+  });
+  it('作業が終わって待機になったら付けて、完了と知らせる', () => {
+    assert.equal(nextAttention('background', 'idle', false), true);
+    assert.equal(attentionReason('background', 'idle'), 'done');
+  });
+  it('作業中から対応待ちになったら対応待ち', () => assert.equal(attentionReason('background', 'waiting'), 'waiting'));
+  it('起動した時点で作業中なら付けない', () => {
+    assert.equal(nextAttention(undefined, 'background', false), false);
+    assert.equal(attentionReason(undefined, 'background'), undefined);
   });
 });
 

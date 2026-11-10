@@ -181,6 +181,7 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 .node:not([data-archived])[data-state="waiting"] .dot { border-color: var(--waiting); background: var(--waiting); }
 .node:not([data-archived])[data-state="busy"] .dot { border-color: var(--busy); background: var(--busy); }
 .node:not([data-archived])[data-state="idle"] .dot { border-color: var(--idle); background: var(--idle); }
+.node:not([data-archived])[data-background] .dot { border-color: var(--busy); background: var(--busy); }
 .node:not([data-archived])[data-held] .dot { border-color: var(--held); background: var(--held); }
 /* 起点（main で始めたセッション）は ◇ */
 .node[data-origin] .dot { border-radius: 2px; transform: rotate(45deg); width: 11px; height: 11px; left: 13px; top: calc(50% - 5.5px); }
@@ -205,6 +206,8 @@ html[data-side="right"] .list::before { transform-origin: left top; }
 .node[data-state="busy"] .status { color: var(--busy); }
 .node[data-state="idle"] .status { color: var(--idle); }
 .node[data-state="stopped"] .status { color: var(--stopped); }
+/* 待機中で、バックグラウンドの作業が動いている（処理中の色） */
+.node[data-background] .status { color: var(--busy); }
 .node[data-held] .status { color: var(--held); }
 /* ウィジェットと同じく、回転は約 15 コマ/秒に落とす（styles.css の .progress-ring） */
 .progress-ring { animation: spin 1.6s steps(24) infinite; }

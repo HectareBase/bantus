@@ -159,9 +159,15 @@ export function waitingLabel(waitingFor: string | undefined): string {
 
 const STATE_LABELS: Record<Exclude<SessionState, 'waiting'>, string> = { busy: ja.state.busy, idle: ja.state.idle, stopped: ja.state.stopped };
 
+/** 待機中で、バックグラウンドの作業が動いている（docs/design/widget-app-plan.md の表示ルール） */
+export function hasBackground(state: SessionState, background?: number): boolean {
+  return state === 'idle' && (background ?? 0) > 0;
+}
+
 /** 行の更新日時の左に出す状態の文字。知らない waitingFor は「その他」（「対応待ち（その他）」） */
-export function stateLabel(state: SessionState, waitingFor?: string): string {
+export function stateLabel(state: SessionState, waitingFor?: string, background?: number): string {
   if (state === 'waiting') return WAITING_LABELS[waitingFor ?? ''] ?? ja.state.waitingOther;
+  if (hasBackground(state, background)) return ja.state.background;
   return STATE_LABELS[state];
 }
 
@@ -177,9 +183,10 @@ export const PROGRESS_RING = 'progress-ring';
 export type StatusIcon = IconName | typeof PROGRESS_RING;
 const STATE_ICONS: Record<Exclude<SessionState, 'waiting'>, StatusIcon> = { busy: PROGRESS_RING, idle: 'message-square-more', stopped: 'circle-minus' };
 
-/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING） */
-export function statusIconName(state: SessionState, waitingFor?: string): StatusIcon {
+/** 行の左に出す状態の印（lucide の名前か PROGRESS_RING）。待機中でバックグラウンドの作業があれば砂時計 */
+export function statusIconName(state: SessionState, waitingFor?: string, background?: number): StatusIcon {
   if (state === 'waiting') return WAITING_ICONS[waitingFor ?? ''] ?? 'circle-alert';
+  if (hasBackground(state, background)) return 'hourglass';
   return STATE_ICONS[state];
 }
 
@@ -189,6 +196,7 @@ export function tooltip(s: SessionView, hold?: HoldMark, now = Date.now()): stri
   if (hold) lines.push(holdTooltip(hold, now));
   if (s.worktree) lines.push(ja.tooltip.worktree(s.worktree.branch));
   if (s.state === 'waiting') lines.push(ja.tooltip.waiting(waitingLabel(s.waitingFor)));
+  if (hasBackground(s.state, s.background)) lines.push(ja.tooltip.background(s.background!));
   if (s.needsAction) lines.push(ja.tooltip.needsAction(s.needsAction));
   if (s.detail) lines.push(s.detail);
   const changes = changesTooltip(s.changes, s.worktree && s.baseBranch);
@@ -252,15 +260,28 @@ export function changesTooltip(c: GitChanges | undefined, base?: string): string
 }
 
 /**
+ * 未確認の帯と知らせの判定に使う状態。待機中でバックグラウンドの作業が動いているもの（background）は、
+ * 作業が終われば Claude が続けるので、処理中と同じく扱う
+ */
+export type AttentionState = SessionState | 'background';
+
+export function attentionStateOf(s: Pick<SessionView, 'state' | 'background'>): AttentionState {
+  return hasBackground(s.state, s.background) ? 'background' : s.state;
+}
+
+/** Claude が動いている（処理中か、バックグラウンドで作業中） */
+const isWorking = (state: AttentionState | undefined) => state === 'busy' || state === 'background';
+
+/**
  * 左端の帯（未確認）を出すかどうか。状態が変わったときに呼ぶ。prev は前に見た状態（初めて見たときは undefined）
- * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中から待機になったとき
- * - 消す：処理中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
+ * - 付ける：対応待ちになったとき（起動した時点で対応待ちのときも）、処理中かバックグラウンドで作業中から待機になったとき
+ * - 消す：処理中・バックグラウンドで作業中になったとき、対応待ちから待機・停止中になったとき（デスクトップ側で対応済み）
  * - クリックしたときに消すのは renderer
  */
-export function nextAttention(prev: SessionState | undefined, next: SessionState, flagged: boolean): boolean {
+export function nextAttention(prev: AttentionState | undefined, next: AttentionState, flagged: boolean): boolean {
   if (prev === next) return flagged;
   if (next === 'waiting') return true;
-  return prev === 'busy' && next === 'idle';
+  return isWorking(prev) && next === 'idle';
 }
 
 /**
@@ -274,7 +295,7 @@ export function newlyFlagged(before: ReadonlySet<string>, after: Iterable<string
 
 // ---- 音とトーストで知らせる ----
 
-/** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中から待機になった） */
+/** 知らせる理由。waiting は対応待ちになった、done は完了した（処理中かバックグラウンドで作業中から待機になった） */
 export type AlertReason = 'waiting' | 'done';
 
 export interface Alert {
@@ -292,10 +313,10 @@ export const ALERT_GAP_MS = 4_000;
  * 完了の帯が残ったまま対応待ちになったときも、対応待ちとして知らせる。
  * 起動直後の最初の読み込みで知らせないのは renderer が決める
  */
-export function attentionReason(prev: SessionState | undefined, next: SessionState): AlertReason | undefined {
+export function attentionReason(prev: AttentionState | undefined, next: AttentionState): AlertReason | undefined {
   if (prev === next) return undefined;
   if (next === 'waiting') return 'waiting';
-  return prev === 'busy' && next === 'idle' ? 'done' : undefined;
+  return isWorking(prev) && next === 'idle' ? 'done' : undefined;
 }
 
 /** まだ知らせていないものに、新しいものを足す。同じセッションなら対応待ちのほうを残す */

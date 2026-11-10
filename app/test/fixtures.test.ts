@@ -28,6 +28,10 @@ describe('見本データの形', () => {
         assert.ok(STATES.includes(s.state), `${s.id}: 状態 ${s.state}`);
         assert.equal(typeof s.minutesAgo, 'number', `${s.id}: minutesAgo`);
         if (s.waitingFor !== undefined) assert.equal(s.state, 'waiting', `${s.id}: waitingFor は対応待ちのときだけ`);
+        if (s.background !== undefined) {
+          assert.equal(s.state, 'idle', `${s.id}: background は待機中のときだけ`);
+          assert.ok(Number.isInteger(s.background) && s.background > 0, `${s.id}: background は 1 以上の整数`);
+        }
         if (s.worktree) for (const k of ['key', 'label', 'branch']) assert.equal(typeof s.worktree[k], 'string');
         if (s.changes) for (const k of ['changed', 'untracked', 'ahead']) assert.equal(typeof s.changes[k], 'number', `${s.id}: changes.${k}`);
         for (const k of ['hold', 'holdCard']) {
@@ -56,6 +60,8 @@ describe('all-states はすべての表示を含む', () => {
     assert.ok([...reasons].some((r) => r !== undefined && !(r in WAITING_LABELS)), '知らない理由');
     assert.ok(reasons.has(undefined), '理由なし');
   });
+
+  it('バックグラウンドで作業中の待機', () => assert.ok(sessions.some((s) => s.state === 'idle' && (s.background ?? 0) > 0)));
 
   it('対応が必要とまとめ', () => {
     assert.ok(sessions.some((s) => s.needsAction));

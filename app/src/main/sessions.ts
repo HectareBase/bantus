@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
+import { createBackgroundReader } from './background-work';
 import { createContextReader } from './context-usage';
 import type { HoldMark } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
@@ -16,7 +17,7 @@ export interface DataPaths {
   runningDir: string;
   /** デスクトップのデータ（`%LOCALAPPDATA%\Claude-Data`） */
   dataBase: string;
-  /** 会話の記録（`~/.claude/projects`）。省くとコンテキストの使用量を読まない */
+  /** 会話の記録（`~/.claude/projects`）。省くとコンテキストの使用量とバックグラウンドの作業を読まない */
   projectsDir?: string;
 }
 
@@ -135,6 +136,8 @@ interface Running {
   waitingFor?: string;
   /** CLI の今の作業フォルダ。途中でワークツリーに入ると、local_*.json の cwd と違う値になる */
   cwd?: string;
+  /** CLI が起動した時刻（Unix ミリ秒）。これより前に始まったバックグラウンドの作業は数えない */
+  startedAt?: number;
 }
 
 /**
@@ -146,7 +149,12 @@ function readRunning(runningDir: string): Map<string, Running> {
   for (const file of listFiles(runningDir, /^\d+\.json$/)) {
     const d = readJson(file);
     if (!d?.sessionId || !isAlive(d.pid)) continue;
-    map.set(d.sessionId, { status: d.status, waitingFor: d.waitingFor, cwd: typeof d.cwd === 'string' ? d.cwd : undefined });
+    map.set(d.sessionId, {
+      status: d.status,
+      waitingFor: d.waitingFor,
+      cwd: typeof d.cwd === 'string' ? d.cwd : undefined,
+      startedAt: typeof d.startedAt === 'number' && Number.isFinite(d.startedAt) ? d.startedAt : undefined,
+    });
   }
   return map;
 }
@@ -156,9 +164,15 @@ export function toState(running: { status?: string } | undefined): SessionState 
   switch (running.status) {
     case 'waiting': return 'waiting';
     case 'busy': return 'busy';
+    // shell は「待機中で、バックグラウンドの Bash が動いている」（端末版の画面だけが書く）。待機として扱い、hasShellWork で印を付ける
     // 起動直後で status がまだない一瞬も含めて待機として扱う
     default: return 'idle';
   }
+}
+
+/** status が shell（待機中で、バックグラウンドの Bash が動いている）。docs/research/session-status.md */
+export function hasShellWork(running: { status?: string } | undefined): boolean {
+  return running?.status === 'shell';
 }
 
 /** 読み取っているフォルダ（設定画面の「情報」用） */
@@ -363,12 +377,37 @@ function contextReaderFor(projectsDir: string) {
   return reader;
 }
 
+/** バックグラウンドの作業を読み終えた、または記録が変わったときに呼ぶもの（watchSessions が登録する） */
+const backgroundListeners = new Set<() => void>();
+/** 会話の記録のフォルダごとの、バックグラウンドの作業の読み手 */
+const backgroundReaders = new Map<string, ReturnType<typeof createBackgroundReader>>();
+
+function backgroundReaderFor(projectsDir: string) {
+  let reader = backgroundReaders.get(projectsDir);
+  if (!reader) {
+    reader = createBackgroundReader(projectsDir, () => {
+      for (const listener of backgroundListeners) listener();
+    });
+    backgroundReaders.set(projectsDir, reader);
+  }
+  return reader;
+}
+
+/** テストで、見張りと読む順番を止めるため */
+export function disposeBackgroundReaders(): void {
+  for (const reader of backgroundReaders.values()) reader.dispose();
+  backgroundReaders.clear();
+}
+
 export function readSessions(paths = defaultPaths()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
   const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
+  const backgroundReader = paths.projectsDir ? backgroundReaderFor(paths.projectsDir) : undefined;
   /** 使用量を読んだ CLI のセッション ID（使い回しの表から消えたものを外す） */
   const cliIds = new Set<string>();
+  /** バックグラウンドの作業を見ている、動いている CLI のセッション ID */
+  const liveCliIds = new Set<string>();
   const heads = new Map<string, string | undefined>();
   const views: SessionView[] = [];
   // 通し番号を数えるためのもの。アーカイブ済みも入れる
@@ -477,6 +516,19 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         const context = contextReader.read(d.cliSessionId, folders, typeof d.model === 'string' ? d.model : undefined);
         if (context) view.context = context;
       }
+      // バックグラウンドの作業。記録を読むのは待機中のときだけ（docs/research/session-status.md の「バックグラウンドの作業」）
+      if (r && typeof d.cliSessionId === 'string' && d.cliSessionId) {
+        let background = 0;
+        if (backgroundReader) {
+          liveCliIds.add(d.cliSessionId);
+          if (state === 'idle') {
+            const folders = [r.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
+            background = backgroundReader.read(d.cliSessionId, folders, r.startedAt) ?? 0;
+          } else backgroundReader.pause(d.cliSessionId);
+        }
+        if (state === 'idle' && hasShellWork(r)) background = Math.max(background, 1);
+        if (background > 0) view.background = background;
+      }
       views.push(view);
     }
   }
@@ -491,6 +543,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   files.prune();
   assignSeq(numbered);
   contextReader?.prune(cliIds);
+  backgroundReader?.prune(liveCliIds);
   // 親がアーカイブ済みなどで一覧にないときは、どの行も塗らない
   for (const view of views) {
     const at = focusedAt.get(view.id);
@@ -525,8 +578,11 @@ export function watchSessions(onChange: () => void, fallbackMs = 30_000, paths =
     }
   }
   const interval = setInterval(onChange, (fixture && cycleMs()) || fallbackMs);
+  // バックグラウンドの作業を読み終えたとき、作業中のセッションの記録が変わったとき
+  backgroundListeners.add(schedule);
 
   return () => {
+    backgroundListeners.delete(schedule);
     clearTimeout(timer);
     clearInterval(interval);
     for (const w of watchers) w.close();

@@ -40,6 +40,11 @@ export interface SessionView {
   state: SessionState;
   /** state が waiting のときの理由（`permission prompt` など） */
   waitingFor?: string;
+  /**
+   * state が idle のとき、バックグラウンドで動いている作業（Bash、サブエージェント、Monitor）の数。なければ省く。
+   * ターンは終わっていて入力もできるが、作業が終わると Claude が自分で続ける（src/main/background-work.ts）
+   */
+  background?: number;
   /** 最後のターンのまとめで「対応が必要」とされた内容 */
   needsAction?: string;
   /** 最後のターンのまとめ（ツールチップ用） */
@@ -224,6 +229,8 @@ export interface FlyItem {
   title: string;
   state: SessionState;
   waitingFor?: string;
+  /** 待機中のときの、バックグラウンドで動いている作業の数（SessionView.background） */
+  background?: number;
   /** Bantus の中でアーカイブしているか */
   archived: boolean;
   /** 保留にしている（行と同じ印で描く） */

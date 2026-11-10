@@ -63,6 +63,8 @@ export const ja = {
   state: {
     busy: '処理中',
     idle: '待機中',
+    /** 待機中で、バックグラウンドの作業が動いている（docs/research/session-status.md） */
+    background: 'バックグラウンドで作業中',
     stopped: '停止中',
     /** 知らない waitingFor（「対応待ち（その他）」） */
     waitingOther: 'その他',
@@ -92,6 +94,8 @@ export const ja = {
     /** ワークツリーのカードの見出し。遅れと未マージを比べている先 */
     base: (branch: string) => `分岐元：${branch}`,
     waiting: (reason: string) => `対応待ち：${reason}`,
+    /** 待機中で、バックグラウンドの作業が動いているとき。n は作業の数 */
+    background: (n: number) => `バックグラウンドで作業中：${n} 件（終わると Claude が続けます）`,
     needsAction: (what: string) => `次にすること：${what}`,
     unknownBranch: '（ブランチ不明）',
     contextPercent: (pct: number, tokens: string, window: string) => `コンテキスト：${pct}%（${tokens} / ${window}）`,
@@ -357,7 +361,7 @@ export const ja = {
     preview: '試聴',
     /** 状態の色 */
     colors: {
-      busy: { label: '処理中', description: 'Claude が作業している' },
+      busy: { label: '処理中', description: 'Claude が作業している。バックグラウンドで作業中のときもこの色' },
       waiting: { label: '対応待ち', description: '許可や回答など、操作を待っている' },
       idle: { label: '待機中', description: '次の指示を待っている。完了したときの帯もこの色' },
       held: { label: '保留', description: 'あとで再開するために止めている。状態のアイコンを押して付け外しする' },

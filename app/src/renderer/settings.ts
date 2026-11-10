@@ -180,6 +180,14 @@ function statusIcon(state: SessionState | 'held', waitingFor?: string): HTMLElem
   return node;
 }
 
+/** 待機中でバックグラウンドの作業が動いているときの印。処理中の色で描く */
+function backgroundIcon(): HTMLElement {
+  const node = el('span', { className: 'status' });
+  node.dataset.state = 'busy';
+  setStatus(node, statusIconName('idle', undefined, 1));
+  return node;
+}
+
 function isDefaultColors(colors: StatusColors): boolean {
   return COLOR_STATES.every((st) => colors[st] === DEFAULT_STATUS_COLORS[st]);
 }
@@ -218,7 +226,11 @@ function statusColors(): HTMLElement {
   const rows = COLOR_STATES.map((state) => {
     const { label, description } = COLOR_LABELS[state];
     const icons = el('div', { className: 'state-icons' },
-      state === 'waiting' ? WAITING_REASONS.map((w) => statusIcon('waiting', w)) : [statusIcon(state)]);
+      state === 'waiting'
+        ? WAITING_REASONS.map((w) => statusIcon('waiting', w))
+        : state === 'busy'
+          ? [statusIcon('busy'), backgroundIcon()]
+          : [statusIcon(state)]);
     const text = el('div', { className: 'label' }, [el('b', { textContent: label }), el('span', { textContent: description })]);
     const reset = el('button', { className: 'text-button', textContent: T.colors.reset });
     reset.addEventListener('click', () => setColor(state, DEFAULT_STATUS_COLORS[state]));

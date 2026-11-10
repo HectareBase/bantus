@@ -8,7 +8,7 @@ import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/t
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { ja } from '../shared/strings/ja.js';
 import { createIcon } from './icon.js';
-import { canToggleArchive, statusIconName, waitingLabel, type StatusIcon } from './model.js';
+import { canToggleArchive, hasBackground, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
 import { applyHighlight, applyMotion, applyStatusColors } from './status-colors.js';
 
@@ -48,7 +48,7 @@ function reportSolid() {
 
 /** 行の状態の印。保留の行はウィジェットと同じ circle-pause */
 function itemIcon(item: FlyItem): StatusIcon {
-  return item.held ? 'circle-pause' : statusIconName(item.state, item.waitingFor);
+  return item.held ? 'circle-pause' : statusIconName(item.state, item.waitingFor, item.background);
 }
 
 function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyItem | undefined): HTMLElement {
@@ -57,6 +57,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
   el.dataset.id = item.id;
   el.dataset.state = item.state;
   el.toggleAttribute('data-held', !!item.held);
+  el.toggleAttribute('data-background', !item.held && !item.archived && hasBackground(item.state, item.background));
   el.toggleAttribute('data-archived', item.archived);
   el.toggleAttribute('data-origin', item.origin);
   el.toggleAttribute('data-focused', item.focused);
@@ -88,6 +89,7 @@ function node(item: FlyItem, kind: 'timeline' | 'plain' | 'cards', above: FlyIte
     setStatus(ico, itemIcon(item));
     sub.append(ico);
     if (item.state === 'waiting') sub.append(ja.state.waitingWithReason(waitingLabel(item.waitingFor)));
+    else if (hasBackground(item.state, item.background)) sub.append(ja.state.background);
   }
   if (item.place) {
     const place = document.createElement('span');
