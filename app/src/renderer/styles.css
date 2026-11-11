@@ -55,6 +55,8 @@
   --focus-fill: rgba(var(--shade-rgb), calc(var(--focus-a) * var(--hl)));
   --focus-hover: rgba(var(--shade-rgb), calc(var(--focus-hover-a) * var(--hl)));
   --focus-pressed: rgba(var(--shade-rgb), calc(var(--focus-pressed-a) * var(--hl)));
+  /* 今開いている行の枠。状態の色を使わない灰色で、濃さに --hl をかける（0% で枠も消える） */
+  --focus-line: rgba(var(--shade-rgb), calc(0.3 * var(--hl)));
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
   --ctx-track: rgba(0, 0, 0, 0.12);
@@ -398,6 +400,9 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 .row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-fill); }
 .row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-hover); }
 .row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-pressed); }
+/* 今開いている行には枠も付ける。処理中・中断・保留の行は状態の塗りがなく、斜線だけでは目立たなかった。
+   ひかえめのときの対応待ち・待機中の行と、未確認の行は、状態の色の枠で上書きする（下の html[data-motion="subtle"]） */
+.row[data-focused]:not(:focus-visible) { box-shadow: inset 0 0 0 1px var(--focus-line); }
 
 /* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付けて点滅させる。クリックするか処理中になると消える */
 .row::before {
