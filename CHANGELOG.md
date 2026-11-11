@@ -4,6 +4,21 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.7.0]
+
+### 追加
+- **表示形式**：設定の「デザイン」でベゼルとフロートを選べる（既定はベゼル）。ベゼルでは、画面の端に黒い帯を余白なしで付け、内側の角を丸めて上下の画面の縁につなぐ。プロジェクトを帯から沈んだ盆のように見せる。角の丸み・縁の太さを設定で変えられ、最前面に固定しているときは残りの 3 辺にも縁を出す。フロートは今までの浮いたパネルで、背景とカードの不透明度を変えられる。選んだ形式に関係のない設定は隠す
+- **開いている行の枠**：デスクトップで今開いているセッションの行に、灰色の細い枠を付ける。処理中・中断・保留の行でも、どれを開いているかわかる
+
+### 変更
+- **行に乗せたとき**：セッションの行の塗りを濃くし、タイトルバーのボタンにも乗せたときの効果を付けた
+- **ひかえめの未確認の行**：枠を細くし、両端に帯を出す
+- **軽さ**：めくれとツールチップの窓をウィジェットと同じ描画のプロセスで動かし、ネットワークの処理もメインのプロセスに入れた。GPU で描かない設定のときは GPU の処理もメインのプロセスに入れ、メモリが 45 MB ほど減る
+
+### 修正
+- 幅を変えて離したとき、ウィジェットが動いたり押し込まれたりして見えていた
+- Windows の拡大率を変えたとき、ウィジェットの位置がずれていた
+
 ## [0.6.0]
 
 ### 追加
@@ -119,7 +134,8 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 - Claude デスクトップのデータを読むだけで、書き換えはしない。読むものは [docs/design/data-usage.md](docs/design/data-usage.md) にある
 - 読み取っているファイルの形式は公式には公開されていないので、Claude デスクトップの更新で動かなくなることがある。調べた版は、デスクトップアプリ 4.4212.0、CLI 2.1.309
 
-[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/HectareBase/bantus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HectareBase/bantus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/HectareBase/bantus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/HectareBase/bantus/releases/tag/v0.4.0
