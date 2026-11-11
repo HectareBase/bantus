@@ -139,6 +139,18 @@ button { font: inherit; color: inherit; }
 }
 .icon-button:hover { background: var(--hover); }
 .icon-button:active { background: var(--pressed); }
+/* タイトルバーのボタンは、乗せたときに塗りを濃くし、アイコンを明るくする（--hover だけでは黒い帯の上でほとんど見えなかった） */
+.titlebar .icon-button { transition: background-color 0.12s ease-out, color 0.12s ease-out; }
+.titlebar .icon-button:hover { background: var(--titlebar-hover); color: var(--text); }
+.titlebar .icon-button:active { background: var(--pressed); transition: none; }
+:root { --titlebar-hover: rgba(0, 0, 0, 0.08); }
+@media (prefers-color-scheme: dark) {
+  :root { --titlebar-hover: rgba(255, 255, 255, 0.12); }
+}
+html.island { --titlebar-hover: rgba(255, 255, 255, 0.14); }
+@media (prefers-reduced-motion: reduce) {
+  .titlebar .icon-button { transition: none; }
+}
 /* アイコンは lucide（icon.ts）。線の太さなどは SVG の属性に入っているので、ここでは大きさだけを決める */
 .icon-button svg { width: 14px; height: 14px; }
 /* PC 全体の CPU とメモリ。2 段のグリッドで、各段はラベル・短いバー・数字（バーと段階はセッションの行の .ctx と同じ）。
@@ -686,9 +698,20 @@ html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="wait
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--st-bg); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
-/* 未確認の行は、状態の色の 2px の枠と、点灯したままの太い帯 */
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
+/* 未確認の行は、状態の色の 1.5px の枠と、両端に点灯したままの太い帯（右の帯は ::after に左と同じ形で描く） */
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 1.5px var(--st); }
 html[data-motion="subtle"] .row[data-attention]::before { width: 4px; }
+html[data-motion="subtle"] .row[data-attention]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: calc(var(--row-pad, 4px) + 4px);
+  bottom: calc(var(--row-pad, 4px) + 4px);
+  width: 4px;
+  border-radius: 2px;
+}
+html[data-motion="subtle"] .row[data-attention][data-state="waiting"]::after { background: var(--waiting); }
+html[data-motion="subtle"] .row[data-attention][data-state="idle"]::after { background: var(--idle); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
