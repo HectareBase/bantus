@@ -284,6 +284,24 @@ function syncBezelLater() {
 }
 
 /**
+ * 幅を変えて離したときに、押し込まれた場所を見せないよう、ウィジェットを一瞬透明にする（keepAppBarBounds の押し込み）。
+ * アプリバーの場所が決まって戻したら（onPlaced）出し直す。決まらなかったときのために、少し待っても出し直す
+ */
+let veilTimer: NodeJS.Timeout | undefined;
+function veilWidget() {
+  if (!win || win.isDestroyed()) return;
+  win.setOpacity(0);
+  if (veilTimer) clearTimeout(veilTimer);
+  veilTimer = setTimeout(unveilWidget, 400);
+}
+function unveilWidget() {
+  if (veilTimer) clearTimeout(veilTimer);
+  veilTimer = undefined;
+  if (!win || win.isDestroyed() || win.getOpacity() === 1) return;
+  win.setOpacity(1);
+}
+
+/**
  * アプリバーを登録している間に、ウィジェットがこちらの置いた場所から動かされたら戻す。
  * 帯の分だけ作業領域が縮むと、Windows がウィジェットを作業領域の中へ押し込むことがある
  */
@@ -295,7 +313,7 @@ function keepAppBarBounds() {
     // 帯の幅を変えると、作業領域が変わったときに Chromium がウィンドウを作業領域の左上の動いた分だけずらす（押し込み）。
     // 押し込まれた直後（move の中や WM_WINDOWPOSCHANGED の中）に setBounds しても同じだけずらされて戻らず、
     // アプリバーの場所が決まったあと（onPlaced のころ）にやっと戻る。ここでは move の処理を終えてから戻す。
-    // 戻るまでの 40 ms ほどは押し込まれた場所が見える（アイランド型より前からある動き）
+    // 戻るまでの 40 ms ほどは押し込まれた場所が見える（アイランド型より前からある動き）。幅を変えたときは veilWidget で透明にして隠す
     setImmediate(() => {
       if (!win || win.isDestroyed()) return;
       win.setBounds(sidebarBounds());
@@ -948,6 +966,8 @@ app.whenReady().then(() => {
     onPlaced: (bar) => {
       appBarRect = bar;
       if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+      // 戻した場所が描かれてから出し直す（同じ処理の中で出すと、押し込まれた場所の絵が一瞬見えた）
+      if (veilTimer) setTimeout(unveilWidget, 16);
       syncBezelLater();
     },
     onFullscreen: (on) => {
@@ -1009,6 +1029,8 @@ app.whenReady().then(() => {
     if (dragWidth === undefined) return;
     const width = dragWidth;
     dragWidth = undefined;
+    // アプリバーの幅が変わると、Chromium がウィジェットを一瞬押し込む。そのあいだ透明にして隠す
+    if (appBarRect && width !== getSettings().width) veilWidget();
     updateSettings({ width });
   });
   ipcMain.on('set-click-through', (_e, value: unknown) => {
@@ -1180,8 +1202,9 @@ app.whenReady().then(() => {
   screen.on('display-metrics-changed', () => {
     if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
     appBar?.sync();
-    // タスクバーが動いたなど、アプリバーの場所は同じでも作業領域が変わることがある
-    syncBezel();
+    // タスクバーが動いたなど、アプリバーの場所は同じでも作業領域が変わることがある。
+    // 帯の幅を変えたときもここへ来る。すぐ作り直すとメインのプロセスが 0.1 秒ほど止まり、ウィジェットを戻すのが遅れるので、少し待つ
+    syncBezelLater();
   });
   screen.on('display-added', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
   screen.on('display-removed', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
