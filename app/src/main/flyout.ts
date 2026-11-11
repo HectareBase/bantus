@@ -9,8 +9,7 @@
 //   （ウィジェットの外はウィジェットの画面からは見えないので、ウィジェットが出ている間はいつもカーソルの位置を見る。
 //   カーソルがウィジェットと反応する範囲から遠いあいだは、見る間隔を長くする）
 
-import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron';
-import { join } from 'node:path';
+import { BrowserWindow, globalShortcut, ipcMain, screen, type BrowserWindowConstructorOptions } from 'electron';
 import type { FlyAction, FlyContent, FlyRequest, FlyShow, FlyTarget, TipRect } from '../shared/types';
 import { POLL_NEAR_MS, contains, flyoutBounds, inHoverZone, pollInterval, scaleRect, type Rect } from './tip-place';
 
@@ -25,9 +24,31 @@ const dbg = (...a: unknown[]) => {
   if (process.env.FLY_DEBUG) console.log('[fly]', ...a);
 };
 
+/**
+ * めくれと一覧のウィンドウの作り。ウィンドウはウィジェットの画面が window.open で開き（描画のプロセスをウィジェットと分け合い、
+ * メモリを減らす。main.ts の openChildWindows）、main.ts が setWindowOpenHandler でこの作りを当てる
+ */
+export const FLYOUT_WINDOW_OPTIONS: BrowserWindowConstructorOptions = {
+  width: 340,
+  height: 600,
+  show: false,
+  frame: false,
+  resizable: false,
+  movable: false,
+  minimizable: false,
+  maximizable: false,
+  // フォーカスを取れるウィンドウにして showInactive() で出す。setFocusable で切り替えると、Windows では
+  // そのあとクリックが下のウィンドウへ抜けるようになるので使わない。押したときは Windows が自然にフォーカスを移す
+  focusable: true,
+  skipTaskbar: true,
+  transparent: true,
+  hasShadow: false,
+  backgroundColor: '#00000000',
+};
+
 export interface FlyoutDeps {
-  preload: string;
-  web: string;
+  /** めくれと一覧のウィンドウ（FLYOUT_WINDOW_OPTIONS で作り、flyout.html を読み込んだもの） */
+  window: BrowserWindow;
   widget: () => BrowserWindow | undefined;
   edge: () => 'left' | 'right';
   area: () => Rect;
@@ -103,27 +124,9 @@ function sameRect(a: Rect, b: Rect): boolean {
 }
 
 export function createFlyout(deps: FlyoutDeps): Flyout {
-  const win = new BrowserWindow({
-    width: 340,
-    height: 600,
-    show: false,
-    frame: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    // フォーカスを取れるウィンドウにして showInactive() で出す。setFocusable で切り替えると、Windows では
-    // そのあとクリックが下のウィンドウへ抜けるようになるので使わない。押したときは Windows が自然にフォーカスを移す
-    focusable: true,
-    skipTaskbar: true,
-    transparent: true,
-    hasShadow: false,
-    backgroundColor: '#00000000',
-    webPreferences: { preload: deps.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
-  });
+  const win = deps.window;
   win.setAlwaysOnTop(true, 'pop-up-menu');
   win.setIgnoreMouseEvents(true);
-  win.loadFile(join(deps.web, 'flyout.html'));
 
   /** ウィジェットが出ているか（ウィンドウはこれに合わせて出したままにする） */
   let widgetVisible = false;

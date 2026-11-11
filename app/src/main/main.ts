@@ -1,14 +1,14 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type BrowserWindowConstructorOptions, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
 import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
-import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
+import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
@@ -162,6 +162,12 @@ else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('use
  */
 const HARDWARE_ACCELERATION = getSettings().hardwareAcceleration;
 if (!HARDWARE_ACCELERATION) app.disableHardwareAcceleration();
+
+/**
+ * ネットワークの処理（Chromium の network service）を、別のプロセスでなくメインのプロセスの中で動かす。
+ * このアプリはほとんど通信しないので、別のプロセスを持つ分のメモリ（10MB ほど）を減らす
+ */
+app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
 const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
@@ -450,6 +456,7 @@ function createWidget(): BrowserWindow {
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
   });
   keepZoom(w);
+  shareRenderer(w);
   w.loadFile(join(WEB, 'index.html'));
   w.once('ready-to-show', () => {
     applySettings(getSettings());
@@ -510,33 +517,89 @@ function createWidget(): BrowserWindow {
 }
 
 /**
- * ツールチップのウィンドウ。ウィジェットの外（画面の内側）に出すので、別のウィンドウにする。
+ * ツールチップのウィンドウの作り。ウィジェットの外（画面の内側）に出すので、別のウィンドウにする。
  * フォーカスを取らず、クリックは後ろへ通す。出すたびに作ると遅いので、1 つを使い回す
  */
-function createTipWindow(): BrowserWindow {
-  const w = new BrowserWindow({
-    width: 400,
-    height: 200,
-    show: false,
-    frame: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    focusable: false,
-    skipTaskbar: true,
-    transparent: true,
-    hasShadow: false,
-    backgroundColor: '#00000000',
-    // 隠れている間も、大きさを測って返せるようにする
-    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+const TIP_WINDOW_OPTIONS: BrowserWindowConstructorOptions = {
+  width: 400,
+  height: 200,
+  show: false,
+  frame: false,
+  resizable: false,
+  movable: false,
+  minimizable: false,
+  maximizable: false,
+  focusable: false,
+  skipTaskbar: true,
+  transparent: true,
+  hasShadow: false,
+  backgroundColor: '#00000000',
+};
+
+/** ウィジェットの画面が window.open で開く子のウィンドウの名前 */
+const FLYOUT_FRAME = 'bantus-flyout';
+const TIP_FRAME = 'bantus-tip';
+
+/**
+ * めくれと一覧、ツールチップのウィンドウを、ウィジェットの画面から window.open で開かせ、描画のプロセスをウィジェットと分け合う
+ * （同じ場所のページを開いたウィンドウは、開いた側と同じプロセスで動く）。ウィンドウごとにプロセスを持つと、1 つ 25MB ほど使った。
+ * - 作りは setWindowOpenHandler で当てる。ほかの window.open は開かない
+ * - ウィジェットの画面を読み込み直しても、子のウィンドウは残る。読み込み終えるたびに、ないものだけを開かせる
+ *   （同じ名前で開き直すと、Chromium は新しく作らず今のウィンドウを使う）
+ * - 子は 1 つのプロセスを分け合うので、ウィジェットの画面の処理が重いあいだは、めくれとツールチップの描画も待たされる
+ */
+function shareRenderer(w: BrowserWindow) {
+  // 子のウィンドウにも、隠れている間に大きさを測って返せるよう、裏での間引きを止める（ほかの値は親から受け継ぐ）
+  const webPreferences = { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false };
+  w.webContents.setWindowOpenHandler(({ frameName }) => {
+    if (frameName === FLYOUT_FRAME) return { action: 'allow', overrideBrowserWindowOptions: { ...FLYOUT_WINDOW_OPTIONS, webPreferences } };
+    if (frameName === TIP_FRAME) return { action: 'allow', overrideBrowserWindowOptions: { ...TIP_WINDOW_OPTIONS, webPreferences } };
+    return { action: 'deny' };
   });
+  w.webContents.on('did-create-window', (child, { frameName }) => {
+    if (frameName === FLYOUT_FRAME) adoptFlyout(child);
+    else if (frameName === TIP_FRAME) adoptTip(child);
+  });
+  w.webContents.on('did-finish-load', () => {
+    const open: string[] = [];
+    if (!flyout || flyout.window().isDestroyed()) open.push(`window.open('flyout.html', '${FLYOUT_FRAME}')`);
+    if (!tipWin || tipWin.isDestroyed()) open.push(`window.open('tip.html', '${TIP_FRAME}')`);
+    if (open.length > 0) w.webContents.executeJavaScript(`${open.join(';')};0`).catch((e) => console.error('めくれとツールチップのウィンドウを開けませんでした：', e));
+  });
+}
+
+function adoptTip(w: BrowserWindow) {
+  tipWin = w;
   w.setIgnoreMouseEvents(true);
   // 固定したウィジェットより前に出す
   w.setAlwaysOnTop(true, 'pop-up-menu');
   keepZoom(w);
-  w.loadFile(join(WEB, 'tip.html'));
-  return w;
+  w.webContents.setZoomFactor(zoomFactor());
+}
+
+function adoptFlyout(w: BrowserWindow) {
+  // 作るのは 1 度だけ（ipcMain の受け口を重ねない）。ウィジェットが閉じるまで同じウィンドウを使う
+  if (flyout) return;
+  flyout = createFlyout({
+    window: w,
+    widget: () => win,
+    edge: () => getSettings().edge,
+    area: () => widgetArea(getSettings()),
+    zoom: zoomFactor,
+    overhang: () => barOverhang(getSettings(), zoomFactor()),
+    onAction: (action) => win?.webContents.send('fly-action', action),
+    onHover: (key) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
+    },
+    onState: (key, open) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
+    },
+  });
+  keepZoom(w);
+  w.webContents.setZoomFactor(zoomFactor());
+  w.webContents.on('did-finish-load', sendFlyoutColors);
+  if (!w.webContents.isLoading()) sendFlyoutColors();
+  if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 }
 
 /** ツールチップの中身の大きさ（CSS px）が届いたら、置いて見せる */
@@ -982,25 +1045,7 @@ app.whenReady().then(() => {
       syncBezel();
     },
   });
-  tipWin = createTipWindow();
-  flyout = createFlyout({
-    preload: PRELOAD,
-    web: WEB,
-    widget: () => win,
-    edge: () => getSettings().edge,
-    area: () => widgetArea(getSettings()),
-    zoom: zoomFactor,
-    overhang: () => barOverhang(getSettings(), zoomFactor()),
-    onAction: (action) => win?.webContents.send('fly-action', action),
-    onHover: (key) => {
-      if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
-    },
-    onState: (key, open) => {
-      if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
-    },
-  });
-  keepZoom(flyout.window());
-  flyout.window().webContents.on('did-finish-load', sendFlyoutColors);
+  // めくれと一覧、ツールチップのウィンドウは、ウィジェットの画面が読み込み終えたら開く（shareRenderer）
   applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
@@ -1109,8 +1154,6 @@ app.whenReady().then(() => {
   ipcMain.on('tip:size', (_e, width: unknown, height: unknown) => {
     if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
   });
-  // ウィジェットのイベント（隠す・最小化など）は createWidget で登録する。めくれより先に出ていたときだけ、ここで知らせる
-  if (win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 
   // HTML ビューア（docs/design/html-viewer.md）。画面からはセッションの ID と場所だけを受け取り、パスはこちらで引く
   viewer = createViewer({
