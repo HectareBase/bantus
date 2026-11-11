@@ -59,10 +59,12 @@ export const FLY_SHADOW = 8;
  * inset はウィンドウのカード側の端から一覧までの距離。どれも画面の座標
  * @param anchor カード（ウィジェットの中の、画面の座標）
  * @param zoom 表示の拡大率。一覧の幅とすき間（CSS px）を画面の座標にするのに使う
+ * @param overhang ウィジェットのウィンドウの内側の端にある、何も描かない列の幅（画面の座標）。ベゼルの表示形式では、角丸と縁の線を描く
+ *   透明な列があり（appbar-place.ts の barOverhang）、ウィンドウの端から開くと帯から列の幅だけ離れて見えたので、帯の端から開く
  */
-export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect, zoom = 1): { bounds: Rect; top: number; inset: number } {
+export function flyoutBounds(edge: 'left' | 'right', widget: Rect, area: Rect, anchor: Rect, zoom = 1, overhang = 0): { bounds: Rect; top: number; inset: number } {
   // ウィジェットが右端なら、カードの左端から左へ。左端なら、カードの右端から右へ
-  const inset = Math.round((edge === 'right' ? anchor.x : widget.width - (anchor.x + anchor.width)) + FLY_GAP * zoom);
+  const inset = Math.round((edge === 'right' ? anchor.x : widget.width - (anchor.x + anchor.width)) - overhang + FLY_GAP * zoom);
   const width = inset + Math.ceil((FLY_LIST_WIDTH + FLY_SHADOW) * zoom);
   const x = edge === 'right' ? widget.x + anchor.x - width : widget.x + anchor.x + anchor.width;
   return {

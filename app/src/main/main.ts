@@ -990,6 +990,7 @@ app.whenReady().then(() => {
     edge: () => getSettings().edge,
     area: () => widgetArea(getSettings()),
     zoom: zoomFactor,
+    overhang: () => barOverhang(getSettings(), zoomFactor()),
     onAction: (action) => win?.webContents.send('fly-action', action),
     onHover: (key) => {
       if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);

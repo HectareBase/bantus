@@ -247,7 +247,7 @@ export const ja = {
       },
       tooltipDelayMs: { label: '表示までの時間', description: 'マウスポインターを合わせてから出るまで。右端にすると表示しない' },
       theme: { label: '配色', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
-      island: { label: '表示のかたち', description: 'ベゼル：画面の縁の黒とつながる帯で表示する。フロート：デスクトップの上に浮いたパネルで表示し、背景とカードの透け具合を変えられる' },
+      island: { label: '表示形式', description: 'ベゼル：画面の縁の黒とつながる帯で表示する。フロート：デスクトップの上に浮いたパネルで表示し、背景とカードの透け具合を変えられる' },
       islandRadius: { label: '角の丸み', description: '帯と画面の縁がつながる角の丸みの大きさ' },
       islandLine: { label: '縁の太さ', description: '帯の内側の端に引く黒い線の太さ。最前面に固定しているときは、画面の残りの 3 辺の線も同じ太さにする' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },

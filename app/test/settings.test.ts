@@ -18,7 +18,7 @@ describe('git の設定', () => {
   });
   it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
-  it('表示のかたちはベゼルとフロートの 2 択', () => {
+  it('表示形式はベゼルとフロートの 2 択', () => {
     const def = SETTING_DEFS.find((d) => d.key === 'island');
     assert.equal(def?.type, 'segmented');
     assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
@@ -199,7 +199,7 @@ describe('normalizeSettings の行の上下の余白', () => {
 });
 
 describe('設定画面のトグルスイッチ', () => {
-  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 と、表示のかたちの ベゼル／フロート は選択肢のまま）', () => {
+  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 と、表示形式の ベゼル／フロート は選択肢のまま）', () => {
     for (const d of SETTING_DEFS) {
       if (d.type === 'action' || d.key === 'viewerAutoHeight' || d.key === 'island') continue;
       if (typeof DEFAULT_SETTINGS[d.key] === 'boolean') assert.equal(d.type, 'toggle', d.key);

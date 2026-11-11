@@ -33,6 +33,8 @@ export interface FlyoutDeps {
   area: () => Rect;
   /** 表示の拡大率（1 で等倍）。画面から届く四角は CSS px なので、これを掛けて画面の座標にする */
   zoom: () => number;
+  /** ウィジェットのウィンドウの内側の端の、何も描かない列の幅（画面の座標。ベゼルの角丸の列。なければ 0） */
+  overhang: () => number;
   /** 一覧の中の操作を、ウィジェットの画面へ渡す */
   onAction: (action: FlyAction) => void;
   /** ウィジェットの外で、重なりに反応する範囲にカーソルが入った */
@@ -167,7 +169,7 @@ export function createFlyout(deps: FlyoutDeps): Flyout {
     const widget = deps.widget();
     if (!widget || widget.isDestroyed()) return undefined;
     const zoom = deps.zoom();
-    const { bounds, top, inset } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), scaleRect(anchor, zoom), zoom);
+    const { bounds, top, inset } = flyoutBounds(deps.edge(), widget.getBounds(), deps.area(), scaleRect(anchor, zoom), zoom, deps.overhang());
     if (!sameRect(win.getBounds(), bounds)) win.setBounds(bounds);
     return { top, inset, zoom };
   }
