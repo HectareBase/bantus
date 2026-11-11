@@ -18,6 +18,21 @@ describe('git の設定', () => {
   });
   it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
+  it('表示形式はベゼルとフロートの 2 択', () => {
+    const def = SETTING_DEFS.find((d) => d.key === 'island');
+    assert.equal(def?.type, 'segmented');
+    assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
+  });
+  it('ベゼルのときだけ角の丸みと縁の太さを出し、フロートのときだけ背景とカードの不透明度を出す', () => {
+    const shown = (value: boolean) => SETTING_DEFS.filter((d) => d.shownWhen?.key === 'island' && d.shownWhen.value === value).map((d) => d.key);
+    assert.deepEqual(shown(true), ['islandRadius', 'islandLine']);
+    assert.deepEqual(shown(false), ['backgroundOpacity', 'cardOpacity']);
+  });
+  it('角の丸みと縁の太さは範囲に収める', () => {
+    const s = normalizeSettings({ islandRadius: 100, islandLine: 0 });
+    assert.deepEqual([s.islandRadius, s.islandLine], [32, 1]);
+    assert.deepEqual([DEFAULT_SETTINGS.islandRadius, DEFAULT_SETTINGS.islandLine], [12, 1]);
+  });
   it('ボタンは設定の値を持たない', () => assert.equal('gitFetchNow' in normalizeSettings({ gitFetchNow: true }), false));
 });
 
@@ -184,9 +199,9 @@ describe('normalizeSettings の行の上下の余白', () => {
 });
 
 describe('設定画面のトグルスイッチ', () => {
-  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 は選択肢のまま）', () => {
+  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 と、表示形式の ベゼル／フロート は選択肢のまま）', () => {
     for (const d of SETTING_DEFS) {
-      if (d.type === 'action' || d.key === 'viewerAutoHeight') continue;
+      if (d.type === 'action' || d.key === 'viewerAutoHeight' || d.key === 'island') continue;
       if (typeof DEFAULT_SETTINGS[d.key] === 'boolean') assert.equal(d.type, 'toggle', d.key);
     }
   });
@@ -225,7 +240,7 @@ describe('設定画面のカテゴリ', () => {
   it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['テーマ', ['theme']],
-      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
+      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
       ['状態の色', ['motion', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>

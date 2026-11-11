@@ -74,6 +74,14 @@ describe('flyoutBounds', () => {
     assert.equal(bounds.x, 262);
     assert.equal(bounds.x + inset, 264 + FLY_GAP);
   });
+  it('ウィンドウの内側の端に何も描かない列（ベゼルの角丸の列）があれば、一覧は列でなく帯の端からすき間をあける', () => {
+    const widget = { x: 0, y: 0, width: 264, height: 1040 };
+    const { bounds, inset } = flyoutBounds('left', widget, area, card, 1, 13);
+    assert.equal(bounds.x, 262);
+    assert.equal(bounds.x + inset, 264 - 13 + FLY_GAP);
+    const right = flyoutBounds('right', { x: 1656, y: 0, width: 264, height: 1040 }, area, { ...card, x: 21 }, 1, 13);
+    assert.equal(right.inset, 21 - 13 + FLY_GAP);
+  });
   it('作業領域が画面の上から始まらないときは、その分を引いた位置をカードの上端にする', () => {
     const top = flyoutBounds('left', { x: 0, y: 40, width: 264, height: 1000 }, { ...area, y: 40, height: 1000 }, card).top;
     assert.equal(top, 120);

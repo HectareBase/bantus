@@ -47,12 +47,16 @@
   --hl: 1;
   --stripe-a: 0.025;
   --focus-a: 0.04;
-  --focus-hover-a: 0.08;
+  --focus-hover-a: 0.11;
+  /* セッションの行に乗せたときの塗り。ボタンの --hover より濃くし、乗せた行がはっきりわかるようにする */
+  --row-hover: rgba(0, 0, 0, 0.07);
   --focus-pressed-a: 0.07;
   --stripe: rgba(var(--shade-rgb), calc(var(--stripe-a) * var(--hl)));
   --focus-fill: rgba(var(--shade-rgb), calc(var(--focus-a) * var(--hl)));
   --focus-hover: rgba(var(--shade-rgb), calc(var(--focus-hover-a) * var(--hl)));
   --focus-pressed: rgba(var(--shade-rgb), calc(var(--focus-pressed-a) * var(--hl)));
+  /* 今開いている行の枠。状態の色を使わない灰色で、濃さに --hl をかける（0% で枠も消える） */
+  --focus-line: rgba(var(--shade-rgb), calc(0.3 * var(--hl)));
   /* コンテキストの使用率が残りわずか（75% から）の文字とバーの色。状態に使わない赤にする */
   --ctx-full: #d03c34;
   --ctx-track: rgba(0, 0, 0, 0.12);
@@ -82,8 +86,9 @@
     --repo-frame: rgba(255, 255, 255, 0.12);
     --stripe-a: 0.03;
     --focus-a: 0.06;
-    --focus-hover-a: 0.09;
+    --focus-hover-a: 0.13;
     --focus-pressed-a: 0.04;
+    --row-hover: rgba(255, 255, 255, 0.10);
     --ctx-full: #ff6b62;
     --ctx-track: rgba(255, 255, 255, 0.14);
   }
@@ -139,6 +144,18 @@ button { font: inherit; color: inherit; }
 }
 .icon-button:hover { background: var(--hover); }
 .icon-button:active { background: var(--pressed); }
+/* タイトルバーのボタンは、乗せたときに塗りを濃くし、アイコンを明るくする（--hover だけでは黒い帯の上でほとんど見えなかった） */
+.titlebar .icon-button { transition: background-color 0.12s ease-out, color 0.12s ease-out; }
+.titlebar .icon-button:hover { background: var(--titlebar-hover); color: var(--text); }
+.titlebar .icon-button:active { background: var(--pressed); transition: none; }
+:root { --titlebar-hover: rgba(0, 0, 0, 0.08); }
+@media (prefers-color-scheme: dark) {
+  :root { --titlebar-hover: rgba(255, 255, 255, 0.12); }
+}
+html.island { --titlebar-hover: rgba(255, 255, 255, 0.14); }
+@media (prefers-reduced-motion: reduce) {
+  .titlebar .icon-button { transition: none; }
+}
 /* アイコンは lucide（icon.ts）。線の太さなどは SVG の属性に入っているので、ここでは大きさだけを決める */
 .icon-button svg { width: 14px; height: 14px; }
 /* PC 全体の CPU とメモリ。2 段のグリッドで、各段はラベル・短いバー・数字（バーと段階はセッションの行の .ctx と同じ）。
@@ -375,7 +392,7 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 }
 /* 隣り合う行の塗り（ホバー、開いているセッション）がくっつかないよう、1px あける */
 .row + .row { margin-top: 1px; }
-.row:hover { background: var(--hover); }
+.row:hover { background: var(--row-hover); }
 .row:active { background: var(--pressed); }
 .row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 /* デスクトップで今開いているセッション：塗りに斜めのストライプの透かしを重ねる（色相は使わない）。
@@ -383,6 +400,9 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 .row[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-fill); }
 .row[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-hover); }
 .row[data-focused]:active { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--focus-pressed); }
+/* 今開いている行には枠も付ける。処理中・中断・保留の行は状態の塗りがなく、斜線だけでは目立たなかった。
+   ひかえめのときの対応待ち・待機中の行と、未確認の行は、状態の色の枠で上書きする（下の html[data-motion="subtle"]） */
+.row[data-focused]:not(:focus-visible) { box-shadow: inset 0 0 0 1px var(--focus-line); }
 
 /* 未確認の行（対応待ちになった、処理中から待機になった）だけ、左端に状態の色の帯を付けて点滅させる。クリックするか処理中になると消える */
 .row::before {
@@ -682,13 +702,24 @@ html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="wait
   background: var(--st-bg);
   box-shadow: inset 0 0 0 1px var(--st-line);
 }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):hover { background: linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):hover { background: linear-gradient(var(--row-hover), var(--row-hover)), var(--st-bg); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):active { background: linear-gradient(var(--pressed), var(--pressed)), var(--st-bg); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, var(--st-bg); }
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, linear-gradient(var(--hover), var(--hover)), var(--st-bg); }
-/* 未確認の行は、状態の色の 2px の枠と、点灯したままの太い帯 */
-html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 2px var(--st); }
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px) fixed, linear-gradient(var(--row-hover), var(--row-hover)), var(--st-bg); }
+/* 未確認の行は、状態の色の 1.5px の枠と、両端に点灯したままの太い帯（右の帯は ::after に左と同じ形で描く） */
+html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention] { box-shadow: inset 0 0 0 1.5px var(--st); }
 html[data-motion="subtle"] .row[data-attention]::before { width: 4px; }
+html[data-motion="subtle"] .row[data-attention]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: calc(var(--row-pad, 4px) + 4px);
+  bottom: calc(var(--row-pad, 4px) + 4px);
+  width: 4px;
+  border-radius: 2px;
+}
+html[data-motion="subtle"] .row[data-attention][data-state="waiting"]::after { background: var(--waiting); }
+html[data-motion="subtle"] .row[data-attention][data-state="idle"]::after { background: var(--idle); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
@@ -754,3 +785,118 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
 }
 .viewer-path { font-size: 11px; color: var(--text-tertiary); word-break: break-all; user-select: text; }
 .viewer[data-kind="ok"] .viewer-empty { display: none; }
+
+/* ---- アイランド型（設定 island、html.island） ----
+   ウィジェットを、画面の端のベゼルの黒が内側へ張り出した一枚の帯に見せる。帯（body）は真っ黒で、画面の端に余白なしで付ける。
+   帯の内側の辺の上端と下端には内向きの角丸（--fillet）を付け、上下のベゼルとなめらかにつなぐ。
+   角丸はウィンドウの中に描くので、ウィンドウの内側の端に透明な列（--island-col。角丸と縁の線の太さの和）を残す（帯はその分だけ細い）。
+   列のクリックは後ろのウィンドウへ通す（renderer.ts の mousemove。的が html のとき）。
+   最前面に固定したときのアプリバーは帯の幅だけを取り、列は隣のウィンドウに重ねる（appbar-place.ts の barOverhang）。
+   角丸の半径（--fillet）と縁の線の太さ（--edge-cover）は設定（islandRadius、islandLine）から renderer.ts が入れる
+   帯はベゼルの色なので、テーマにかかわらず黒にし、配色はダークにそろえる。背景とカードの不透明度は使わない。
+   リポジトリの枠、カード、見出しの帯、重なり、行の作りはそのままで、色の値だけを黒の地に合わせる */
+:root { --fillet: 12px; --edge-cover: 1px; --island-col: calc(var(--fillet) + var(--edge-cover)); }
+html.island {
+  color-scheme: dark;
+  --text: #ffffff;
+  --text-secondary: #c8c8c8;
+  --text-tertiary: #9a9a9a;
+  --bg-rgb: 0, 0, 0;
+  --card-rgb: 8, 8, 8;
+  --card: rgb(var(--card-rgb));
+  --shade-rgb: 255, 255, 255;
+  --card-stroke: rgba(255, 255, 255, 0.07);
+  --divider: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.06);
+  --pressed: rgba(255, 255, 255, 0.04);
+  --selected: rgba(255, 255, 255, 0.09);
+  --selected-hover: rgba(255, 255, 255, 0.12);
+  --focus: #ffffff;
+  /* 前のセッションの重なりは、盆の地（#383838）より明るくして見えるようにする */
+  --stack: #6a6a6a;
+  --stack-strong: #828282;
+  --stack-edge: rgba(0, 0, 0, 0.5);
+  --repo-frame: rgba(255, 255, 255, 0.13);
+  --stripe-a: 0.03;
+  --focus-a: 0.06;
+  --focus-hover-a: 0.14;
+  --row-hover: rgba(255, 255, 255, 0.12);
+  --focus-pressed-a: 0.04;
+  --ctx-full: #ff6b62;
+  --ctx-track: rgba(255, 255, 255, 0.14);
+  /* html の背景が透明（色が transparent で画像なし）だと、body の黒がウィンドウ全体（キャンバス）に広がり、
+     角丸の分の透明な列まで黒くなる。透明な画像を敷いて、body の背景が広がらないようにする */
+  background: linear-gradient(transparent, transparent);
+}
+html.island[data-motion="subtle"] { --stripe-a: 0.08; }
+
+/* 帯。内側に角丸の分の透明な列を残す */
+html.island body { background: #000; }
+/* 帯の内側の端の外へ、黒い線（--edge-cover）を透明な列に描く。隣のウィンドウの端に Windows が描く明るい枠の線は、
+   アプリバーの境（帯の内側の端）に来るので、それを覆って隠す。枠の線は物理ピクセルで 1px なので、1px（拡大率 100% 以上では 1 物理ピクセル以上）で足りる。
+   太くすると縁が目立つ（隣のウィンドウの端も隠れる）。影はポインターの的にならないので、列のクリックは今までどおり後ろへ通る */
+html.island:not([data-edge="left"]) body { box-shadow: calc(-1 * var(--edge-cover)) 0 0 #000; }
+html.island[data-edge="left"] body { box-shadow: var(--edge-cover) 0 0 #000; }
+html.island:not([data-edge="left"]) body { margin-left: var(--island-col); }
+html.island[data-edge="left"] body { margin-right: var(--island-col); }
+
+/* 内向きの角丸。透明な列の上端と下端に、ベゼル（画面の上下の端）と帯をつなぐ黒い四分円の外側を描く。
+   角丸は縁の線の内側につなぐ（帯の側は --edge-cover の線、上下は画面の端から --edge-cover の線）。
+   上下の線は、角丸の箱の影（box-shadow）で箱の上（下）に描く。外側の影は箱の下には描かれないので、円の内側は透けたまま。
+   円の中心は箱の外側（帯から遠い側）の角に置き、円の内側を透かす */
+html.island::before, html.island::after {
+  content: "";
+  position: fixed;
+  z-index: 20;
+  width: var(--fillet);
+  height: var(--fillet);
+  pointer-events: none;
+  --fillet-in: calc(var(--fillet) - 0.5px);
+  --fillet-out: calc(var(--fillet) + 0.5px);
+}
+html.island::before { top: var(--edge-cover); box-shadow: 0 calc(-1 * var(--edge-cover)) 0 #000; }
+html.island::after { bottom: var(--edge-cover); box-shadow: 0 var(--edge-cover) 0 #000; }
+/* 最前面に固定していないときは縁取りの窓（上下の線）を出さないので、角丸は画面の上下の端（ベゼル）にじかにつなぐ。
+   線の内側につなぐと、列の幅だけの線に角丸がぶつかって途切れて見えた */
+html.island:not(.pinned)::before { top: 0; box-shadow: none; }
+html.island:not(.pinned)::after { bottom: 0; box-shadow: none; }
+html.island:not([data-edge="left"])::before, html.island:not([data-edge="left"])::after { left: 0; }
+html.island[data-edge="left"]::before, html.island[data-edge="left"]::after { right: 0; }
+html.island:not([data-edge="left"])::before { background: radial-gradient(circle var(--fillet) at 0 100%, transparent var(--fillet-in), #000 var(--fillet-out)); }
+html.island:not([data-edge="left"])::after { background: radial-gradient(circle var(--fillet) at 0 0, transparent var(--fillet-in), #000 var(--fillet-out)); }
+html.island[data-edge="left"]::before { background: radial-gradient(circle var(--fillet) at 100% 100%, transparent var(--fillet-in), #000 var(--fillet-out)); }
+html.island[data-edge="left"]::after { background: radial-gradient(circle var(--fillet) at 100% 0, transparent var(--fillet-in), #000 var(--fillet-out)); }
+
+/* 幅を変える取っ手は、透明な列ではなく帯の内側の端に置く（列のクリックは後ろへ通すため） */
+html.island:not([data-edge="left"]) .resize-handle { left: var(--island-col); }
+html.island[data-edge="left"] .resize-handle { right: var(--island-col); }
+
+/* タイトルバーは帯と一体にする（枠と塗りを付けない） */
+html.island .titlebar { background: transparent; border-color: transparent; margin: 4px 8px 4px; }
+
+html.island main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
+
+/* リポジトリ（プロジェクト）は、帯の面から窪んだ盆に見せる。
+   盆の地は帯より明るい灰色（#383838）にし、縁は帯と同じ黒にする（明るい縁の線があると、帯の上に載った板に見える）。
+   上の縁から内側へ影を落とし、下の縁だけを細く明るくする（光が上から当たって、手前の縁が光る）。
+   上の影は縁から 3px ほどに収め、プロジェクトの名前（.repo-header の文字は上から 6px の余白のあと）にかからないようにする。
+   ワークツリーのカードは帯と同じ層に見えるよう、帯に近い黒（--card-rgb）にする。暗い画面では明るい面ほど手前に見えるので、
+   盆を明るく、カードを黒くすると、盆の底が帯とカードの面より下がって見える。
+   影は小さくぼかすだけにする（大きなぼかしは GPU を使わない既定ではスクロールのたびに重い） */
+html.island .repo {
+  background: #383838;
+  border: 1px solid #000;
+  box-shadow: inset 0 3px 3px -2px rgba(0, 0, 0, 0.95), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+}
+html.island .card {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+/* カードの見出し（ワークツリーの名前の帯）は明るくし、その下の行（セッション）と、見出しから垂れる git の変更の札
+   （カードの本体と同じ黒で塗る）との差をつける。設定の見出しの濃さ（--header-alpha）はその上に足す */
+html.island .card-header { background: rgba(255, 255, 255, calc(var(--header-alpha) + 0.13)); border-bottom-color: rgba(0, 0, 0, 0.6); }
+html.island .card-wrap[data-held] .card-header { background: color-mix(in srgb, var(--held) 18%, rgba(255, 255, 255, calc(var(--header-alpha) + 0.13))); }
+
+/* ビューアは帯の中の下に置き、カードの一覧とは細い線とつまみで区切る */
+html.island .viewer { margin: 0; padding: 0 8px 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+html.island .viewer-box { background: rgb(var(--card-rgb)); border-color: var(--repo-frame); }

@@ -43,8 +43,8 @@ function set<K extends keyof Settings>(key: K, value: Settings[K]) {
   api.set({ [key]: value } as Partial<Settings>);
   // 状態の色の見本の行を、アニメーション効果に合わせて描く
   if (key === 'motion') applyMotion(value as Settings['motion']);
-  // この設定で押せるかが決まる項目があれば、描き直す
-  if (SETTING_DEFS.some((d) => d.enabledBy === key)) void renderContent();
+  // この設定で押せるか、出すかが決まる項目があれば、描き直す
+  if (SETTING_DEFS.some((d) => d.enabledBy === key || d.shownWhen?.key === key)) void renderContent();
 }
 
 // ---- ボタン（type: 'action'）の横に出す結果 ----
@@ -320,7 +320,8 @@ async function renderContent() {
   content.replaceChildren(el('h1', { textContent: category.label }));
   if (current === 'about') return renderAbout();
 
-  const defs = SETTING_DEFS.filter((d) => d.category === current);
+  // 今の設定に関係のない項目（shownWhen が合わない）は出さない
+  const defs = SETTING_DEFS.filter((d) => d.category === current && (!d.shownWhen || settings[d.shownWhen.key] === d.shownWhen.value));
   const packaged = defs.some((d) => d.packagedOnly) && (await api.about()).packaged;
   let group = '';
   for (const def of defs) {

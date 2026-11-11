@@ -18,10 +18,14 @@
   --hl: 1;
   --stripe-a: 0.025;
   --focus-a: 0.04;
-  --focus-hover-a: 0.06;
+  --focus-hover-a: 0.11;
+  /* 行に乗せたときの塗り。ウィジェットのセッションの行（styles.css の --row-hover）とそろえる */
+  --row-hover: rgba(0, 0, 0, 0.07);
   --stripe: rgba(var(--shade-rgb), calc(var(--stripe-a) * var(--hl)));
   --focus-fill: rgba(var(--shade-rgb), calc(var(--focus-a) * var(--hl)));
   --focus-hover: rgba(var(--shade-rgb), calc(var(--focus-hover-a) * var(--hl)));
+  /* 今開いている行の枠（ウィジェットの styles.css の --focus-line とそろえる） */
+  --focus-line: rgba(var(--shade-rgb), calc(0.3 * var(--hl)));
   /* 状態の色。ライトとダークで同じで、設定の色で上書きする（status-colors.ts） */
   --waiting: #e6a100;
   --busy: #3b8eea;
@@ -47,7 +51,8 @@
     --shade-rgb: 255, 255, 255;
     --stripe-a: 0.03;
     --focus-a: 0.06;
-    --focus-hover-a: 0.07;
+    --focus-hover-a: 0.13;
+    --row-hover: rgba(255, 255, 255, 0.10);
   }
 }
 
@@ -80,11 +85,14 @@ svg { width: 14px; height: 14px; flex: none; }
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
   cursor: default;
 }
-.flap svg { width: 12px; height: 12px; stroke-width: 2.5; }
+/* 件数と矢印は行の高さを詰め、矢印を小さくして、めくれ（高さ 32px）の中央に余白を取って寄せる。
+   行の高さ 1.4 と 12px の矢印では、上下の縁との間がほとんど残らなかった */
+.flap-count, .flap-arrow { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.flap svg { width: 10px; height: 10px; stroke-width: 2.75; }
 html[data-side="left"] .flap { right: 0; border-right: 0; border-radius: 8px 0 0 8px; transform-origin: right center; }
 html[data-side="left"] .flap-arrow svg { transform: scaleX(-1); }
 /* 件数の代わりのブランチのアイコン（以前のセッションがなく、分岐元だけを見せるカード） */
-.flap-count svg { width: 11px; height: 11px; stroke-width: 2; }
+.flap-count svg { width: 10px; height: 10px; stroke-width: 2; }
 html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8px 0; transform-origin: left center; }
 /* 伸びる動きは、めくれをカードの端（ウィンドウの端）の向こうから滑り出させて見せる。ウィンドウの外へ出た分は描かれない。
    横に縮める（scaleX）と件数と矢印も縮んでぶれるので、文字の形は変えない */
@@ -161,9 +169,10 @@ html[data-side="right"] .list::before { transform-origin: left top; }
   cursor: default;
 }
 .node.linked { padding-left: 30px; }
-.node:hover { background: var(--hover); }
+.node:hover { background: var(--row-hover); }
 /* デスクトップで今開いているセッション：塗りに斜めのストライプを重ねる（色相は使わない）。濃さは設定で変えられる */
 .node[data-focused] { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-fill); }
+.node[data-focused]:not(:focus-visible) { box-shadow: inset 0 0 0 1px var(--focus-line); }
 .node[data-focused]:hover { background: repeating-linear-gradient(135deg, var(--stripe) 0 5px, transparent 5px 10px), var(--focus-hover); }
 .node .dot {
   position: absolute;
@@ -258,3 +267,18 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .base-root .ln.in { height: calc(50% - 7.5px); }
 .base-root .ln.out { top: calc(50% + 7.5px); }
 .node.base-root .title { color: var(--text-secondary); font-weight: 400; }
+
+/* ---- アイランド型（設定 island、html.island）：質感だけをウィジェットに合わせる。色の変数は変えない ----
+   ウィジェットでは、帯や盆の縁を黒の線で切り、持ち上がった面（カード）には上の辺の細い光と、ぼかしの小さな影を付ける。
+   めくれと一覧も同じにする。めくれは重なりを引き出したつまみ、一覧はその上に重なる面なので、どちらも持ち上がった面として描く。
+   大きくぼかした影は使わない */
+html.island .flap {
+  border-color: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+html.island .list::before {
+  border-color: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+html.island { --row-hover: rgba(255, 255, 255, 0.12); --focus-hover-a: 0.14; }
+html.island .list-foot { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35); }

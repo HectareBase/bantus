@@ -18,6 +18,15 @@ export interface Settings {
   displayByLayout: Record<string, string>;
   /** 広げたときのウィジェットの幅（px）。設定画面には出さず、ウィジェットの内側の端をドラッグして変える */
   width: number;
+  /**
+   * アイランド型（画面の端のベゼルの黒に張り付く一枚の帯）で描く。オンのときは帯をいつも黒で塗り、
+   * 背景とカードの不透明度は使わない（テーマにかかわらず暗い配色にする）
+   */
+  island: boolean;
+  /** アイランド型の内向きの角丸の半径（px。ウィジェットの拡大率をかける） */
+  islandRadius: number;
+  /** アイランド型の縁の黒い線の太さ（px。ウィジェットの拡大率をかける）。帯の内側の端と、帯のない 3 辺の線 */
+  islandLine: number;
   /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
@@ -205,6 +214,9 @@ export const DEFAULT_SETTINGS: Settings = {
   display: 'primary',
   displayByLayout: {},
   width: 264,
+  island: true,
+  islandRadius: 12,
+  islandLine: 1,
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
@@ -326,6 +338,8 @@ interface Base<K extends keyof Settings> {
   packagedOnly?: boolean;
   /** この設定（オンかオフ）がオフのときは、灰色にして押せなくする */
   enabledBy?: BooleanKey;
+  /** この設定（オンかオフ）が value のときだけ出す（関係のないときは灰色にせず、隠す） */
+  shownWhen?: { key: BooleanKey; value: boolean };
 }
 
 /** オンかオフの設定 */
@@ -344,7 +358,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      'edge' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
+      'edge' | 'island' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -354,7 +368,7 @@ export type SettingDef =
   /** オンかオフ。トグルスイッチで描き、横に「オン」「オフ」を出す。ラベルは「〜する」か、オンオフで意味が通る名前にする */
   | (Base<BooleanKey> & { type: 'toggle' })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -403,12 +417,27 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
   },
   {
-    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    key: 'island', category: 'look', group: T.groups.widget, type: 'segmented',
+    ...T.items.island,
+    options: [{ value: true, label: T.options.lookBezel }, { value: false, label: T.options.lookFloat }],
+  },
+  {
+    key: 'islandRadius', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: true },
+    ...T.items.islandRadius,
+    min: 4, max: 32, step: 2, unit: 'px',
+  },
+  {
+    key: 'islandLine', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: true },
+    ...T.items.islandLine,
+    min: 1, max: 6, step: 1, unit: 'px',
+  },
+  {
+    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: false },
     ...T.items.backgroundOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: false },
     ...T.items.cardOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },

@@ -1,12 +1,14 @@
 // サイドバー型ウィジェットのメインプロセス。画面の端に、枠のない透明なウィンドウを置く。
 // 背景の色と濃さは画面側（CSS）で塗る。透明なウィンドウには Mica を使えない。
 
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type Display } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeTheme, Notification, powerMonitor, screen, shell, Tray, type BrowserWindowConstructorOptions, type Display } from 'electron';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
-import { areaWithoutBar, placeWidget, type PlacedBar } from './appbar-place';
-import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
+import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
+import { createBezel, type Bezel } from './bezel';
+import { bezelArea, bezelParts } from './bezel-place';
+import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
@@ -75,6 +77,8 @@ let flashTimer: NodeJS.Timeout | undefined;
 let appBar: AppBar | undefined;
 let appBarRect: PlacedBar | undefined;
 let fullscreenApp = false;
+/** アイランド型の縁取り（帯のない 3 辺の黒い線と角丸）。最前面に固定してアプリバーにしている間だけ出す */
+let bezel: Bezel | undefined;
 /** 本当に終わるところ（トレイの「終了」、OS のシャットダウン）。立っていないときは、ウィジェットを閉じずに隠す */
 let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
@@ -159,6 +163,18 @@ else if (process.env.WIDGET_FIXTURE) app.setPath('userData', `${app.getPath('use
 const HARDWARE_ACCELERATION = getSettings().hardwareAcceleration;
 if (!HARDWARE_ACCELERATION) app.disableHardwareAcceleration();
 
+/**
+ * ネットワークの処理（Chromium の network service）を、別のプロセスでなくメインのプロセスの中で動かす。
+ * このアプリはほとんど通信しないので、別のプロセスを持つ分のメモリ（10MB ほど）を減らす
+ */
+app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
+/**
+ * GPU の処理（画面の合成）も、別のプロセスでなくメインのプロセスの中で動かす。ハードウェア アクセラレーションがオフでも
+ * GPU のプロセスは合成のために残り、40MB ほど使っていた（メインのプロセスは 30MB ほど増え、差し引きで 10MB ほど減る）。
+ * オンのときは付けない。Direct3D の描画面を作れないエラー（EGL_BAD_ALLOC）が続けて出た
+ */
+if (!HARDWARE_ACCELERATION) app.commandLine.appendSwitch('in-process-gpu');
+
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
 const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
 
@@ -240,7 +256,67 @@ function applyAlwaysOnTop(s: Settings) {
 function appBarWanted() {
   const s = getSettings();
   if (!s.pinned || !win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return undefined;
-  return { edge: s.edge, monitor: targetDisplay(s).bounds, width: Math.min(s.width, widthLimit(widgetArea(s).width)) };
+  // アイランド型では、角丸の透明な列の分は取らない（列は隣のウィンドウに重ねる。barOverhang）
+  const width = Math.min(s.width, widthLimit(widgetArea(s).width)) - barOverhang(s, s.zoom / 100);
+  return { edge: s.edge, monitor: targetDisplay(s).bounds, width };
+}
+
+/**
+ * アイランド型の縁取りを、今の状態に合わせて出す・隠す。アイランド型で、最前面に固定してアプリバーにしていて、
+ * ウィジェットが見えていて、全画面のアプリが開いていない間だけ出す。作業領域はアプリバーの分が引かれたもの（Windows の値のまま）
+ */
+function syncBezel() {
+  if (!bezel) return;
+  const s = getSettings();
+  // 最小化している間は触らない。縁取りの窓はウィジェットに従うので、Windows が一緒に隠し、元に戻すと一緒に出す
+  if (win && !win.isDestroyed() && win.isMinimized()) return;
+  // 最小化から戻した直後は、アプリバーを登録し直している途中（appBarRect がない）。Windows が出した縁取りをそのまま残し、
+  // 登録が済んだら（onPlaced）置き直す。固定を外したときなどは pinned か appBarWanted で隠す
+  if (s.island && s.pinned && !appBarRect && !fullscreenApp && appBarWanted()) return;
+  const visible = !!win && !win.isDestroyed() && win.isVisible();
+  if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
+  const d = targetDisplay(s);
+  const zoom = s.zoom / 100;
+  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), Math.round(s.islandRadius * zoom), Math.max(1, Math.round(s.islandLine * zoom))), d.scaleFactor);
+}
+
+/**
+ * アプリバーが動いたあと、少し待ってから縁取りを出し直す。
+ * - すぐには引かない。帯の幅を変えると、Windows がウィジェットを作業領域の中へ一瞬押し込み、keepAppBarBounds が戻す。
+ *   縁取りの窓を作り直すあいだはメインのプロセスが止まり、戻すのが 0.1 秒ほど遅れて、ウィジェットが動いて見えた。戻し終えてから引く
+ * - 作業領域（上下と反対側の辺）は Windows が少し遅れて変えるので、落ち着いたころにもう一度引く
+ */
+let bezelSoon: NodeJS.Timeout | undefined;
+let bezelSettle: NodeJS.Timeout | undefined;
+function syncBezelLater() {
+  if (bezelSoon) clearTimeout(bezelSoon);
+  if (bezelSettle) clearTimeout(bezelSettle);
+  bezelSoon = setTimeout(() => {
+    bezelSoon = undefined;
+    syncBezel();
+  }, 120);
+  bezelSettle = setTimeout(() => {
+    bezelSettle = undefined;
+    syncBezel();
+  }, 500);
+}
+
+/**
+ * 幅を変えて離したときに、押し込まれた場所を見せないよう、ウィジェットを一瞬透明にする（keepAppBarBounds の押し込み）。
+ * アプリバーの場所が決まって戻したら（onPlaced）出し直す。決まらなかったときのために、少し待っても出し直す
+ */
+let veilTimer: NodeJS.Timeout | undefined;
+function veilWidget() {
+  if (!win || win.isDestroyed()) return;
+  win.setOpacity(0);
+  if (veilTimer) clearTimeout(veilTimer);
+  veilTimer = setTimeout(unveilWidget, 400);
+}
+function unveilWidget() {
+  if (veilTimer) clearTimeout(veilTimer);
+  veilTimer = undefined;
+  if (!win || win.isDestroyed() || win.getOpacity() === 1) return;
+  win.setOpacity(1);
 }
 
 /**
@@ -251,15 +327,32 @@ function keepAppBarBounds() {
   if (!appBarRect || !win || win.isDestroyed()) return;
   const want = sidebarBounds();
   const now = win.getBounds();
-  if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) win.setBounds(want);
+  if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) {
+    // 帯の幅を変えると、作業領域が変わったときに Chromium がウィンドウを作業領域の左上の動いた分だけずらす（押し込み）。
+    // 押し込まれた直後（move の中や WM_WINDOWPOSCHANGED の中）に setBounds しても同じだけずらされて戻らず、
+    // アプリバーの場所が決まったあと（onPlaced のころ）にやっと戻る。ここでは move の処理を終えてから戻す。
+    // 戻るまでの 40 ms ほどは押し込まれた場所が見える（アイランド型より前からある動き）。幅を変えたときは veilWidget で透明にして隠す
+    setImmediate(() => {
+      if (!win || win.isDestroyed()) return;
+      win.setBounds(sidebarBounds());
+    });
+  }
+}
+
+/**
+ * クリックを後ろのウィンドウへ通すことがあるか。背景が 0% のときは枠の外、アイランド型のときは帯の内側の角丸の分（帯の外の透明なところ）を通す。
+ * アイランド型では背景を塗らないので、背景の不透明度にかかわらずこちらに従う
+ */
+function canClickThrough(s: Settings): boolean {
+  return s.island || s.backgroundOpacity === 0;
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
+    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -276,8 +369,8 @@ function applyTheme(s: Settings) {
 /** 一覧（めくれ）の状態の色と、今開いている行の強調の濃さと、アニメーション効果。ウィジェットには layout で届く */
 function sendFlyoutColors() {
   const w = flyout?.window();
-  const { statusColors, activeHighlight, motion } = getSettings();
-  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', statusColors, activeHighlight, motion);
+  const { statusColors, activeHighlight, motion, island } = getSettings();
+  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', statusColors, activeHighlight, motion, island);
 }
 
 /** 表示の拡大率（1 で等倍） */
@@ -318,8 +411,10 @@ function applySettings(s: Settings) {
   applyAlwaysOnTop(s);
   // 固定、端、幅、モニターが変わったら、アプリバーを登録し直す（または外す）
   appBar?.sync();
-  // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときに画面側が決める）
-  if (s.backgroundOpacity > 0) win.setIgnoreMouseEvents(false);
+  // アイランド型や拡大率が変わったら、縁取りを出し直す（アプリバーの場所が変わったときは onPlaced からも呼ぶ）
+  syncBezel();
+  // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときとアイランド型のときに画面側が決める）
+  if (!canClickThrough(s)) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
   updateSystemUsage();
 }
@@ -367,6 +462,7 @@ function createWidget(): BrowserWindow {
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
   });
   keepZoom(w);
+  shareRenderer(w);
   w.loadFile(join(WEB, 'index.html'));
   w.once('ready-to-show', () => {
     applySettings(getSettings());
@@ -410,7 +506,10 @@ function createWidget(): BrowserWindow {
   w.on('minimize', updateSystemUsage);
   w.on('restore', updateSystemUsage);
   // 隠したときと最小化したときはアプリバーを外し、出したら登録し直す
-  const syncAppBar = () => appBar?.sync();
+  const syncAppBar = () => {
+    appBar?.sync();
+    syncBezel();
+  };
   w.on('show', syncAppBar);
   w.on('hide', syncAppBar);
   w.on('minimize', syncAppBar);
@@ -424,33 +523,89 @@ function createWidget(): BrowserWindow {
 }
 
 /**
- * ツールチップのウィンドウ。ウィジェットの外（画面の内側）に出すので、別のウィンドウにする。
+ * ツールチップのウィンドウの作り。ウィジェットの外（画面の内側）に出すので、別のウィンドウにする。
  * フォーカスを取らず、クリックは後ろへ通す。出すたびに作ると遅いので、1 つを使い回す
  */
-function createTipWindow(): BrowserWindow {
-  const w = new BrowserWindow({
-    width: 400,
-    height: 200,
-    show: false,
-    frame: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    focusable: false,
-    skipTaskbar: true,
-    transparent: true,
-    hasShadow: false,
-    backgroundColor: '#00000000',
-    // 隠れている間も、大きさを測って返せるようにする
-    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+const TIP_WINDOW_OPTIONS: BrowserWindowConstructorOptions = {
+  width: 400,
+  height: 200,
+  show: false,
+  frame: false,
+  resizable: false,
+  movable: false,
+  minimizable: false,
+  maximizable: false,
+  focusable: false,
+  skipTaskbar: true,
+  transparent: true,
+  hasShadow: false,
+  backgroundColor: '#00000000',
+};
+
+/** ウィジェットの画面が window.open で開く子のウィンドウの名前 */
+const FLYOUT_FRAME = 'bantus-flyout';
+const TIP_FRAME = 'bantus-tip';
+
+/**
+ * めくれと一覧、ツールチップのウィンドウを、ウィジェットの画面から window.open で開かせ、描画のプロセスをウィジェットと分け合う
+ * （同じ場所のページを開いたウィンドウは、開いた側と同じプロセスで動く）。ウィンドウごとにプロセスを持つと、1 つ 25MB ほど使った。
+ * - 作りは setWindowOpenHandler で当てる。ほかの window.open は開かない
+ * - ウィジェットの画面を読み込み直しても、子のウィンドウは残る。読み込み終えるたびに、ないものだけを開かせる
+ *   （同じ名前で開き直すと、Chromium は新しく作らず今のウィンドウを使う）
+ * - 子は 1 つのプロセスを分け合うので、ウィジェットの画面の処理が重いあいだは、めくれとツールチップの描画も待たされる
+ */
+function shareRenderer(w: BrowserWindow) {
+  // 子のウィンドウにも、隠れている間に大きさを測って返せるよう、裏での間引きを止める（ほかの値は親から受け継ぐ）
+  const webPreferences = { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false };
+  w.webContents.setWindowOpenHandler(({ frameName }) => {
+    if (frameName === FLYOUT_FRAME) return { action: 'allow', overrideBrowserWindowOptions: { ...FLYOUT_WINDOW_OPTIONS, webPreferences } };
+    if (frameName === TIP_FRAME) return { action: 'allow', overrideBrowserWindowOptions: { ...TIP_WINDOW_OPTIONS, webPreferences } };
+    return { action: 'deny' };
   });
+  w.webContents.on('did-create-window', (child, { frameName }) => {
+    if (frameName === FLYOUT_FRAME) adoptFlyout(child);
+    else if (frameName === TIP_FRAME) adoptTip(child);
+  });
+  w.webContents.on('did-finish-load', () => {
+    const open: string[] = [];
+    if (!flyout || flyout.window().isDestroyed()) open.push(`window.open('flyout.html', '${FLYOUT_FRAME}')`);
+    if (!tipWin || tipWin.isDestroyed()) open.push(`window.open('tip.html', '${TIP_FRAME}')`);
+    if (open.length > 0) w.webContents.executeJavaScript(`${open.join(';')};0`).catch((e) => console.error('めくれとツールチップのウィンドウを開けませんでした：', e));
+  });
+}
+
+function adoptTip(w: BrowserWindow) {
+  tipWin = w;
   w.setIgnoreMouseEvents(true);
   // 固定したウィジェットより前に出す
   w.setAlwaysOnTop(true, 'pop-up-menu');
   keepZoom(w);
-  w.loadFile(join(WEB, 'tip.html'));
-  return w;
+  w.webContents.setZoomFactor(zoomFactor());
+}
+
+function adoptFlyout(w: BrowserWindow) {
+  // 作るのは 1 度だけ（ipcMain の受け口を重ねない）。ウィジェットが閉じるまで同じウィンドウを使う
+  if (flyout) return;
+  flyout = createFlyout({
+    window: w,
+    widget: () => win,
+    edge: () => getSettings().edge,
+    area: () => widgetArea(getSettings()),
+    zoom: zoomFactor,
+    overhang: () => barOverhang(getSettings(), zoomFactor()),
+    onAction: (action) => win?.webContents.send('fly-action', action),
+    onHover: (key) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
+    },
+    onState: (key, open) => {
+      if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
+    },
+  });
+  keepZoom(w);
+  w.webContents.setZoomFactor(zoomFactor());
+  w.webContents.on('did-finish-load', sendFlyoutColors);
+  if (!w.webContents.isLoading()) sendFlyoutColors();
+  if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 }
 
 /** ツールチップの中身の大きさ（CSS px）が届いたら、置いて見せる */
@@ -645,7 +800,8 @@ function widthAtCursor(): number {
   const area = widgetArea(s);
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
-  return clampWidth(w, area.width);
+  // アイランド型では取っ手が帯の内側の端（ウィンドウの端から角丸の列の分だけ内側）にあるので、列の分を足してウィンドウの幅にする
+  return clampWidth(w + barOverhang(s, s.zoom / 100), area.width);
 }
 
 /**
@@ -878,36 +1034,24 @@ app.whenReady().then(() => {
   }
   applyTheme(getSettings());
   win = createWidget();
+  bezel = createBezel(() => win);
   appBar = createAppBar({
     window: () => win,
     wanted: appBarWanted,
     onPlaced: (bar) => {
       appBarRect = bar;
       if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+      // 戻した場所が描かれてから出し直す（同じ処理の中で出すと、押し込まれた場所の絵が一瞬見えた）
+      if (veilTimer) setTimeout(unveilWidget, 16);
+      syncBezelLater();
     },
     onFullscreen: (on) => {
       fullscreenApp = on;
       applyAlwaysOnTop(getSettings());
+      syncBezel();
     },
   });
-  tipWin = createTipWindow();
-  flyout = createFlyout({
-    preload: PRELOAD,
-    web: WEB,
-    widget: () => win,
-    edge: () => getSettings().edge,
-    area: () => widgetArea(getSettings()),
-    zoom: zoomFactor,
-    onAction: (action) => win?.webContents.send('fly-action', action),
-    onHover: (key) => {
-      if (win && !win.isDestroyed()) win.webContents.send('fly-hover', key);
-    },
-    onState: (key, open) => {
-      if (win && !win.isDestroyed()) win.webContents.send('fly-state', key, open);
-    },
-  });
-  keepZoom(flyout.window());
-  flyout.window().webContents.on('did-finish-load', sendFlyoutColors);
+  // めくれと一覧、ツールチップのウィンドウは、ウィジェットの画面が読み込み終えたら開く（shareRenderer）
   applyZoom();
   tray = createTray();
   const stopWatching = watchSessions(() => sendSessions());
@@ -943,11 +1087,13 @@ app.whenReady().then(() => {
     if (dragWidth === undefined) return;
     const width = dragWidth;
     dragWidth = undefined;
+    // アプリバーの幅が変わると、Chromium がウィジェットを一瞬押し込む。そのあいだ透明にして隠す
+    if (appBarRect && width !== getSettings().width) veilWidget();
     updateSettings({ width });
   });
   ipcMain.on('set-click-through', (_e, value: unknown) => {
     // forward: true で、クリックは通してもマウスの移動は画面側に届き続ける（カードに乗ったら戻せる）
-    if (getSettings().backgroundOpacity === 0) win?.setIgnoreMouseEvents(value === true, { forward: true });
+    if (canClickThrough(getSettings())) win?.setIgnoreMouseEvents(value === true, { forward: true });
   });
   ipcMain.on('open-settings', () => openSettingsWindow());
   ipcMain.on('set-pinned', (_e, value: unknown) => {
@@ -1014,8 +1160,6 @@ app.whenReady().then(() => {
   ipcMain.on('tip:size', (_e, width: unknown, height: unknown) => {
     if (typeof width === 'number' && typeof height === 'number') placeTip(width, height);
   });
-  // ウィジェットのイベント（隠す・最小化など）は createWidget で登録する。めくれより先に出ていたときだけ、ここで知らせる
-  if (win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
 
   // HTML ビューア（docs/design/html-viewer.md）。画面からはセッションの ID と場所だけを受け取り、パスはこちらで引く
   viewer = createViewer({
@@ -1111,9 +1255,26 @@ app.whenReady().then(() => {
   };
   // つないだ・外した直後は、モニターの一覧や作業領域が何度か続けて変わる。すぐ置き直し、落ち着いたころにもう一度読み直す
   const settle = settleTimers(reposition);
-  screen.on('display-metrics-changed', () => {
+  // Windows の拡大率が変わったとき。Windows は窓（ウィジェットと縁取り）の大きさを新しい拡大率に合わせて変え、作業領域も少し遅れて変わる。
+  // アプリバーの場所を DIP で覚え直し（同じ物理ピクセルでも DIP が変わる）、縁取りは作り直し、落ち着いたころにもう一度置き直す
+  const rescale = () => {
+    if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+    appBar?.refresh();
+    bezel?.reset();
+    syncBezelLater();
+  };
+  const settleScale = settleTimers(rescale);
+  screen.on('display-metrics-changed', (_e, _display, changed) => {
+    if (changed.includes('scaleFactor')) {
+      rescale();
+      settleScale(DISPLAY_SETTLE_MS);
+      return;
+    }
     if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
     appBar?.sync();
+    // タスクバーが動いたなど、アプリバーの場所は同じでも作業領域が変わることがある。
+    // 帯の幅を変えたときもここへ来る。すぐ作り直すとメインのプロセスが 0.1 秒ほど止まり、ウィジェットを戻すのが遅れるので、少し待つ
+    syncBezelLater();
   });
   screen.on('display-added', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
   screen.on('display-removed', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
@@ -1128,6 +1289,7 @@ app.whenReady().then(() => {
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();
+    bezel?.destroy();
     // アプリバーを外す（外さないと、ほかのウィンドウの最大化が帯の分だけ狭いまま残る）
     appBar?.stop();
     tray?.destroy();

@@ -86,3 +86,12 @@ export function placeWidget(edge: Edge, area: Rect, width: number, bar: PlacedBa
   else x = (own ? own.x + own.width : area.x + area.width) - width;
   return { x, y: area.y, width, height: area.height };
 }
+
+/**
+ * ウィンドウのうち、アプリバーとして画面の幅を取らない分（DIP）。アイランド型では、ウィンドウの内側の端に角丸と縁の線を描く透明な列があり
+ * （styles.css の --island-col。角丸の半径と線の太さの和）、そこまで取ると最大化したウィンドウとのあいだに列の幅の隙間ができる。
+ * 列は隣のウィンドウに重ね（クリックは後ろへ通す）、アプリバーは帯の幅だけを取る。拡大率をかけると CSS px が DIP で大きくなるので、zoom（1 で等倍）をかける
+ */
+export function barOverhang(s: { island: boolean; islandRadius: number; islandLine: number }, zoom: number): number {
+  return s.island ? Math.round((s.islandRadius + s.islandLine) * zoom) : 0;
+}
