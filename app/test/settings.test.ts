@@ -20,6 +20,13 @@ describe('git の設定', () => {
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
   it('アイランド型のときは、背景とカードの不透明度を押せなくする', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.disabledBy === 'island').map((d) => d.key), ['backgroundOpacity', 'cardOpacity']));
+  it('角の丸みと縁の太さは、アイランド型のときだけ変えられる', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'island').map((d) => d.key), ['islandRadius', 'islandLine']));
+  it('角の丸みと縁の太さは範囲に収める', () => {
+    const s = normalizeSettings({ islandRadius: 100, islandLine: 0 });
+    assert.deepEqual([s.islandRadius, s.islandLine], [32, 1]);
+    assert.deepEqual([DEFAULT_SETTINGS.islandRadius, DEFAULT_SETTINGS.islandLine], [12, 1]);
+  });
   it('ボタンは設定の値を持たない', () => assert.equal('gitFetchNow' in normalizeSettings({ gitFetchNow: true }), false));
 });
 
@@ -227,7 +234,7 @@ describe('設定画面のカテゴリ', () => {
   it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['テーマ', ['theme']],
-      ['ウィジェット', ['island', 'backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
+      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
       ['状態の色', ['motion', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>

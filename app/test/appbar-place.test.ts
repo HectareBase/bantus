@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ISLAND_FILLET, abEdge, areaWithoutBar, barOverhang, fitWidth, fromLtrb, placeWidget, proposeRect, sameLtrb, toLtrb } from '../src/main/appbar-place';
+import { abEdge, areaWithoutBar, barOverhang, fitWidth, fromLtrb, placeWidget, proposeRect, sameLtrb, toLtrb } from '../src/main/appbar-place';
 
 const monitor = { left: 0, top: 0, right: 1920, bottom: 1080 };
 
@@ -102,12 +102,14 @@ describe('placeWidget', () => {
 });
 
 describe('barOverhang', () => {
-  it('アイランド型でなければ、ウィンドウの幅をすべてアプリバーにする', () => assert.equal(barOverhang(false, 1), 0));
-  it('アイランド型なら、角丸の列の分を取らない', () => assert.equal(barOverhang(true, 1), ISLAND_FILLET));
-  it('拡大率をかける', () => assert.equal(barOverhang(true, 1.5), 18));
-  it('帯の右端の側にそろえると、ウィンドウは帯から列の分だけ内側へはみ出す', () => {
+  const island = { island: true, islandRadius: 12, islandLine: 1 };
+  it('アイランド型でなければ、ウィンドウの幅をすべてアプリバーにする', () => assert.equal(barOverhang({ ...island, island: false }, 1), 0));
+  it('アイランド型なら、角丸と縁の線の列の分を取らない', () => assert.equal(barOverhang(island, 1), 13));
+  it('縁の線を太くすると、列も広がる', () => assert.equal(barOverhang({ ...island, islandRadius: 20, islandLine: 4 }, 1), 24));
+  it('拡大率をかける', () => assert.equal(barOverhang(island, 1.5), 20));
+  it('帯の右端の側にそろえると、ウィンドウは帯より列の分だけ内側へはみ出す', () => {
     const bar = { edge: 'right' as const, rect: { x: 1920 - 288, y: 0, width: 288, height: 1040 } };
-    const placed = placeWidget('right', { x: 0, y: 0, width: 1920, height: 1040 }, 288 + barOverhang(true, 1), bar);
-    assert.equal(placed.x, 1920 - 288 - ISLAND_FILLET);
+    const placed = placeWidget('right', { x: 0, y: 0, width: 1920, height: 1040 }, 288 + barOverhang(island, 1), bar);
+    assert.equal(placed.x, 1920 - 288 - 13);
   });
 });

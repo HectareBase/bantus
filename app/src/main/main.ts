@@ -245,7 +245,7 @@ function appBarWanted() {
   const s = getSettings();
   if (!s.pinned || !win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return undefined;
   // アイランド型では、角丸の透明な列の分は取らない（列は隣のウィンドウに重ねる。barOverhang）
-  const width = Math.min(s.width, widthLimit(widgetArea(s).width)) - barOverhang(s.island, s.zoom / 100);
+  const width = Math.min(s.width, widthLimit(widgetArea(s).width)) - barOverhang(s, s.zoom / 100);
   return { edge: s.edge, monitor: targetDisplay(s).bounds, width };
 }
 
@@ -259,7 +259,8 @@ function syncBezel() {
   const visible = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
   const d = targetDisplay(s);
-  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), barOverhang(true, s.zoom / 100)));
+  const zoom = s.zoom / 100;
+  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), Math.round(s.islandRadius * zoom), Math.max(1, Math.round(s.islandLine * zoom))));
 }
 
 /**
@@ -330,11 +331,11 @@ function canClickThrough(s: Settings): boolean {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, island, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, island, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
+    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -726,7 +727,7 @@ function widthAtCursor(): number {
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
   // アイランド型では取っ手が帯の内側の端（ウィンドウの端から角丸の列の分だけ内側）にあるので、列の分を足してウィンドウの幅にする
-  return clampWidth(w + barOverhang(s.island, s.zoom / 100), area.width);
+  return clampWidth(w + barOverhang(s, s.zoom / 100), area.width);
 }
 
 /**

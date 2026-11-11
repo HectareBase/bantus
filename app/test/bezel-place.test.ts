@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BEZEL_LINE, BEZEL_WINDOW, bezelArea, bezelParts, filletRows } from '../src/main/bezel-place';
+import { BEZEL_WINDOW, bezelArea, bezelParts, filletRows } from '../src/main/bezel-place';
 
 describe('filletRows', () => {
   it('上の行ほど広く、下の行ほど狭い（ベゼルの辺から帯の辺へなめらかにつなぐ）', () => {
@@ -16,50 +16,57 @@ describe('bezelParts', () => {
   const area = { x: 288, y: 48, width: 2784, height: 1680 };
 
   it('上の辺・下の辺・反対側の辺の 3 枚', () =>
-    assert.deepEqual(bezelParts('left', area, 12).map((p) => p.name), ['top', 'bottom', 'far']));
+    assert.deepEqual(bezelParts('left', area, 12, 1).map((p) => p.name), ['top', 'bottom', 'far']));
 
-  it('上と下の辺は作業領域の幅いっぱいで、高さは Windows の最小の大きさより大きく取る。線はいちばん外側の 1 行', () => {
-    const [top, bottom] = bezelParts('left', area, 12);
+  it('上と下の辺は作業領域の幅いっぱいで、高さは Windows の最小の大きさより大きく取る。線はいちばん外側の線の太さの分', () => {
+    const [top, bottom] = bezelParts('left', area, 12, 3);
     assert.deepEqual(top!.rect, { x: 288, y: 48, width: 2784, height: BEZEL_WINDOW });
     assert.deepEqual(bottom!.rect, { x: 288, y: 48 + 1680 - BEZEL_WINDOW, width: 2784, height: BEZEL_WINDOW });
-    assert.deepEqual(top!.shape[0], { x: 0, y: 0, width: 2784, height: BEZEL_LINE });
-    assert.deepEqual(bottom!.shape[0], { x: 0, y: BEZEL_WINDOW - BEZEL_LINE, width: 2784, height: BEZEL_LINE });
+    assert.deepEqual(top!.shape[0], { x: 0, y: 0, width: 2784, height: 3 });
+    assert.deepEqual(bottom!.shape[0], { x: 0, y: BEZEL_WINDOW - 3, width: 2784, height: 3 });
   });
 
   it('窓はどれも Windows の最小の大きさ（幅 29・高さ 38 DIP ほど）より大きい', () => {
-    for (const p of bezelParts('left', area, 12)) assert.ok(p.rect.width >= 40 && p.rect.height >= 40, p.name);
+    for (const p of bezelParts('left', area, 12, 1)) assert.ok(p.rect.width >= 40 && p.rect.height >= 40, p.name);
   });
 
-  it('角の箱の行はすべて塗り、反対側の線とすき間なくつなぐ', () => {
-    const [top] = bezelParts('left', area, 12);
-    assert.deepEqual(top!.shape.slice(1).map((r) => r.y), Array.from({ length: 12 }, (_, i) => i));
-    assert.ok(top!.shape.slice(1).every((r) => r.width >= BEZEL_LINE));
+  it('角丸と線が窓より大きければ、窓も大きくする', () => {
+    const [top, , far] = bezelParts('left', area, 40, 6);
+    assert.equal(top!.rect.height, 46);
+    assert.equal(far!.rect.width, 46);
+  });
+
+  it('角丸は上の線のすぐ下から 1 行ずつ塗り、反対側の線の太さの分も続けて塗る', () => {
+    const [top] = bezelParts('left', area, 12, 3);
+    assert.deepEqual(top!.shape.slice(1).map((r) => r.y), Array.from({ length: 12 }, (_, i) => 3 + i));
+    assert.deepEqual(top!.shape.slice(1).map((r) => r.width), filletRows(12).map((w) => w + 3));
   });
 
   it('帯が左なら、反対側の線は作業領域の右の端に引き、角丸は右の角に付ける', () => {
-    const [top, , far] = bezelParts('left', area, 12);
+    const [top, , far] = bezelParts('left', area, 12, 2);
     assert.equal(far!.rect.x + far!.rect.width, 288 + 2784);
-    assert.deepEqual([far!.rect.y, far!.rect.height], [48 + 12, 1680 - 24]);
-    // 線は窓の右の端の 1 列
-    assert.deepEqual(far!.shape, [{ x: BEZEL_WINDOW - BEZEL_LINE, y: 0, width: BEZEL_LINE, height: 1680 - 24 }]);
+    // 線と角丸の箱の分だけ上下を空ける
+    assert.deepEqual([far!.rect.y, far!.rect.height], [48 + 14, 1680 - 28]);
+    // 線は窓の右の端の線の太さの分
+    assert.deepEqual(far!.shape, [{ x: BEZEL_WINDOW - 2, y: 0, width: 2, height: 1680 - 28 }]);
     for (const r of top!.shape.slice(1)) assert.equal(r.x + r.width, 2784);
   });
 
   it('帯が右なら、反対側の線は作業領域の左の端に引き、角丸は左の角に付ける', () => {
-    const [top, bottom, far] = bezelParts('right', { ...area, x: 0 }, 12);
+    const [top, bottom, far] = bezelParts('right', { ...area, x: 0 }, 12, 1);
     assert.equal(far!.rect.x, 0);
     assert.equal(far!.shape[0]!.x, 0);
     for (const r of [...top!.shape.slice(1), ...bottom!.shape.slice(1)]) assert.equal(r.x, 0);
   });
 
   it('下の辺の角丸は上の辺の角丸を上下に返した形', () => {
-    const [top, bottom] = bezelParts('left', area, 12);
+    const [top, bottom] = bezelParts('left', area, 12, 2);
     const t = top!.shape.slice(1).map((r) => [r.y, r.width]);
     const b = bottom!.shape.slice(1).map((r) => [BEZEL_WINDOW - 1 - r.y, r.width]);
     assert.deepEqual(b, t);
   });
 
-  it('作業領域が小さすぎれば何も描かない', () => assert.deepEqual(bezelParts('left', { x: 0, y: 0, width: 10, height: 10 }, 12), []));
+  it('作業領域が小さすぎれば何も描かない', () => assert.deepEqual(bezelParts('left', { x: 0, y: 0, width: 20, height: 20 }, 12, 1), []));
 });
 
 describe('bezelArea', () => {

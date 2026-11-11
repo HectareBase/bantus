@@ -758,12 +758,13 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
 /* ---- アイランド型（設定 island、html.island） ----
    ウィジェットを、画面の端のベゼルの黒が内側へ張り出した一枚の帯に見せる。帯（body）は真っ黒で、画面の端に余白なしで付ける。
    帯の内側の辺の上端と下端には内向きの角丸（--fillet）を付け、上下のベゼルとなめらかにつなぐ。
-   角丸はウィンドウの中に描くので、ウィンドウの内側の端に --fillet の幅の透明な列を残す（帯はその分だけ細い）。
+   角丸はウィンドウの中に描くので、ウィンドウの内側の端に透明な列（--island-col。角丸と縁の線の太さの和）を残す（帯はその分だけ細い）。
    列のクリックは後ろのウィンドウへ通す（renderer.ts の mousemove。的が html のとき）。
-   最前面に固定したときのアプリバーは帯の幅だけを取り、列は隣のウィンドウに重ねる（appbar-place.ts の barOverhang。値は ISLAND_FILLET とそろえる）。
+   最前面に固定したときのアプリバーは帯の幅だけを取り、列は隣のウィンドウに重ねる（appbar-place.ts の barOverhang）。
+   角丸の半径（--fillet）と縁の線の太さ（--edge-cover）は設定（islandRadius、islandLine）から renderer.ts が入れる
    帯はベゼルの色なので、テーマにかかわらず黒にし、配色はダークにそろえる。背景とカードの不透明度は使わない。
    リポジトリの枠、カード、見出しの帯、重なり、行の作りはそのままで、色の値だけを黒の地に合わせる */
-:root { --fillet: 12px; }
+:root { --fillet: 12px; --edge-cover: 1px; --island-col: calc(var(--fillet) + var(--edge-cover)); }
 html.island {
   color-scheme: dark;
   --text: #ffffff;
@@ -801,15 +802,16 @@ html.island[data-motion="subtle"] { --stripe-a: 0.08; }
 html.island body { background: #000; }
 /* 帯の内側の端の外へ、黒い線（--edge-cover）を透明な列に描く。隣のウィンドウの端に Windows が描く明るい枠の線は、
    アプリバーの境（帯の内側の端）に来るので、それを覆って隠す。枠の線は物理ピクセルで 1px なので、1px（拡大率 100% 以上では 1 物理ピクセル以上）で足りる。
-   太くすると隣のウィンドウの中身まで隠す。影はポインターの的にならないので、列のクリックは今までどおり後ろへ通る */
-:root { --edge-cover: 1px; }
+   太くすると縁が目立つ（隣のウィンドウの端も隠れる）。影はポインターの的にならないので、列のクリックは今までどおり後ろへ通る */
 html.island:not([data-edge="left"]) body { box-shadow: calc(-1 * var(--edge-cover)) 0 0 #000; }
 html.island[data-edge="left"] body { box-shadow: var(--edge-cover) 0 0 #000; }
-html.island:not([data-edge="left"]) body { margin-left: var(--fillet); }
-html.island[data-edge="left"] body { margin-right: var(--fillet); }
+html.island:not([data-edge="left"]) body { margin-left: var(--island-col); }
+html.island[data-edge="left"] body { margin-right: var(--island-col); }
 
 /* 内向きの角丸。透明な列の上端と下端に、ベゼル（画面の上下の端）と帯をつなぐ黒い四分円の外側を描く。
-   円の中心は列の外側（帯から遠い側）の角に置き、円の内側を透かす */
+   角丸は縁の線の内側につなぐ（帯の側は --edge-cover の線、上下は画面の端から --edge-cover の線）。
+   上下の線は、角丸の箱の影（box-shadow）で箱の上（下）に描く。外側の影は箱の下には描かれないので、円の内側は透けたまま。
+   円の中心は箱の外側（帯から遠い側）の角に置き、円の内側を透かす */
 html.island::before, html.island::after {
   content: "";
   position: fixed;
@@ -820,8 +822,8 @@ html.island::before, html.island::after {
   --fillet-in: calc(var(--fillet) - 0.5px);
   --fillet-out: calc(var(--fillet) + 0.5px);
 }
-html.island::before { top: 0; }
-html.island::after { bottom: 0; }
+html.island::before { top: var(--edge-cover); box-shadow: 0 calc(-1 * var(--edge-cover)) 0 #000; }
+html.island::after { bottom: var(--edge-cover); box-shadow: 0 var(--edge-cover) 0 #000; }
 html.island:not([data-edge="left"])::before, html.island:not([data-edge="left"])::after { left: 0; }
 html.island[data-edge="left"]::before, html.island[data-edge="left"]::after { right: 0; }
 html.island:not([data-edge="left"])::before { background: radial-gradient(circle var(--fillet) at 0 100%, transparent var(--fillet-in), #000 var(--fillet-out)); }
@@ -830,8 +832,8 @@ html.island[data-edge="left"]::before { background: radial-gradient(circle var(-
 html.island[data-edge="left"]::after { background: radial-gradient(circle var(--fillet) at 100% 0, transparent var(--fillet-in), #000 var(--fillet-out)); }
 
 /* 幅を変える取っ手は、透明な列ではなく帯の内側の端に置く（列のクリックは後ろへ通すため） */
-html.island:not([data-edge="left"]) .resize-handle { left: var(--fillet); }
-html.island[data-edge="left"] .resize-handle { right: var(--fillet); }
+html.island:not([data-edge="left"]) .resize-handle { left: var(--island-col); }
+html.island[data-edge="left"] .resize-handle { right: var(--island-col); }
 
 /* タイトルバーは帯と一体にする（枠と塗りを付けない） */
 html.island .titlebar { background: transparent; border-color: transparent; margin: 4px 8px 4px; }

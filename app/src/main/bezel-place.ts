@@ -18,12 +18,6 @@ export interface BezelPart {
 }
 
 /**
- * 線の太さ（DIP）。隣のウィンドウの枠の線は物理ピクセルで 1px。形は DIP の整数でしか渡せないので 1 にする
- * （拡大率 100% 以上では 1 物理ピクセル以上になり、枠の線を覆える）
- */
-export const BEZEL_LINE = 1;
-
-/**
  * 縁取りの窓の短い辺の長さ（DIP）。Windows には窓の最小の大きさ（幅 29・高さ 38 DIP ほど）があり、
  * それより小さく置くと窓が広げられ、画面に収めるために内側へ押し出された（反対側の線が画面の端から 30px ほど内側に出た）。
  * 最小より大きく取り、線と角丸は窓の画面の端の側だけに塗る（残りは透明でクリックも通る）
@@ -47,37 +41,41 @@ export function filletRows(radius: number): number[] {
 }
 
 /**
- * 縁取りの 3 枚。edge はウィジェットを置いた端、area は作業領域（帯の分は引かれている。DIP）、radius は角丸の半径（DIP）。
+ * 縁取りの 3 枚。edge はウィジェットを置いた端、area は作業領域（帯の分は引かれている。DIP）、
+ * radius は角丸の半径、line は線の太さ（どちらも DIP）。角丸は線の内側の角につなぐ。
  * 作業領域が角丸を描けないほど小さいときは何も返さない
  */
-export function bezelParts(edge: Edge, area: Rect, radius: number): BezelPart[] {
+export function bezelParts(edge: Edge, area: Rect, radius: number, line: number): BezelPart[] {
   const r = Math.max(1, Math.round(radius));
-  if (area.width < r * 2 || area.height < r * 2) return [];
+  const l = Math.max(1, Math.round(line));
+  // 角の箱（線の分を含む）
+  const corner = r + l;
+  if (area.width < corner * 2 || area.height < corner * 2) return [];
   const w = area.width;
-  // 窓の高さ（上と下の辺）と幅（反対側の辺）。角丸より大きく、Windows の最小の大きさより大きく取る
-  const t = Math.max(r, BEZEL_WINDOW);
+  // 窓の高さ（上と下の辺）と幅（反対側の辺）。角の箱より大きく、Windows の最小の大きさより大きく取る
+  const t = Math.max(corner, BEZEL_WINDOW);
   const rows = filletRows(r);
-  // 反対側の角の箱。左に帯があれば右の角、右に帯があれば左の角
+  // 反対側の角。左に帯があれば右の角、右に帯があれば左の角
   const farRight = edge === 'left';
   const filletRect = (y: number, width: number): Rect => (farRight ? { x: w - width, y, width, height: 1 } : { x: 0, y, width, height: 1 });
-  const top: Rect[] = [{ x: 0, y: 0, width: w, height: BEZEL_LINE }];
+  const top: Rect[] = [{ x: 0, y: 0, width: w, height: l }];
   // 下の辺の窓は下の端にそろえて置くので、線と角丸は窓の下の端から描く
-  const bottom: Rect[] = [{ x: 0, y: t - BEZEL_LINE, width: w, height: BEZEL_LINE }];
+  const bottom: Rect[] = [{ x: 0, y: t - l, width: w, height: l }];
   rows.forEach((width, i) => {
-    // 円の下の端の近くは幅が 0 になるが、反対側の線は角の箱の中も通す（線の太さは塗る）。そうしないと線との間にすき間が空く
-    const wide = Math.max(width, BEZEL_LINE);
-    // 上の辺の角は、箱の上の行ほど広い（rows はそのまま）。下の辺の角は上下を返す
-    top.push(filletRect(i, wide));
-    bottom.push(filletRect(t - 1 - i, wide));
+    // 角丸の行は、反対側の線の分（l）も続けて塗る。円の下の端の近くは角丸の幅が 0 になり、線の太さだけが残る
+    const wide = width + l;
+    // 上の辺の角は、上の線のすぐ下から、箱の上の行ほど広い（rows はそのまま）。下の辺の角は上下を返す
+    top.push(filletRect(l + i, wide));
+    bottom.push(filletRect(t - 1 - l - i, wide));
   });
-  const farHeight = area.height - r * 2;
+  const farHeight = area.height - corner * 2;
   return [
     { name: 'top', rect: { x: area.x, y: area.y, width: w, height: t }, shape: top },
     { name: 'bottom', rect: { x: area.x, y: area.y + area.height - t, width: w, height: t }, shape: bottom },
     {
       name: 'far',
-      rect: { x: farRight ? area.x + w - t : area.x, y: area.y + r, width: t, height: farHeight },
-      shape: [{ x: farRight ? t - BEZEL_LINE : 0, y: 0, width: BEZEL_LINE, height: farHeight }],
+      rect: { x: farRight ? area.x + w - t : area.x, y: area.y + corner, width: t, height: farHeight },
+      shape: [{ x: farRight ? t - l : 0, y: 0, width: l, height: farHeight }],
     },
   ];
 }

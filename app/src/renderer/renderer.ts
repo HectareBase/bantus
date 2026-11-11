@@ -1076,6 +1076,8 @@ function applyLayout(layout: WidgetLayout) {
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
   root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
   root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
+  root.style.setProperty('--fillet', `${layout.islandRadius}px`);
+  root.style.setProperty('--edge-cover', `${layout.islandLine}px`);
   applyStatusColors(layout.statusColors);
   applyHighlight(layout.activeHighlight);
   applyMotion(layout.motion);

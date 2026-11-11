@@ -23,6 +23,10 @@ export interface Settings {
    * 背景とカードの不透明度は使わない（テーマにかかわらず暗い配色にする）
    */
   island: boolean;
+  /** アイランド型の内向きの角丸の半径（px。ウィジェットの拡大率をかける） */
+  islandRadius: number;
+  /** アイランド型の縁の黒い線の太さ（px。ウィジェットの拡大率をかける）。帯の内側の端と、帯のない 3 辺の線 */
+  islandLine: number;
   /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
@@ -211,6 +215,8 @@ export const DEFAULT_SETTINGS: Settings = {
   displayByLayout: {},
   width: 264,
   island: true,
+  islandRadius: 12,
+  islandLine: 1,
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
@@ -362,7 +368,7 @@ export type SettingDef =
   /** オンかオフ。トグルスイッチで描き、横に「オン」「オフ」を出す。ラベルは「〜する」か、オンオフで意味が通る名前にする */
   | (Base<BooleanKey> & { type: 'toggle' })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -413,6 +419,16 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'island', category: 'look', group: T.groups.widget, type: 'toggle',
     ...T.items.island,
+  },
+  {
+    key: 'islandRadius', category: 'look', group: T.groups.widget, type: 'slider', enabledBy: 'island',
+    ...T.items.islandRadius,
+    min: 4, max: 32, step: 2, unit: 'px',
+  },
+  {
+    key: 'islandLine', category: 'look', group: T.groups.widget, type: 'slider', enabledBy: 'island',
+    ...T.items.islandLine,
+    min: 1, max: 6, step: 1, unit: 'px',
   },
   {
     key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider', disabledBy: 'island',
