@@ -799,6 +799,12 @@ html.island[data-motion="subtle"] { --stripe-a: 0.08; }
 
 /* 帯。内側に角丸の分の透明な列を残す */
 html.island body { background: #000; }
+/* 帯の内側の端の外へ、黒い線（--edge-cover）を透明な列に描く。隣のウィンドウの端に Windows が描く明るい枠の線は、
+   アプリバーの境（帯の内側の端）に来るので、それを覆って隠す。枠の線は物理ピクセルで 1px なので、1px（拡大率 100% 以上では 1 物理ピクセル以上）で足りる。
+   太くすると隣のウィンドウの中身まで隠す。影はポインターの的にならないので、列のクリックは今までどおり後ろへ通る */
+:root { --edge-cover: 1px; }
+html.island:not([data-edge="left"]) body { box-shadow: calc(-1 * var(--edge-cover)) 0 0 #000; }
+html.island[data-edge="left"] body { box-shadow: var(--edge-cover) 0 0 #000; }
 html.island:not([data-edge="left"]) body { margin-left: var(--fillet); }
 html.island[data-edge="left"] body { margin-right: var(--fillet); }
 

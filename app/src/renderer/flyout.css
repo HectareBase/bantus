@@ -80,11 +80,14 @@ svg { width: 14px; height: 14px; flex: none; }
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
   cursor: default;
 }
-.flap svg { width: 12px; height: 12px; stroke-width: 2.5; }
+/* 件数と矢印は行の高さを詰め、矢印を小さくして、めくれ（高さ 32px）の中央に余白を取って寄せる。
+   行の高さ 1.4 と 12px の矢印では、上下の縁との間がほとんど残らなかった */
+.flap-count, .flap-arrow { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.flap svg { width: 10px; height: 10px; stroke-width: 2.75; }
 html[data-side="left"] .flap { right: 0; border-right: 0; border-radius: 8px 0 0 8px; transform-origin: right center; }
 html[data-side="left"] .flap-arrow svg { transform: scaleX(-1); }
 /* 件数の代わりのブランチのアイコン（以前のセッションがなく、分岐元だけを見せるカード） */
-.flap-count svg { width: 11px; height: 11px; stroke-width: 2; }
+.flap-count svg { width: 10px; height: 10px; stroke-width: 2; }
 html[data-side="right"] .flap { left: 0; border-left: 0; border-radius: 0 8px 8px 0; transform-origin: left center; }
 /* 伸びる動きは、めくれをカードの端（ウィンドウの端）の向こうから滑り出させて見せる。ウィンドウの外へ出た分は描かれない。
    横に縮める（scaleX）と件数と矢印も縮んでぶれるので、文字の形は変えない */
