@@ -86,3 +86,15 @@ export function placeWidget(edge: Edge, area: Rect, width: number, bar: PlacedBa
   else x = (own ? own.x + own.width : area.x + area.width) - width;
   return { x, y: area.y, width, height: area.height };
 }
+
+/** アイランド型の内向きの角丸の半径（CSS px）。styles.css の --fillet と同じ値にする */
+export const ISLAND_FILLET = 12;
+
+/**
+ * ウィンドウのうち、アプリバーとして画面の幅を取らない分（DIP）。アイランド型では、ウィンドウの内側の端に角丸を描く透明な列があり、
+ * そこまで取ると最大化したウィンドウとのあいだに列の幅の隙間ができる。列は隣のウィンドウに重ね（クリックは後ろへ通す）、
+ * アプリバーは帯の幅だけを取る。拡大率をかけると CSS px が DIP で大きくなるので、zoom（1 で等倍）をかける
+ */
+export function barOverhang(island: boolean, zoom: number): number {
+  return island ? Math.round(ISLAND_FILLET * zoom) : 0;
+}

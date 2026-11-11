@@ -760,6 +760,7 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
    帯の内側の辺の上端と下端には内向きの角丸（--fillet）を付け、上下のベゼルとなめらかにつなぐ。
    角丸はウィンドウの中に描くので、ウィンドウの内側の端に --fillet の幅の透明な列を残す（帯はその分だけ細い）。
    列のクリックは後ろのウィンドウへ通す（renderer.ts の mousemove。的が html のとき）。
+   最前面に固定したときのアプリバーは帯の幅だけを取り、列は隣のウィンドウに重ねる（appbar-place.ts の barOverhang。値は ISLAND_FILLET とそろえる）。
    帯はベゼルの色なので、テーマにかかわらず黒にし、配色はダークにそろえる。背景とカードの不透明度は使わない。
    リポジトリの枠、カード、見出しの帯、重なり、行の作りはそのままで、色の値だけを黒の地に合わせる */
 :root { --fillet: 12px; }

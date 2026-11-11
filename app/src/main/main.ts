@@ -5,7 +5,7 @@ import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeThe
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
-import { areaWithoutBar, placeWidget, type PlacedBar } from './appbar-place';
+import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -240,7 +240,9 @@ function applyAlwaysOnTop(s: Settings) {
 function appBarWanted() {
   const s = getSettings();
   if (!s.pinned || !win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) return undefined;
-  return { edge: s.edge, monitor: targetDisplay(s).bounds, width: Math.min(s.width, widthLimit(widgetArea(s).width)) };
+  // アイランド型では、角丸の透明な列の分は取らない（列は隣のウィンドウに重ねる。barOverhang）
+  const width = Math.min(s.width, widthLimit(widgetArea(s).width)) - barOverhang(s.island, s.zoom / 100);
+  return { edge: s.edge, monitor: targetDisplay(s).bounds, width };
 }
 
 /**
@@ -653,7 +655,8 @@ function widthAtCursor(): number {
   const area = widgetArea(s);
   const cursor = screen.getCursorScreenPoint();
   const w = s.edge === 'left' ? cursor.x - area.x : area.x + area.width - cursor.x;
-  return clampWidth(w, area.width);
+  // アイランド型では取っ手が帯の内側の端（ウィンドウの端から角丸の列の分だけ内側）にあるので、列の分を足してウィンドウの幅にする
+  return clampWidth(w + barOverhang(s.island, s.zoom / 100), area.width);
 }
 
 /**

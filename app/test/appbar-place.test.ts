@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { abEdge, areaWithoutBar, fitWidth, fromLtrb, placeWidget, proposeRect, sameLtrb, toLtrb } from '../src/main/appbar-place';
+import { ISLAND_FILLET, abEdge, areaWithoutBar, barOverhang, fitWidth, fromLtrb, placeWidget, proposeRect, sameLtrb, toLtrb } from '../src/main/appbar-place';
 
 const monitor = { left: 0, top: 0, right: 1920, bottom: 1080 };
 
@@ -98,5 +98,16 @@ describe('placeWidget', () => {
   it('端を変えた直後（帯がまだ前の端）は、帯を使わない', () => {
     const bar = { edge: 'left' as const, rect: { x: 0, y: 0, width: 400, height: 1040 } };
     assert.deepEqual(placeWidget('right', area, 400, bar), { x: 1520, y: 0, width: 400, height: 1040 });
+  });
+});
+
+describe('barOverhang', () => {
+  it('アイランド型でなければ、ウィンドウの幅をすべてアプリバーにする', () => assert.equal(barOverhang(false, 1), 0));
+  it('アイランド型なら、角丸の列の分を取らない', () => assert.equal(barOverhang(true, 1), ISLAND_FILLET));
+  it('拡大率をかける', () => assert.equal(barOverhang(true, 1.5), 18));
+  it('帯の右端の側にそろえると、ウィンドウは帯から列の分だけ内側へはみ出す', () => {
+    const bar = { edge: 'right' as const, rect: { x: 1920 - 288, y: 0, width: 288, height: 1040 } };
+    const placed = placeWidget('right', { x: 0, y: 0, width: 1920, height: 1040 }, 288 + barOverhang(true, 1), bar);
+    assert.equal(placed.x, 1920 - 288 - ISLAND_FILLET);
   });
 });
