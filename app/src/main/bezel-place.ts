@@ -24,6 +24,13 @@ export interface BezelPart {
 export const BEZEL_LINE = 1;
 
 /**
+ * 縁取りの窓の短い辺の長さ（DIP）。Windows には窓の最小の大きさ（幅 29・高さ 38 DIP ほど）があり、
+ * それより小さく置くと窓が広げられ、画面に収めるために内側へ押し出された（反対側の線が画面の端から 30px ほど内側に出た）。
+ * 最小より大きく取り、線と角丸は窓の画面の端の側だけに塗る（残りは透明でクリックも通る）
+ */
+export const BEZEL_WINDOW = 40;
+
+/**
  * 内向きの角丸を、横 1 行ずつの黒い帯で表す。返すのは、角の箱（radius × radius）の上から i 行目で、
  * 円の中心から遠い側の端から数えて黒く塗る幅。円の中心は箱の角（作業領域の内側の角）に置く。
  * 行の真ん中の高さで円の外側にある分を塗る（ぎざぎざは 1 行ごとの段になる。ウィンドウの形にはぼかしがない）
@@ -47,27 +54,30 @@ export function bezelParts(edge: Edge, area: Rect, radius: number): BezelPart[] 
   const r = Math.max(1, Math.round(radius));
   if (area.width < r * 2 || area.height < r * 2) return [];
   const w = area.width;
+  // 窓の高さ（上と下の辺）と幅（反対側の辺）。角丸より大きく、Windows の最小の大きさより大きく取る
+  const t = Math.max(r, BEZEL_WINDOW);
   const rows = filletRows(r);
   // 反対側の角の箱。左に帯があれば右の角、右に帯があれば左の角
   const farRight = edge === 'left';
   const filletRect = (y: number, width: number): Rect => (farRight ? { x: w - width, y, width, height: 1 } : { x: 0, y, width, height: 1 });
   const top: Rect[] = [{ x: 0, y: 0, width: w, height: BEZEL_LINE }];
-  const bottom: Rect[] = [{ x: 0, y: r - BEZEL_LINE, width: w, height: BEZEL_LINE }];
+  // 下の辺の窓は下の端にそろえて置くので、線と角丸は窓の下の端から描く
+  const bottom: Rect[] = [{ x: 0, y: t - BEZEL_LINE, width: w, height: BEZEL_LINE }];
   rows.forEach((width, i) => {
     // 円の下の端の近くは幅が 0 になるが、反対側の線は角の箱の中も通す（線の太さは塗る）。そうしないと線との間にすき間が空く
     const wide = Math.max(width, BEZEL_LINE);
     // 上の辺の角は、箱の上の行ほど広い（rows はそのまま）。下の辺の角は上下を返す
     top.push(filletRect(i, wide));
-    bottom.push(filletRect(r - 1 - i, wide));
+    bottom.push(filletRect(t - 1 - i, wide));
   });
   const farHeight = area.height - r * 2;
   return [
-    { name: 'top', rect: { x: area.x, y: area.y, width: w, height: r }, shape: top },
-    { name: 'bottom', rect: { x: area.x, y: area.y + area.height - r, width: w, height: r }, shape: bottom },
+    { name: 'top', rect: { x: area.x, y: area.y, width: w, height: t }, shape: top },
+    { name: 'bottom', rect: { x: area.x, y: area.y + area.height - t, width: w, height: t }, shape: bottom },
     {
       name: 'far',
-      rect: { x: farRight ? area.x + w - BEZEL_LINE : area.x, y: area.y + r, width: BEZEL_LINE, height: farHeight },
-      shape: [{ x: 0, y: 0, width: BEZEL_LINE, height: farHeight }],
+      rect: { x: farRight ? area.x + w - t : area.x, y: area.y + r, width: t, height: farHeight },
+      shape: [{ x: farRight ? t - BEZEL_LINE : 0, y: 0, width: BEZEL_LINE, height: farHeight }],
     },
   ];
 }
