@@ -4,7 +4,9 @@
 // 窓は透明にし、黒い所の形を setShape で切り出す（形の中だけを背景色の黒で塗る）。形の外は描かれない。
 // 透明にしないと、setShape の外も Windows の既定の灰色で塗られて見えた。窓は細い帯なので、透明の合成の負荷は小さい。
 // 線の上のクリックも通すよう、setIgnoreMouseEvents(true) にする。ほかのウィンドウの前に出し、フォーカスは取らない。
-// 窓は 3 枚。隠すときは hide するだけで、場所か形が変わったときだけ作り直す。
+// 窓は 5 枚。隠すときは hide するだけで、場所か形が変わったときだけ作り直す。
+// 窓はウィジェットに従わせる（owner）。ウィジェットを最小化すると Windows が一緒に隠し、元に戻すと一緒に出す。
+// こちらで隠して元に戻った知らせを待って出し直すと、ウィジェットが見えてから少し遅れて黒い枠が出て、ちらついた。
 // 作った窓の場所と大きさを setBounds で変えると、Windows の窓の最小の大きさ（高さ 38 DIP ほど）に引っかかり、
 // 広げられなかったり、下の辺の窓が上へずれたりした。作った直後の 1 回目の setBounds は思ったとおりに置けるので、作り直す。
 // Web のページを持たない窓なので、作り直しは軽い。
@@ -32,7 +34,7 @@ export interface Bezel {
 }
 
 /** Windows 以外では何もしないものを返す（setShape は Windows と Linux だけ） */
-export function createBezel(): Bezel {
+export function createBezel(owner: () => BaseWindow | undefined): Bezel {
   if (process.platform !== 'win32') return { show: () => {}, hide: () => {}, reset: () => {}, destroy: () => {} };
   const windows = new Map<BezelPart['name'], BaseWindow>();
   /** 最後に当てた場所と形。同じなら当て直さない（ちらつかせない） */
@@ -41,8 +43,10 @@ export function createBezel(): Bezel {
   function windowFor(name: BezelPart['name'], picture: boolean): BaseWindow {
     let w = windows.get(name);
     if (w && !w.isDestroyed()) return w;
+    const parent = owner();
     w = new BaseWindow({
       show: false,
+      parent: parent && !parent.isDestroyed() ? parent : undefined,
       frame: false,
       // 枠のない窓に Windows が付ける見えない縁（大きさを変える所）を付けない。付けると、置いた場所から線がずれる
       thickFrame: false,

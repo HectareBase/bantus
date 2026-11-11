@@ -256,7 +256,12 @@ function appBarWanted() {
 function syncBezel() {
   if (!bezel) return;
   const s = getSettings();
-  const visible = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+  // 最小化している間は触らない。縁取りの窓はウィジェットに従うので、Windows が一緒に隠し、元に戻すと一緒に出す
+  if (win && !win.isDestroyed() && win.isMinimized()) return;
+  // 最小化から戻した直後は、アプリバーを登録し直している途中（appBarRect がない）。Windows が出した縁取りをそのまま残し、
+  // 登録が済んだら（onPlaced）置き直す。固定を外したときなどは pinned か appBarWanted で隠す
+  if (s.island && s.pinned && !appBarRect && !fullscreenApp && appBarWanted()) return;
+  const visible = !!win && !win.isDestroyed() && win.isVisible();
   if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
   const d = targetDisplay(s);
   const zoom = s.zoom / 100;
@@ -960,7 +965,7 @@ app.whenReady().then(() => {
   }
   applyTheme(getSettings());
   win = createWidget();
-  bezel = createBezel();
+  bezel = createBezel(() => win);
   appBar = createAppBar({
     window: () => win,
     wanted: appBarWanted,
