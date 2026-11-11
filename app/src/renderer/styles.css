@@ -789,7 +789,9 @@ html.island {
   --focus-pressed-a: 0.04;
   --ctx-full: #ff6b62;
   --ctx-track: rgba(255, 255, 255, 0.14);
-  background: transparent;
+  /* html の背景が透明（色が transparent で画像なし）だと、body の黒がウィンドウ全体（キャンバス）に広がり、
+     角丸の分の透明な列まで黒くなる。透明な画像を敷いて、body の背景が広がらないようにする */
+  background: linear-gradient(transparent, transparent);
 }
 html.island[data-motion="subtle"] { --stripe-a: 0.08; }
 
