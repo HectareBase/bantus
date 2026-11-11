@@ -254,12 +254,20 @@ function keepAppBarBounds() {
   if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) win.setBounds(want);
 }
 
+/**
+ * クリックを後ろのウィンドウへ通すことがあるか。背景が 0% のときは枠の外、アイランド型のときは帯の内側の角丸の分（帯の外の透明なところ）を通す。
+ * アイランド型では背景を塗らないので、背景の不透明度にかかわらずこちらに従う
+ */
+function canClickThrough(s: Settings): boolean {
+  return s.island || s.backgroundOpacity === 0;
+}
+
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
+    edge, island, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -318,8 +326,8 @@ function applySettings(s: Settings) {
   applyAlwaysOnTop(s);
   // 固定、端、幅、モニターが変わったら、アプリバーを登録し直す（または外す）
   appBar?.sync();
-  // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときに画面側が決める）
-  if (s.backgroundOpacity > 0) win.setIgnoreMouseEvents(false);
+  // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときとアイランド型のときに画面側が決める）
+  if (!canClickThrough(s)) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
   updateSystemUsage();
 }
@@ -947,7 +955,7 @@ app.whenReady().then(() => {
   });
   ipcMain.on('set-click-through', (_e, value: unknown) => {
     // forward: true で、クリックは通してもマウスの移動は画面側に届き続ける（カードに乗ったら戻せる）
-    if (getSettings().backgroundOpacity === 0) win?.setIgnoreMouseEvents(value === true, { forward: true });
+    if (canClickThrough(getSettings())) win?.setIgnoreMouseEvents(value === true, { forward: true });
   });
   ipcMain.on('open-settings', () => openSettingsWindow());
   ipcMain.on('set-pinned', (_e, value: unknown) => {

@@ -1023,8 +1023,10 @@ resizeHandle.addEventListener('lostpointercapture', () => {
   window.widget.resizeEnd();
 });
 
-// 背景が 0% のときは、リポジトリの枠やタイトルバーのない所のクリックを後ろのウィンドウへ通す
+// 背景が 0% のときは、リポジトリの枠やタイトルバーのない所のクリックを後ろのウィンドウへ通す。
+// アイランド型のときは、帯（body）の外の透明なところ（内側の角丸の分の細い列）だけを通す。そこではポインターの的が html になる
 let floating = false;
+let island = false;
 let clickThrough = false;
 function setClickThrough(value: boolean) {
   if (value === clickThrough) return;
@@ -1032,6 +1034,10 @@ function setClickThrough(value: boolean) {
   window.widget.setClickThrough(value);
 }
 document.addEventListener('mousemove', (e) => {
+  if (island) {
+    setClickThrough(e.target === document.documentElement);
+    return;
+  }
   if (!floating) return;
   const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit, .viewer');
   setClickThrough(!solid);
@@ -1077,9 +1083,11 @@ function applyLayout(layout: WidgetLayout) {
   root.classList.toggle('hide-state', !layout.showState);
   root.classList.toggle('hide-context', !layout.showContext);
   root.classList.toggle('hide-system-usage', !layout.showSystemUsage);
-  floating = backgroundOpacity === 0;
+  island = layout.island;
+  root.classList.toggle('island', island);
+  floating = !island && backgroundOpacity === 0;
   root.classList.toggle('floating', floating);
-  if (!floating) clickThrough = false;
+  if (!floating && !island) clickThrough = false;
 }
 window.widget.onLayout(applyLayout);
 initSystemUsage();

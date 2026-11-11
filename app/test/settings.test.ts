@@ -18,6 +18,8 @@ describe('git の設定', () => {
   });
   it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
+  it('アイランド型のときは、背景とカードの不透明度を押せなくする', () =>
+    assert.deepEqual(SETTING_DEFS.filter((d) => d.disabledBy === 'island').map((d) => d.key), ['backgroundOpacity', 'cardOpacity']));
   it('ボタンは設定の値を持たない', () => assert.equal('gitFetchNow' in normalizeSettings({ gitFetchNow: true }), false));
 });
 
@@ -225,7 +227,7 @@ describe('設定画面のカテゴリ', () => {
   it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['テーマ', ['theme']],
-      ['ウィジェット', ['backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
+      ['ウィジェット', ['island', 'backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
       ['状態の色', ['motion', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>

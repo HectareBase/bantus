@@ -44,7 +44,7 @@ function set<K extends keyof Settings>(key: K, value: Settings[K]) {
   // 状態の色の見本の行を、アニメーション効果に合わせて描く
   if (key === 'motion') applyMotion(value as Settings['motion']);
   // この設定で押せるかが決まる項目があれば、描き直す
-  if (SETTING_DEFS.some((d) => d.enabledBy === key)) void renderContent();
+  if (SETTING_DEFS.some((d) => d.enabledBy === key || d.disabledBy === key)) void renderContent();
 }
 
 // ---- ボタン（type: 'action'）の横に出す結果 ----
@@ -332,7 +332,7 @@ async function renderContent() {
       content.append(await control(def, false));
       continue;
     }
-    const disabled = (def.packagedOnly === true && !packaged) || (def.enabledBy !== undefined && !settings[def.enabledBy]);
+    const disabled = (def.packagedOnly === true && !packaged) || (def.enabledBy !== undefined && !settings[def.enabledBy]) || (def.disabledBy !== undefined && settings[def.disabledBy]);
     const node = card(def.label, def.description, await control(def, disabled), def.type === 'text');
     if (disabled) node.classList.add('disabled');
     content.append(node);

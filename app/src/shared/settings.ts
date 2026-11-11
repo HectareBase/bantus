@@ -18,6 +18,11 @@ export interface Settings {
   displayByLayout: Record<string, string>;
   /** 広げたときのウィジェットの幅（px）。設定画面には出さず、ウィジェットの内側の端をドラッグして変える */
   width: number;
+  /**
+   * アイランド型（画面の端のベゼルの黒に張り付く一枚の帯）で描く。オンのときは帯をいつも黒で塗り、
+   * 背景とカードの不透明度は使わない（テーマにかかわらず暗い配色にする）
+   */
+  island: boolean;
   /** 背景の不透明度（%）。0 で背景が消え、カードとタイトルバーだけが浮かぶ */
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
@@ -205,6 +210,7 @@ export const DEFAULT_SETTINGS: Settings = {
   display: 'primary',
   displayByLayout: {},
   width: 264,
+  island: true,
   backgroundOpacity: 100,
   cardOpacity: 50,
   headerShade: 5,
@@ -326,6 +332,8 @@ interface Base<K extends keyof Settings> {
   packagedOnly?: boolean;
   /** この設定（オンかオフ）がオフのときは、灰色にして押せなくする */
   enabledBy?: BooleanKey;
+  /** この設定（オンかオフ）がオンのときは、灰色にして押せなくする */
+  disabledBy?: BooleanKey;
 }
 
 /** オンかオフの設定 */
@@ -403,12 +411,16 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
   },
   {
-    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    key: 'island', category: 'look', group: T.groups.widget, type: 'toggle',
+    ...T.items.island,
+  },
+  {
+    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider', disabledBy: 'island',
     ...T.items.backgroundOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider',
+    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider', disabledBy: 'island',
     ...T.items.cardOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },

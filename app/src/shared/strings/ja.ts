@@ -247,6 +247,7 @@ export const ja = {
       },
       tooltipDelayMs: { label: '表示までの時間', description: 'マウスポインターを合わせてから出るまで。右端にすると表示しない' },
       theme: { label: '配色', description: 'ウィジェットと設定の明るさ。システムは Windows の設定に従う' },
+      island: { label: 'アイランド型', description: '画面の端のベゼルにつながる黒い帯で表示する。オンのときは背景とカードの不透明度を使わない' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
       headerShade: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% で区切り線だけになる' },
