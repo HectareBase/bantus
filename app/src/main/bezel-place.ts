@@ -71,3 +71,20 @@ export function bezelParts(edge: Edge, area: Rect, radius: number): BezelPart[] 
     },
   ];
 }
+
+/**
+ * 縁取りを引く範囲（DIP）。上下と反対側の辺は作業領域から、帯の側の端は登録したアプリバー（bar）の内側の端から取る。
+ * 幅を変えたりアイランド型を切り替えたりした直後は、アプリバーは動いても Electron の作業領域が古いままのことがあり、
+ * 作業領域だけで決めると、帯の側の端が古い場所（角丸の列の分ずれた所など）に残った。
+ * bar が別の端にあるとき（端を変えた直後）は作業領域のまま
+ */
+export function bezelArea(edge: Edge, workArea: Rect, bar: { edge: Edge; rect: Rect } | undefined): Rect {
+  if (!bar || bar.edge !== edge) return workArea;
+  const right = workArea.x + workArea.width;
+  if (edge === 'left') {
+    const x = bar.rect.x + bar.rect.width;
+    return { x, y: workArea.y, width: Math.max(0, right - x), height: workArea.height };
+  }
+  const end = bar.rect.x;
+  return { x: workArea.x, y: workArea.y, width: Math.max(0, end - workArea.x), height: workArea.height };
+}

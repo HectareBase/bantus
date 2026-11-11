@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
 import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
 import { createBezel, type Bezel } from './bezel';
-import { bezelParts } from './bezel-place';
+import { bezelArea, bezelParts } from './bezel-place';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -259,7 +259,21 @@ function syncBezel() {
   const visible = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
   const d = targetDisplay(s);
-  bezel.show(bezelParts(s.edge, d.workArea, barOverhang(true, s.zoom / 100)));
+  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), barOverhang(true, s.zoom / 100)));
+}
+
+/**
+ * アプリバーが動いたあと、少し待ってから縁取りを出し直す。作業領域（上下と反対側の辺）は Windows が少し遅れて変えるので、
+ * 落ち着いたころの値で引き直す
+ */
+let bezelSettle: NodeJS.Timeout | undefined;
+function syncBezelLater() {
+  syncBezel();
+  if (bezelSettle) clearTimeout(bezelSettle);
+  bezelSettle = setTimeout(() => {
+    bezelSettle = undefined;
+    syncBezel();
+  }, 500);
 }
 
 /**
@@ -918,7 +932,7 @@ app.whenReady().then(() => {
     onPlaced: (bar) => {
       appBarRect = bar;
       if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
-      syncBezel();
+      syncBezelLater();
     },
     onFullscreen: (on) => {
       fullscreenApp = on;

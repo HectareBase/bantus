@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BEZEL_LINE, bezelParts, filletRows } from '../src/main/bezel-place';
+import { BEZEL_LINE, bezelArea, bezelParts, filletRows } from '../src/main/bezel-place';
 
 describe('filletRows', () => {
   it('上の行ほど広く、下の行ほど狭い（ベゼルの辺から帯の辺へなめらかにつなぐ）', () => {
@@ -53,4 +53,20 @@ describe('bezelParts', () => {
   });
 
   it('作業領域が小さすぎれば何も描かない', () => assert.deepEqual(bezelParts('left', { x: 0, y: 0, width: 10, height: 10 }, 12), []));
+});
+
+describe('bezelArea', () => {
+  // 作業領域が古いまま（帯を広げる前の内側の端 288）
+  const stale = { x: 288, y: 48, width: 2784, height: 1680 };
+
+  it('帯が左なら、左の端はアプリバーの内側の端にそろえ、右の端は作業領域のまま', () =>
+    assert.deepEqual(bezelArea('left', stale, { edge: 'left', rect: { x: 0, y: 48, width: 359, height: 1680 } }), { x: 359, y: 48, width: 3072 - 359, height: 1680 }));
+
+  it('帯が右なら、右の端はアプリバーの内側の端にそろえ、左の端は作業領域のまま', () =>
+    assert.deepEqual(bezelArea('right', { x: 0, y: 48, width: 2784, height: 1680 }, { edge: 'right', rect: { x: 2700, y: 48, width: 372, height: 1680 } }), { x: 0, y: 48, width: 2700, height: 1680 }));
+
+  it('アプリバーがない、または別の端にあれば作業領域のまま', () => {
+    assert.deepEqual(bezelArea('left', stale, undefined), stale);
+    assert.deepEqual(bezelArea('left', stale, { edge: 'right', rect: { x: 2700, y: 48, width: 372, height: 1680 } }), stale);
+  });
 });
