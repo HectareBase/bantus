@@ -260,7 +260,7 @@ function syncBezel() {
   if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
   const d = targetDisplay(s);
   const zoom = s.zoom / 100;
-  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), Math.round(s.islandRadius * zoom), Math.max(1, Math.round(s.islandLine * zoom))));
+  bezel.show(bezelParts(s.edge, bezelArea(s.edge, d.workArea, appBarRect), Math.round(s.islandRadius * zoom), Math.max(1, Math.round(s.islandLine * zoom))), d.scaleFactor);
 }
 
 /**
