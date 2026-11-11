@@ -824,6 +824,10 @@ html.island::before, html.island::after {
 }
 html.island::before { top: var(--edge-cover); box-shadow: 0 calc(-1 * var(--edge-cover)) 0 #000; }
 html.island::after { bottom: var(--edge-cover); box-shadow: 0 var(--edge-cover) 0 #000; }
+/* 最前面に固定していないときは縁取りの窓（上下の線）を出さないので、角丸は画面の上下の端（ベゼル）にじかにつなぐ。
+   線の内側につなぐと、列の幅だけの線に角丸がぶつかって途切れて見えた */
+html.island:not(.pinned)::before { top: 0; box-shadow: none; }
+html.island:not(.pinned)::after { bottom: 0; box-shadow: none; }
 html.island:not([data-edge="left"])::before, html.island:not([data-edge="left"])::after { left: 0; }
 html.island[data-edge="left"]::before, html.island[data-edge="left"]::after { right: 0; }
 html.island:not([data-edge="left"])::before { background: radial-gradient(circle var(--fillet) at 0 100%, transparent var(--fillet-in), #000 var(--fillet-out)); }

@@ -999,6 +999,8 @@ const pinButton = document.getElementById('pin')!;
 let pinned = true;
 function showPinned(value: boolean) {
   pinned = value;
+  // アイランド型の角丸のつなぎ方を変える（固定している間だけ、画面の上下に縁取りの線がある）
+  document.documentElement.classList.toggle('pinned', value);
   pinButton.setAttribute('aria-pressed', String(pinned));
   pinButton.dataset.tip = pinned ? ja.widget.pinned : ja.widget.pin;
 }
