@@ -338,8 +338,8 @@ interface Base<K extends keyof Settings> {
   packagedOnly?: boolean;
   /** この設定（オンかオフ）がオフのときは、灰色にして押せなくする */
   enabledBy?: BooleanKey;
-  /** この設定（オンかオフ）がオンのときは、灰色にして押せなくする */
-  disabledBy?: BooleanKey;
+  /** この設定（オンかオフ）が value のときだけ出す（関係のないときは灰色にせず、隠す） */
+  shownWhen?: { key: BooleanKey; value: boolean };
 }
 
 /** オンかオフの設定 */
@@ -358,7 +358,7 @@ export function isCardKey(key: unknown): key is string {
 
 export type SettingDef =
   | (Base<
-      'edge' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
+      'edge' | 'island' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -417,26 +417,27 @@ export const SETTING_DEFS: SettingDef[] = [
     options: [{ value: 'system', label: T.options.themeSystem }, { value: 'light', label: T.options.themeLight }, { value: 'dark', label: T.options.themeDark }],
   },
   {
-    key: 'island', category: 'look', group: T.groups.widget, type: 'toggle',
+    key: 'island', category: 'look', group: T.groups.widget, type: 'segmented',
     ...T.items.island,
+    options: [{ value: true, label: T.options.lookBezel }, { value: false, label: T.options.lookFloat }],
   },
   {
-    key: 'islandRadius', category: 'look', group: T.groups.widget, type: 'slider', enabledBy: 'island',
+    key: 'islandRadius', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: true },
     ...T.items.islandRadius,
     min: 4, max: 32, step: 2, unit: 'px',
   },
   {
-    key: 'islandLine', category: 'look', group: T.groups.widget, type: 'slider', enabledBy: 'island',
+    key: 'islandLine', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: true },
     ...T.items.islandLine,
     min: 1, max: 6, step: 1, unit: 'px',
   },
   {
-    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider', disabledBy: 'island',
+    key: 'backgroundOpacity', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: false },
     ...T.items.backgroundOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider', disabledBy: 'island',
+    key: 'cardOpacity', category: 'look', group: T.groups.widget, type: 'slider', shownWhen: { key: 'island', value: false },
     ...T.items.cardOpacity,
     min: 0, max: 100, step: 5, unit: '%',
   },

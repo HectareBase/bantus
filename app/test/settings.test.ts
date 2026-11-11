@@ -18,10 +18,16 @@ describe('git の設定', () => {
   });
   it('間隔と「今すぐ取得」は、取得がオフのとき押せない', () =>
     assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'gitFetch').map((d) => d.key), ['gitFetchMinutes', 'gitFetchNow']));
-  it('アイランド型のときは、背景とカードの不透明度を押せなくする', () =>
-    assert.deepEqual(SETTING_DEFS.filter((d) => d.disabledBy === 'island').map((d) => d.key), ['backgroundOpacity', 'cardOpacity']));
-  it('角の丸みと縁の太さは、アイランド型のときだけ変えられる', () =>
-    assert.deepEqual(SETTING_DEFS.filter((d) => d.enabledBy === 'island').map((d) => d.key), ['islandRadius', 'islandLine']));
+  it('表示のかたちはベゼルとフロートの 2 択', () => {
+    const def = SETTING_DEFS.find((d) => d.key === 'island');
+    assert.equal(def?.type, 'segmented');
+    assert.deepEqual(def?.type === 'segmented' && def.options.map((o) => o.value), [true, false]);
+  });
+  it('ベゼルのときだけ角の丸みと縁の太さを出し、フロートのときだけ背景とカードの不透明度を出す', () => {
+    const shown = (value: boolean) => SETTING_DEFS.filter((d) => d.shownWhen?.key === 'island' && d.shownWhen.value === value).map((d) => d.key);
+    assert.deepEqual(shown(true), ['islandRadius', 'islandLine']);
+    assert.deepEqual(shown(false), ['backgroundOpacity', 'cardOpacity']);
+  });
   it('角の丸みと縁の太さは範囲に収める', () => {
     const s = normalizeSettings({ islandRadius: 100, islandLine: 0 });
     assert.deepEqual([s.islandRadius, s.islandLine], [32, 1]);
@@ -193,9 +199,9 @@ describe('normalizeSettings の行の上下の余白', () => {
 });
 
 describe('設定画面のトグルスイッチ', () => {
-  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 は選択肢のまま）', () => {
+  it('既定値がオンかオフの項目は、トグルスイッチで出す（HTML の高さの 自動／手動 と、表示のかたちの ベゼル／フロート は選択肢のまま）', () => {
     for (const d of SETTING_DEFS) {
-      if (d.type === 'action' || d.key === 'viewerAutoHeight') continue;
+      if (d.type === 'action' || d.key === 'viewerAutoHeight' || d.key === 'island') continue;
       if (typeof DEFAULT_SETTINGS[d.key] === 'boolean') assert.equal(d.type, 'toggle', d.key);
     }
   });
