@@ -770,7 +770,7 @@ html.island {
   --text-secondary: #c8c8c8;
   --text-tertiary: #9a9a9a;
   --bg-rgb: 0, 0, 0;
-  --card-rgb: 32, 32, 32;
+  --card-rgb: 52, 52, 52;
   --card: rgb(var(--card-rgb));
   --shade-rgb: 255, 255, 255;
   --card-stroke: rgba(255, 255, 255, 0.07);
@@ -833,13 +833,13 @@ html.island main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16
 
 /* リポジトリ（プロジェクト）は、帯の面から一段沈んだ盆に見せる。盆の地は帯より明るい灰色にし、
    上の縁から内側へ濃い影を落とし（左右にも少し）、下の縁だけを細く明るくする（光が上から当たって、手前の縁が光る）。
-   盆と盆のあいだは帯の黒なので、プロジェクトの区切りがはっきりする。
+   盆と盆のあいだは帯の黒なので、プロジェクトの区切りがはっきりする。盆の灰色は、暗い画面でも黒と見分けがつくよう #2a2a2a まで上げる（#141414 では黒と区別しにくかった）。
    カードは盆の中から帯の面の高さまで持ち上がって見えるよう、盆の地より明るい塗りに、上の辺の細い光と、盆へ落ちる影を付ける。
    影は小さくぼかすだけにする（大きなぼかしは GPU を使わない既定ではスクロールのたびに重い） */
 html.island .repo {
-  background: linear-gradient(180deg, #060606 0, #121212 14px, #141414 100%);
+  background: linear-gradient(180deg, #121212 0, #282828 12px, #2a2a2a 100%);
   border: 1px solid #000;
-  border-bottom-color: rgba(255, 255, 255, 0.13);
+  border-bottom-color: rgba(255, 255, 255, 0.18);
   box-shadow:
     inset 0 5px 6px -3px rgba(0, 0, 0, 0.95),
     inset 4px 0 5px -4px rgba(0, 0, 0, 0.8),
