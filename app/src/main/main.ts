@@ -168,6 +168,12 @@ if (!HARDWARE_ACCELERATION) app.disableHardwareAcceleration();
  * このアプリはほとんど通信しないので、別のプロセスを持つ分のメモリ（10MB ほど）を減らす
  */
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
+/**
+ * GPU の処理（画面の合成）も、別のプロセスでなくメインのプロセスの中で動かす。ハードウェア アクセラレーションがオフでも
+ * GPU のプロセスは合成のために残り、40MB ほど使っていた（メインのプロセスは 30MB ほど増え、差し引きで 10MB ほど減る）。
+ * オンのときは付けない。Direct3D の描画面を作れないエラー（EGL_BAD_ALLOC）が続けて出た
+ */
+if (!HARDWARE_ACCELERATION) app.commandLine.appendSwitch('in-process-gpu');
 
 /** トレイと設定ウィンドウに出す名前。ワークツリー版はワークツリー名を添えて、いつものウィジェットと見分ける */
 const APP_LABEL = WORKTREE ? ja.app.worktreeLabel(WORKTREE) : ja.app.name;
