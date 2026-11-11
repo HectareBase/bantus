@@ -314,7 +314,8 @@ function setOpen(animate: boolean) {
   reportSolid();
 }
 
-window.flyoutApi.onColors((colors, highlight, motion) => {
+window.flyoutApi.onColors((colors, highlight, motion, island) => {
+  document.documentElement.classList.toggle('island', island);
   applyStatusColors(colors);
   applyHighlight(highlight);
   applyMotion(motion);

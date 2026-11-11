@@ -286,8 +286,8 @@ function applyTheme(s: Settings) {
 /** 一覧（めくれ）の状態の色と、今開いている行の強調の濃さと、アニメーション効果。ウィジェットには layout で届く */
 function sendFlyoutColors() {
   const w = flyout?.window();
-  const { statusColors, activeHighlight, motion } = getSettings();
-  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', statusColors, activeHighlight, motion);
+  const { statusColors, activeHighlight, motion, island } = getSettings();
+  if (w && !w.isDestroyed()) w.webContents.send('fly:colors', statusColors, activeHighlight, motion, island);
 }
 
 /** 表示の拡大率（1 で等倍） */

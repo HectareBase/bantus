@@ -258,3 +258,17 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .base-root .ln.in { height: calc(50% - 7.5px); }
 .base-root .ln.out { top: calc(50% + 7.5px); }
 .node.base-root .title { color: var(--text-secondary); font-weight: 400; }
+
+/* ---- アイランド型（設定 island、html.island）：質感だけをウィジェットに合わせる。色の変数は変えない ----
+   ウィジェットでは、帯や盆の縁を黒の線で切り、持ち上がった面（カード）には上の辺の細い光と、ぼかしの小さな影を付ける。
+   めくれと一覧も同じにする。めくれは重なりを引き出したつまみ、一覧はその上に重なる面なので、どちらも持ち上がった面として描く。
+   大きくぼかした影は使わない */
+html.island .flap {
+  border-color: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+html.island .list::before {
+  border-color: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 8px rgba(0, 0, 0, 0.55);
+}
+html.island .list-foot { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35); }

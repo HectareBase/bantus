@@ -333,7 +333,8 @@ export interface FlyoutApi {
   /** クリックを受け取る場所（ウィンドウの中の座標）。ほかはクリックを下へ通す */
   reportSolid(rects: TipRect[]): void;
   /** 状態の色と、今開いている行の強調の濃さ（設定）。読み込んだときと、設定が変わったときに届く */
-  onColors(listener: (colors: StatusColors, highlight: number, motion: Motion) => void): void;
+  /** island はアイランド型か（めくれと一覧の縁と影をウィジェットに合わせる。色は変えない） */
+  onColors(listener: (colors: StatusColors, highlight: number, motion: Motion, island: boolean) => void): void;
   /** めくれが押された */
   requestOpen(): void;
   action(action: FlyAction): void;

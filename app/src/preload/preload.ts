@@ -91,7 +91,9 @@ const flyoutApi: FlyoutApi = {
   },
   reportSolid: (rects) => ipcRenderer.send('fly:solid', rects),
   onColors: (listener) => {
-    ipcRenderer.on('fly:colors', (_e, colors: StatusColors, highlight: number, motion: Motion) => listener(colors, highlight, motion));
+    ipcRenderer.on('fly:colors', (_e, colors: StatusColors, highlight: number, motion: Motion, island: unknown) =>
+      listener(colors, highlight, motion, island === true),
+    );
   },
   requestOpen: () => ipcRenderer.send('fly:request-open'),
   action: (action) => ipcRenderer.send('fly:action', action),
