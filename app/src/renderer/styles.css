@@ -770,7 +770,7 @@ html.island {
   --text-secondary: #c8c8c8;
   --text-tertiary: #9a9a9a;
   --bg-rgb: 0, 0, 0;
-  --card-rgb: 52, 52, 52;
+  --card-rgb: 8, 8, 8;
   --card: rgb(var(--card-rgb));
   --shade-rgb: 255, 255, 255;
   --card-stroke: rgba(255, 255, 255, 0.07);
@@ -780,9 +780,10 @@ html.island {
   --selected: rgba(255, 255, 255, 0.09);
   --selected-hover: rgba(255, 255, 255, 0.12);
   --focus: #ffffff;
-  --stack: #3c3c3c;
-  --stack-strong: #4e4e4e;
-  --stack-edge: rgba(255, 255, 255, 0.18);
+  /* 前のセッションの重なりは、盆の地（#383838）より明るくして見えるようにする */
+  --stack: #6a6a6a;
+  --stack-strong: #828282;
+  --stack-edge: rgba(0, 0, 0, 0.5);
   --repo-frame: rgba(255, 255, 255, 0.13);
   --stripe-a: 0.03;
   --focus-a: 0.06;
@@ -831,24 +832,25 @@ html.island .titlebar { background: transparent; border-color: transparent; marg
 
 html.island main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
-/* リポジトリ（プロジェクト）は、帯の面から一段沈んだ盆に見せる。盆の地は帯より明るい灰色にし、
-   上の縁から内側へ濃い影を落とし（左右にも少し）、下の縁だけを細く明るくする（光が上から当たって、手前の縁が光る）。
-   盆と盆のあいだは帯の黒なので、プロジェクトの区切りがはっきりする。盆の灰色は、暗い画面でも黒と見分けがつくよう #2a2a2a まで上げる（#141414 では黒と区別しにくかった）。
-   カードは盆の中から帯の面の高さまで持ち上がって見えるよう、盆の地より明るい塗りに、上の辺の細い光と、盆へ落ちる影を付ける。
+/* リポジトリ（プロジェクト）は、帯の面から窪んだ盆に見せる。
+   盆の地は帯より明るい灰色（#383838）にし、縁は帯と同じ黒にする（明るい縁の線があると、帯の上に載った板に見える）。
+   上の縁から内側へ影を落とし、下の縁だけを細く明るくする（光が上から当たって、手前の縁が光る）。
+   ワークツリーのカードは帯と同じ層に見えるよう、帯に近い黒（--card-rgb）にする。暗い画面では明るい面ほど手前に見えるので、
+   盆を明るく、カードを黒くすると、盆の底が帯とカードの面より下がって見える。
    影は小さくぼかすだけにする（大きなぼかしは GPU を使わない既定ではスクロールのたびに重い） */
 html.island .repo {
-  background: linear-gradient(180deg, #121212 0, #282828 12px, #2a2a2a 100%);
+  background: #383838;
   border: 1px solid #000;
-  border-bottom-color: rgba(255, 255, 255, 0.18);
-  box-shadow:
-    inset 0 5px 6px -3px rgba(0, 0, 0, 0.95),
-    inset 4px 0 5px -4px rgba(0, 0, 0, 0.8),
-    inset -4px 0 5px -4px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 5px 6px -3px rgba(0, 0, 0, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
 }
 html.island .card {
-  border-color: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 5px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
+/* カードの見出し（ワークツリーの名前の帯）は明るくし、その下の行（セッション）と、見出しから垂れる git の変更の札
+   （カードの本体と同じ黒で塗る）との差をつける。設定の見出しの濃さ（--header-alpha）はその上に足す */
+html.island .card-header { background: rgba(255, 255, 255, calc(var(--header-alpha) + 0.13)); border-bottom-color: rgba(0, 0, 0, 0.6); }
+html.island .card-wrap[data-held] .card-header { background: color-mix(in srgb, var(--held) 18%, rgba(255, 255, 255, calc(var(--header-alpha) + 0.13))); }
 
 /* ビューアは帯の中の下に置き、カードの一覧とは細い線とつまみで区切る */
 html.island .viewer { margin: 0; padding: 0 8px 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
