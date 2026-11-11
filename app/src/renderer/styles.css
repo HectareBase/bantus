@@ -831,15 +831,8 @@ html.island .titlebar { background: transparent; border-color: transparent; marg
 
 html.island main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); }
 
-/* リポジトリの枠はすりガラス風にする。上から下へ薄れる白の塗りと、上の辺を明るくした縁で、黒の地から浮かせる。
-   描くのが重いもの（backdrop-filter のぼかし、ぼかしの大きな影）は使わない。GPU を使わない既定では、
-   スクロールのたびに描き直しになり CPU を使うため。塗りはグラデーション、縁の光は 1px の内側の影だけにする */
-html.island .repo {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.045) 40%, rgba(255, 255, 255, 0.03) 100%);
-  border-color: rgba(255, 255, 255, 0.18);
-  border-top-color: rgba(255, 255, 255, 0.36);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
+/* リポジトリの枠の中は、黒よりごくわずかに明るくする */
+html.island .repo { background: #0a0a0a; }
 
 /* ビューアは帯の中の下に置き、カードの一覧とは細い線とつまみで区切る */
 html.island .viewer { margin: 0; padding: 0 8px 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
