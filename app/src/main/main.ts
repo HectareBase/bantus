@@ -6,6 +6,8 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileS
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
 import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
+import { createBezel, type Bezel } from './bezel';
+import { bezelParts } from './bezel-place';
 import { createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
@@ -75,6 +77,8 @@ let flashTimer: NodeJS.Timeout | undefined;
 let appBar: AppBar | undefined;
 let appBarRect: PlacedBar | undefined;
 let fullscreenApp = false;
+/** アイランド型の縁取り（帯のない 3 辺の黒い線と角丸）。最前面に固定してアプリバーにしている間だけ出す */
+let bezel: Bezel | undefined;
 /** 本当に終わるところ（トレイの「終了」、OS のシャットダウン）。立っていないときは、ウィジェットを閉じずに隠す */
 let quitting = false;
 /** 出しているトースト。変数に持っておかないと、ガベージコレクションでクリックが届かなくなる */
@@ -246,6 +250,19 @@ function appBarWanted() {
 }
 
 /**
+ * アイランド型の縁取りを、今の状態に合わせて出す・隠す。アイランド型で、最前面に固定してアプリバーにしていて、
+ * ウィジェットが見えていて、全画面のアプリが開いていない間だけ出す。作業領域はアプリバーの分が引かれたもの（Windows の値のまま）
+ */
+function syncBezel() {
+  if (!bezel) return;
+  const s = getSettings();
+  const visible = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+  if (!s.island || !s.pinned || !appBarRect || fullscreenApp || !visible) return bezel.hide();
+  const d = targetDisplay(s);
+  bezel.show(bezelParts(s.edge, d.workArea, barOverhang(true, s.zoom / 100)));
+}
+
+/**
  * アプリバーを登録している間に、ウィジェットがこちらの置いた場所から動かされたら戻す。
  * 帯の分だけ作業領域が縮むと、Windows がウィジェットを作業領域の中へ押し込むことがある
  */
@@ -328,6 +345,8 @@ function applySettings(s: Settings) {
   applyAlwaysOnTop(s);
   // 固定、端、幅、モニターが変わったら、アプリバーを登録し直す（または外す）
   appBar?.sync();
+  // アイランド型や拡大率が変わったら、縁取りを出し直す（アプリバーの場所が変わったときは onPlaced からも呼ぶ）
+  syncBezel();
   // 背景を見せるなら、クリックを後ろへ通すのをやめる（通すかどうかは、背景が 0% のときとアイランド型のときに画面側が決める）
   if (!canClickThrough(s)) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
@@ -420,7 +439,10 @@ function createWidget(): BrowserWindow {
   w.on('minimize', updateSystemUsage);
   w.on('restore', updateSystemUsage);
   // 隠したときと最小化したときはアプリバーを外し、出したら登録し直す
-  const syncAppBar = () => appBar?.sync();
+  const syncAppBar = () => {
+    appBar?.sync();
+    syncBezel();
+  };
   w.on('show', syncAppBar);
   w.on('hide', syncAppBar);
   w.on('minimize', syncAppBar);
@@ -889,16 +911,19 @@ app.whenReady().then(() => {
   }
   applyTheme(getSettings());
   win = createWidget();
+  bezel = createBezel();
   appBar = createAppBar({
     window: () => win,
     wanted: appBarWanted,
     onPlaced: (bar) => {
       appBarRect = bar;
       if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+      syncBezel();
     },
     onFullscreen: (on) => {
       fullscreenApp = on;
       applyAlwaysOnTop(getSettings());
+      syncBezel();
     },
   });
   tipWin = createTipWindow();
@@ -1125,6 +1150,8 @@ app.whenReady().then(() => {
   screen.on('display-metrics-changed', () => {
     if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
     appBar?.sync();
+    // タスクバーが動いたなど、アプリバーの場所は同じでも作業領域が変わることがある
+    syncBezel();
   });
   screen.on('display-added', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
   screen.on('display-removed', () => { reposition(); settle(DISPLAY_SETTLE_MS); });
@@ -1139,6 +1166,7 @@ app.whenReady().then(() => {
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();
+    bezel?.destroy();
     // アプリバーを外す（外さないと、ほかのウィンドウの最大化が帯の分だけ狭いまま残る）
     appBar?.stop();
     tray?.destroy();
