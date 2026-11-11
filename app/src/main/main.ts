@@ -263,13 +263,20 @@ function syncBezel() {
 }
 
 /**
- * アプリバーが動いたあと、少し待ってから縁取りを出し直す。作業領域（上下と反対側の辺）は Windows が少し遅れて変えるので、
- * 落ち着いたころの値で引き直す
+ * アプリバーが動いたあと、少し待ってから縁取りを出し直す。
+ * - すぐには引かない。帯の幅を変えると、Windows がウィジェットを作業領域の中へ一瞬押し込み、keepAppBarBounds が戻す。
+ *   縁取りの窓を作り直すあいだはメインのプロセスが止まり、戻すのが 0.1 秒ほど遅れて、ウィジェットが動いて見えた。戻し終えてから引く
+ * - 作業領域（上下と反対側の辺）は Windows が少し遅れて変えるので、落ち着いたころにもう一度引く
  */
+let bezelSoon: NodeJS.Timeout | undefined;
 let bezelSettle: NodeJS.Timeout | undefined;
 function syncBezelLater() {
-  syncBezel();
+  if (bezelSoon) clearTimeout(bezelSoon);
   if (bezelSettle) clearTimeout(bezelSettle);
+  bezelSoon = setTimeout(() => {
+    bezelSoon = undefined;
+    syncBezel();
+  }, 120);
   bezelSettle = setTimeout(() => {
     bezelSettle = undefined;
     syncBezel();
@@ -284,7 +291,16 @@ function keepAppBarBounds() {
   if (!appBarRect || !win || win.isDestroyed()) return;
   const want = sidebarBounds();
   const now = win.getBounds();
-  if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) win.setBounds(want);
+  if (Math.abs(now.x - want.x) > 1 || Math.abs(now.width - want.width) > 1) {
+    // 帯の幅を変えると、作業領域が変わったときに Chromium がウィンドウを作業領域の左上の動いた分だけずらす（押し込み）。
+    // 押し込まれた直後（move の中や WM_WINDOWPOSCHANGED の中）に setBounds しても同じだけずらされて戻らず、
+    // アプリバーの場所が決まったあと（onPlaced のころ）にやっと戻る。ここでは move の処理を終えてから戻す。
+    // 戻るまでの 40 ms ほどは押し込まれた場所が見える（アイランド型より前からある動き）
+    setImmediate(() => {
+      if (!win || win.isDestroyed()) return;
+      win.setBounds(sidebarBounds());
+    });
+  }
 }
 
 /**
