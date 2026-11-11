@@ -22,13 +22,18 @@ export interface Bezel {
   /** 縁取りを出す（parts が空なら隠す）。scale は画面の拡大率（角丸の絵を物理ピクセルの細かさで描く） */
   show(parts: BezelPart[], scale: number): void;
   hide(): void;
+  /**
+   * 窓を閉じ、次の show で作り直す。Windows の拡大率が変わると、Windows が窓の大きさを新しい拡大率に合わせて変えてしまい、
+   * 場所と形が同じなら置き直さないので、ずれたまま残った
+   */
+  reset(): void;
   /** 窓を閉じる（終了するとき） */
   destroy(): void;
 }
 
 /** Windows 以外では何もしないものを返す（setShape は Windows と Linux だけ） */
 export function createBezel(): Bezel {
-  if (process.platform !== 'win32') return { show: () => {}, hide: () => {}, destroy: () => {} };
+  if (process.platform !== 'win32') return { show: () => {}, hide: () => {}, reset: () => {}, destroy: () => {} };
   const windows = new Map<BezelPart['name'], BaseWindow>();
   /** 最後に当てた場所と形。同じなら当て直さない（ちらつかせない） */
   const applied = new Map<BezelPart['name'], string>();
@@ -100,7 +105,8 @@ export function createBezel(): Bezel {
   function destroy() {
     for (const w of windows.values()) if (!w.isDestroyed()) w.destroy();
     windows.clear();
+    applied.clear();
   }
 
-  return { show, hide, destroy };
+  return { show, hide, reset: destroy, destroy };
 }

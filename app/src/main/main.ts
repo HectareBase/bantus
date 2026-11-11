@@ -1200,7 +1200,21 @@ app.whenReady().then(() => {
   };
   // つないだ・外した直後は、モニターの一覧や作業領域が何度か続けて変わる。すぐ置き直し、落ち着いたころにもう一度読み直す
   const settle = settleTimers(reposition);
-  screen.on('display-metrics-changed', () => {
+  // Windows の拡大率が変わったとき。Windows は窓（ウィジェットと縁取り）の大きさを新しい拡大率に合わせて変え、作業領域も少し遅れて変わる。
+  // アプリバーの場所を DIP で覚え直し（同じ物理ピクセルでも DIP が変わる）、縁取りは作り直し、落ち着いたころにもう一度置き直す
+  const rescale = () => {
+    if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
+    appBar?.refresh();
+    bezel?.reset();
+    syncBezelLater();
+  };
+  const settleScale = settleTimers(rescale);
+  screen.on('display-metrics-changed', (_e, _display, changed) => {
+    if (changed.includes('scaleFactor')) {
+      rescale();
+      settleScale(DISPLAY_SETTLE_MS);
+      return;
+    }
     if (win && !win.isDestroyed()) win.setBounds(sidebarBounds());
     appBar?.sync();
     // タスクバーが動いたなど、アプリバーの場所は同じでも作業領域が変わることがある。

@@ -97,6 +97,11 @@ export interface AppBarHost {
 export interface AppBar {
   /** 登録する・置き直す・外すを、今の wanted() に合わせる。続けて呼ばれても、1 つずつまとめて行う */
   sync(): void;
+  /**
+   * 置いた場所を覚え直す。Windows の拡大率が変わると、物理ピクセルの場所は同じでも DIP の場所が変わるので、
+   * 同じ場所でも SETPOS し直して onPlaced を呼ぶ（呼ばないと、ウィジェットと縁取りが古い DIP の場所のまま残る）
+   */
+  refresh(): void;
   /** 外して PowerShell を終える（終了するとき） */
   stop(): void;
 }
@@ -119,7 +124,7 @@ function ltrb(r: Ltrb): string {
 
 /** Windows 以外では何もしないものを返す */
 export function createAppBar(host: AppBarHost): AppBar {
-  if (process.platform !== 'win32') return { sync: () => {}, stop: () => {} };
+  if (process.platform !== 'win32') return { sync: () => {}, refresh: () => {}, stop: () => {} };
   const ps = createPowerShellLine(SCRIPT);
   /** 登録しているウィンドウのハンドル */
   let registered: string | undefined;
@@ -215,6 +220,11 @@ export function createAppBar(host: AppBarHost): AppBar {
     })();
   }
 
+  function refresh() {
+    lastSet = undefined;
+    sync();
+  }
+
   function stop() {
     stopped = true;
     if (registered) ps.send(`remove ${registered}`);
@@ -223,5 +233,5 @@ export function createAppBar(host: AppBarHost): AppBar {
     ps.close();
   }
 
-  return { sync, stop };
+  return { sync, refresh, stop };
 }
