@@ -786,6 +786,59 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
 .viewer-path { font-size: 11px; color: var(--text-tertiary); word-break: break-all; user-select: text; }
 .viewer[data-kind="ok"] .viewer-empty { display: none; }
 
+/* ---- ウィンドウの切り替え（docs/design/window-switcher.md）：ウィジェットの一番下の 1 列の帯 ----
+   アイコンは 16px、ボタンは 24px（switcher.ts の SWITCHER_ITEM と合わせる）。最小化しているウィンドウは薄く出す。
+   入りきらない分の一覧は、帯の上に重ねて開く（ウィジェットの中だけ。別のウィンドウは作らない）。動きは付けない */
+.switcher { flex: none; position: relative; margin: 0 8px 8px; }
+.switcher[hidden], html.hide-switcher .switcher { display: none; }
+.switcher-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 2px;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--card-stroke);
+  border-radius: 8px;
+}
+.switcher-item, .switcher-more, .switcher-row {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  outline: none;
+}
+.switcher-item { flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; }
+.switcher-more { flex: none; width: 32px; height: 24px; padding: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.switcher-item:hover, .switcher-more:hover, .switcher-row:hover { background: var(--hover); color: var(--text); }
+.switcher-item:active, .switcher-more:active, .switcher-row:active { background: var(--pressed); }
+.switcher-item:focus-visible, .switcher-more:focus-visible, .switcher-row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+.switcher-more[aria-expanded="true"] { background: var(--selected); color: var(--text); }
+.switcher-icon { width: 16px; height: 16px; flex: none; pointer-events: none; }
+/* 最小化しているウィンドウ。乗せたときは濃く戻す */
+.switcher-item[data-min] .switcher-icon, .switcher-row[data-min] .switcher-icon { opacity: 0.45; }
+.switcher-row[data-min] .switcher-title { color: var(--text-tertiary); }
+.switcher-item[data-min]:hover .switcher-icon, .switcher-row[data-min]:hover .switcher-icon { opacity: 1; }
+/* 残りの一覧。帯の上に重ねる。高すぎるときはスクロールする */
+.switcher-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 12;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  padding: 4px;
+  background: rgb(var(--card-rgb));
+  border: 1px solid var(--repo-frame);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.switcher-list[hidden] { display: none; }
+.switcher-row { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; text-align: left; font-size: 12px; }
+.switcher-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+
 /* ---- アイランド型（設定 island、html.island） ----
    ウィジェットを、画面の端のベゼルの黒が内側へ張り出した一枚の帯に見せる。帯（body）は真っ黒で、画面の端に余白なしで付ける。
    帯の内側の辺の上端と下端には内向きの角丸（--fillet）を付け、上下のベゼルとなめらかにつなぐ。
@@ -900,3 +953,10 @@ html.island .card-wrap[data-held] .card-header { background: color-mix(in srgb, 
 /* ビューアは帯の中の下に置き、カードの一覧とは細い線とつまみで区切る */
 html.island .viewer { margin: 0; padding: 0 8px 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 html.island .viewer-box { background: rgb(var(--card-rgb)); border-color: var(--repo-frame); }
+
+/* ウィンドウの切り替えの帯は、帯（ベゼル）の一番下に溶け込ませる。ビューアがあれば、その下に続ける */
+html.island .switcher { margin: 0; padding: 0 8px 6px; }
+html.island .switcher-bar { background: transparent; border-color: transparent; border-top: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0; }
+html.island .switcher-list { left: 8px; right: 8px; }
+html.island .viewer + .switcher .switcher-bar { border-top-color: transparent; }
+html.floating .switcher-bar { border-color: rgba(128, 128, 128, 0.35); }

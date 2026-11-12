@@ -62,6 +62,7 @@ import { setStatus } from './status-icon.js';
 import { applyHighlight, applyMotion, applyStatusColors } from './status-colors.js';
 import { fillStrings } from './strings.js';
 import { sweep } from './sweep.js';
+import { initSwitcher } from './switcher.js';
 import { initTooltips } from './tooltip.js';
 import { initViewer } from './viewer.js';
 
@@ -128,6 +129,8 @@ fillIcons(document);
 fillStrings(document);
 const tooltips = initTooltips();
 const viewer = initViewer();
+// 残りの一覧を開いている間は、ビューアの HTML（一番上に重なる別のビュー）を引っ込める
+initSwitcher(tooltips, (open) => viewer.setCovered(open));
 
 const rows = new Map<string, RowRefs>();
 const cards = new Map<string, CardRefs>();
@@ -1041,7 +1044,7 @@ document.addEventListener('mousemove', (e) => {
     return;
   }
   if (!floating) return;
-  const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit, .viewer');
+  const solid = (e.target as Element).closest('.repo, .titlebar, .resize-handle, .stack-hit, .viewer, .switcher');
   setClickThrough(!solid);
 });
 
@@ -1087,6 +1090,7 @@ function applyLayout(layout: WidgetLayout) {
   root.classList.toggle('hide-state', !layout.showState);
   root.classList.toggle('hide-context', !layout.showContext);
   root.classList.toggle('hide-system-usage', !layout.showSystemUsage);
+  root.classList.toggle('hide-switcher', !layout.showWindowSwitcher);
   island = layout.island;
   root.classList.toggle('island', island);
   floating = !island && backgroundOpacity === 0;

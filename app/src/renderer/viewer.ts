@@ -13,6 +13,11 @@ export interface ViewerPane {
   applyLayout(layout: WidgetLayout): void;
   /** 今開いているセッションが決まったとき（描き直すたびに呼ぶ。変わったときだけ送る） */
   setTarget(id: string | undefined): void;
+  /**
+   * ウィジェットの中の重ねて出すもの（ウィンドウの切り替えの残りの一覧）が HTML の場所にかかっている間は true。
+   * HTML は別のビューで一番上に重なるので、その間は HTML を引っ込める
+   */
+  setCovered(covered: boolean): void;
 }
 
 export function initViewer(): ViewerPane {
@@ -20,6 +25,8 @@ export function initViewer(): ViewerPane {
   const cards = document.getElementById('cards')!;
   const grip = document.getElementById('viewer-grip')!;
   const slot = document.getElementById('viewer-slot')!;
+  /** ビューアの下に置く、ウィンドウの切り替えの帯（switcher.ts）。出ていないときは高さ 0 */
+  const below = document.getElementById('switcher');
   const fileEl = root.querySelector<HTMLElement>('.viewer-file')!;
   const placeEl = root.querySelector<HTMLElement>('.viewer-place')!;
   const messageEl = root.querySelector<HTMLElement>('.viewer-message')!;
@@ -44,11 +51,12 @@ export function initViewer(): ViewerPane {
   let sentTarget: string | null | undefined = null;
   let targetSent = false;
   let sentRect = '';
+  let covered = false;
 
   /** HTML の場所を送る。隠れているときは undefined */
   function report() {
     let rect: TipRect | undefined;
-    if (enabled && !collapsed && slot.isConnected) {
+    if (enabled && !collapsed && !covered && slot.isConnected) {
       const r = slot.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) rect = { x: r.x, y: r.y, width: r.width, height: r.height };
     }
@@ -93,7 +101,9 @@ export function initViewer(): ViewerPane {
     if (!enabled || !auto || dragHeight !== undefined) return;
     // カードの一覧とビューアの HTML で分け合える高さ。畳んでいるときは、HTML の分も一覧が使っている。
     // 一覧が縮みきってビューアがウィンドウの下にはみ出しているときは、はみ出した分を引く（1px までは端数として見逃す）
-    const overflow = root.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(root).marginBottom) || 0) - window.innerHeight;
+    // ビューアの下にウィンドウの切り替えの帯があるときは、その分（帯の高さと下の余白）もはみ出しに数える
+    const belowHeight = below?.getClientRects().length ? below.getBoundingClientRect().height + (parseFloat(getComputedStyle(below).marginBottom) || 0) : 0;
+    const overflow = root.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(root).marginBottom) || 0) + belowHeight - window.innerHeight;
     const shared = cards.getBoundingClientRect().height + (collapsed ? 0 : shownHeight) - (overflow > 1 ? overflow : 0);
     const next = autoViewerHeight(shared, cardsContentHeight());
     if (next === autoHeight) return;
@@ -164,6 +174,8 @@ export function initViewer(): ViewerPane {
 
   // 大きさが変わったとき（高さのドラッグ、幅のドラッグ、拡大率）と、位置が変わったとき（ウィンドウの高さ）に送り直す
   new ResizeObserver(() => report()).observe(slot);
+  // 帯が出た・消えた、残りの一覧を開いた・閉じたときも、空いた場所を測り直す
+  if (below) new ResizeObserver(() => scheduleFit()).observe(below);
   window.addEventListener('resize', () => {
     applyHeight();
     report();
@@ -246,6 +258,11 @@ export function initViewer(): ViewerPane {
       targetSent = true;
       sentTarget = value;
       window.widget.setViewerTarget(id);
+    },
+    setCovered(value) {
+      if (value === covered) return;
+      covered = value;
+      report();
     },
   };
 }
