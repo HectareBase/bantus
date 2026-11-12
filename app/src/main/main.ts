@@ -9,7 +9,7 @@ import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appb
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
 import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { askWindowList, bringWindowToFront, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, windowIcon } from './foreground';
+import { askWindowList, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, toggleWindow, windowIcon } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
@@ -1194,8 +1194,8 @@ app.whenReady().then(() => {
   });
   ipcMain.on('switcher-focus', (e, id: unknown) => {
     if (e.sender !== win?.webContents || typeof id !== 'string' || !windowSwitcher.has(id)) return;
-    // 前に出したら前面の印が移るので、すぐ調べ直す
-    void bringWindowToFront(id).then(() => windowSwitcher.refresh(true));
+    // 前に出す。もう前面にあれば最小化する（タスクバーと同じ）。どちらでも前面の印が移るので、すぐ調べ直す
+    void toggleWindow(id, process.pid).then(() => windowSwitcher.refresh(true));
   });
 
   ipcMain.on('flash-taskbar', () => flashTaskbar());
