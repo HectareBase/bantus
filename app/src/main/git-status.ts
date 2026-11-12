@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GitChanges, SessionState, SessionView } from '../shared/types';
+import { createBaseFinder, type FindBase } from './base-branch';
 import { findGitDirs, folderKey } from './sessions';
 
 /** 1 回の git status を待つ長さ。大きなリポジトリで止まらないよう、過ぎたら諦める */
@@ -254,6 +255,8 @@ interface Entry {
   changes?: GitChanges;
   /** 追跡するブランチ。元のフォルダ（base がない）で、取得がオンのときだけ表示に使う */
   upstream?: Upstream;
+  /** 割り出した分岐元（base-branch.ts）。ワークツリーだけ。セッションの baseBranch をこれに置き換える */
+  base?: string;
   at: number;
 }
 
@@ -298,6 +301,7 @@ export function createGitStatus(
   branch: ReadBranch = createBranchReader(),
   exists: (dir: string) => boolean = existsSync,
   options: () => GitOptions = () => DEFAULT_OPTIONS,
+  findBase: FindBase = createBaseFinder(git),
 ) {
   const cache = new Map<string, Entry>();
   /** 前に見たときの状態（ターンの終わりを見つけるため） */
@@ -316,12 +320,15 @@ export function createGitStatus(
       const opts = options();
       let changes: GitChanges | undefined;
       let upstream: Upstream | undefined;
+      let found: string | undefined;
       try {
         const output = await run(dir, opts.countUntracked);
         changes = parseStatus(output);
         if (base) {
+          // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる
+          found = await findBase(dir, base, main);
           const remote = commonDir ? opts.remoteOf(commonDir) : undefined;
-          const info = await branch(dir, base, remote ? `refs/remotes/${remote}/${base}` : undefined, main);
+          const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, main);
           changes.behind = info.behind;
           changes.merged = info.merged;
           if (info.mergedInto) changes.mergedInto = info.mergedInto;
@@ -337,8 +344,8 @@ export function createGitStatus(
         changes = exists(dir) ? undefined : { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false, gone: true };
       }
       const prev = cache.get(key);
-      if (JSON.stringify([prev?.changes, prev?.upstream]) !== JSON.stringify([changes, upstream])) changed = true;
-      cache.set(key, { changes, ...(upstream && { upstream }), at: now() });
+      if (JSON.stringify([prev?.changes, prev?.upstream, prev?.base]) !== JSON.stringify([changes, upstream, found])) changed = true;
+      cache.set(key, { changes, ...(upstream && { upstream }), ...(found && { base: found }), at: now() });
     }
     running = false;
     if (changed) onUpdate();
@@ -382,6 +389,7 @@ export function createGitStatus(
     for (const s of sessions) {
       const entry = s.workDir ? cache.get(folderKey(s.workDir)) : undefined;
       if (entry?.changes) s.changes = withUpstream(entry.changes, entry.upstream, fetchEnabled);
+      if (entry?.base && s.baseBranch) s.baseBranch = entry.base;
     }
     return sessions;
   }
