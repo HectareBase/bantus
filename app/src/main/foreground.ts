@@ -11,7 +11,8 @@
 //   （ウィンドウの切り替え。docs/design/window-switcher.md）。答えは「W」のあとに、ウィンドウごとの
 //   「;ハンドル:最小化(0/1):前面(0/1):プロセスの起動時刻:パス:タイトル」。起動時刻は FILETIME（わからなければ 0）、
 //   パスとタイトルは UTF-8 の base64。Claude（プロセス名 claude）と自分のプロセスのウィンドウは入れない。調べられなければ空行
-// - front <ハンドル>：そのウィンドウを前に出す（最小化されていれば元に戻す）。前に出せたら 1、ウィンドウがもうない・断られたら 0
+// - front <ハンドル> <自分のプロセス ID>：そのウィンドウを前に出す（最小化されていれば元に戻す）。前に出せたら 1、ウィンドウがもうない・断られたら 0。
+//   もう前面にある（下の「前面とみなすウィンドウ」）ときは、タスクバーと同じく最小化して 2
 // - icon <ハンドル> <0/1>：ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の base64 で答える。1 なら大きいほうを先に探す。
 //   取れなければ空行
 
@@ -34,7 +35,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 //   GetWindowPlacement の元に戻したときの場所（rcNormalPosition）から MonitorFromRect で引く
 // - 実行ファイルのパスは OpenProcess（PROCESS_QUERY_LIMITED_INFORMATION = 0x1000）と QueryFullProcessImageName で引く。
 //   管理者で動いているプロセスでも引ける。引けなければ空のまま並べる。起動時刻（GetProcessTimes）は並び順に使う
-// - 前面の印は GetForegroundWindow と、その一番上の所有者（GetAncestor の GA_ROOTOWNER = 3）
+// - 前面とみなすウィンドウ（FrontWindow）：前面のウィンドウ（GetForegroundWindow）の一番上の所有者（GetAncestor の GA_ROOTOWNER = 3）。
+//   ただし前面が Bantus 自身（帯を押すとウィジェットが前面になる）のときは、Bantus 以外で、最小化しておらずタスクバーに出るウィンドウのうち
+//   一番手前のもの（直前まで前面だったもの）。最前面に固定したウィンドウ（WS_EX_TOPMOST = 0x8）は、前面でなくても手前にいるので飛ばす。
+//   一覧の前面の印と、front で最小化するかどうかの両方に使う
 // - アイコンは WM_GETICON（0x7F。ICON_BIG = 1、ICON_SMALL2 = 2、ICON_SMALL = 0）を SendMessageTimeout（200 ms で打ち切り）で聞き、
 //   なければクラスのアイコン（GCLP_HICON = -14、GCLP_HICONSM = -34）。実行ファイルのアイコンと違い、タスクバーと同じ絵になる。
 //   アイコンはウィンドウのものなので破棄しない
@@ -69,6 +73,7 @@ public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 [StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT { public int length, flags, showCmd; public POINT min, max; public RECT normal; }
 [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr hWnd, string name);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr hWnd);
 [DllImport("kernel32.dll")] public static extern bool GetProcessTimes(IntPtr h, out long creation, out long exit, out long kernel, out long user);
 [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")] public static extern IntPtr SendIconMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
 [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr hWnd, int index);
@@ -108,22 +113,44 @@ public static string IconPng(IntPtr h, bool big) {
     }
   } catch { return ""; }
 }
+static bool OnTaskbar(IntPtr h) {
+  if (!IsWindowVisible(h)) return false;
+  int ex = GetWindowLong(h, -20);
+  if ((ex & 0x80) != 0) return false;
+  if ((ex & 0x40000) == 0 && ((ex & 0x08000000) != 0 || GetWindow(h, 4) != IntPtr.Zero)) return false;
+  int cloaked;
+  if (DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0) return false;
+  return GetProp(h, "ITaskList_Deleted") == IntPtr.Zero;
+}
+public static IntPtr FrontWindow(uint selfPid) {
+  IntPtr fg = GetForegroundWindow();
+  if (fg != IntPtr.Zero) {
+    uint pid;
+    GetWindowThreadProcessId(fg, out pid);
+    if (pid != selfPid) {
+      IntPtr root = GetAncestor(fg, 3);
+      return root == IntPtr.Zero ? fg : root;
+    }
+  }
+  IntPtr first = IntPtr.Zero;
+  EnumWindows(delegate(IntPtr h, IntPtr l) {
+    uint pid;
+    GetWindowThreadProcessId(h, out pid);
+    if (pid == selfPid || IsIconic(h) || (GetWindowLong(h, -20) & 0x8) != 0 || !OnTaskbar(h) || GetWindowTextLength(h) == 0) return true;
+    first = h;
+    return false;
+  }, IntPtr.Zero);
+  return first;
+}
 public static string List(IntPtr self, uint selfPid) {
   IntPtr monitor = MonitorFromWindow(self, 2);
-  IntPtr fg = GetForegroundWindow();
-  IntPtr fgRoot = fg == IntPtr.Zero ? IntPtr.Zero : GetAncestor(fg, 3);
+  IntPtr front = FrontWindow(selfPid);
   StringBuilder sb = new StringBuilder("W");
   StringBuilder text = new StringBuilder(512);
   Dictionary<uint, string> paths = new Dictionary<uint, string>();
   Dictionary<uint, long> times = new Dictionary<uint, long>();
   EnumWindows(delegate(IntPtr h, IntPtr l) {
-    if (h == self || !IsWindowVisible(h)) return true;
-    int ex = GetWindowLong(h, -20);
-    if ((ex & 0x80) != 0) return true;
-    if ((ex & 0x40000) == 0 && ((ex & 0x08000000) != 0 || GetWindow(h, 4) != IntPtr.Zero)) return true;
-    int cloaked;
-    if (DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0) return true;
-    if (GetProp(h, "ITaskList_Deleted") != IntPtr.Zero) return true;
+    if (h == self || !OnTaskbar(h)) return true;
     text.Length = 0;
     if (GetWindowText(h, text, text.Capacity) == 0) return true;
     uint pid;
@@ -145,7 +172,7 @@ public static string List(IntPtr self, uint selfPid) {
     if (path.Length > 0 && string.Equals(System.IO.Path.GetFileNameWithoutExtension(path), "claude", StringComparison.OrdinalIgnoreCase)) return true;
     string title = text.ToString();
     if (title.Length > 200) title = title.Substring(0, 200);
-    bool active = h == fg || h == fgRoot;
+    bool active = h == front;
     sb.Append(';').Append(h.ToInt64()).Append(':').Append(min ? '1' : '0').Append(':').Append(active ? '1' : '0').Append(':').Append(created)
       .Append(':').Append(B64(path)).Append(':').Append(B64(title));
     return true;
@@ -218,10 +245,16 @@ function Get-Icon([string]$arg) {
   try { [Bantus.Win]::IconPng([IntPtr]$h, $parts[1] -eq '1') } catch { '' }
 }
 function Invoke-Front([string]$arg) {
+  $parts = "$arg" -split ' '
   $n = [long]0
-  if (-not [long]::TryParse("$arg", [ref]$n)) { return '0' }
+  $id = [uint32]0
+  if ($parts.Length -ne 2 -or -not [long]::TryParse($parts[0], [ref]$n) -or -not [uint32]::TryParse($parts[1], [ref]$id)) { return '0' }
   $h = [IntPtr]$n
   if (-not [Bantus.Win]::IsWindow($h)) { return '0' }
+  if (-not [Bantus.Win]::IsIconic($h) -and [Bantus.Win]::FrontWindow($id) -eq $h) {
+    [void][Bantus.Win]::ShowWindow($h, 6)
+    return '2'
+  }
   if ([Bantus.Win]::IsIconic($h)) { [void][Bantus.Win]::ShowWindow($h, 9) }
   $ok = [Bantus.Win]::SetForegroundWindow($h)
   if (-not $ok) {
@@ -362,10 +395,12 @@ export async function windowIcon(handle: string, big: boolean, timeoutMs = 1500)
 }
 
 /**
- * ハンドルのウィンドウを前に出す（最小化されていれば元に戻す）。前に出せたときだけ true。
- * ウィンドウがもうない、Windows に断られた、PowerShell が使えない、時間切れは false
+ * ハンドルのウィンドウを前に出す（最小化されていれば元に戻す）。もう前面にあれば最小化する（タスクバーのボタンと同じ）。
+ * pid は Bantus 自身のプロセス（帯を押してウィジェットが前面になったときに、直前の前面のウィンドウを見るため）。
+ * 前に出したら 'front'、最小化したら 'minimized'。ウィンドウがもうない、Windows に断られた、PowerShell が使えない、時間切れは undefined
  */
-export async function bringWindowToFront(handle: string, timeoutMs = 1000): Promise<boolean> {
-  if (!HANDLE.test(handle)) return false;
-  return (await ask(`front ${handle}`, timeoutMs)) === '1';
+export async function toggleWindow(handle: string, pid: number, timeoutMs = 1000): Promise<'front' | 'minimized' | undefined> {
+  if (!HANDLE.test(handle) || !Number.isInteger(pid) || pid <= 0) return undefined;
+  const answer = await ask(`front ${handle} ${pid}`, timeoutMs);
+  return answer === '1' ? 'front' : answer === '2' ? 'minimized' : undefined;
 }
