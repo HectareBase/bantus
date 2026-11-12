@@ -208,11 +208,13 @@ export interface SwitcherWindow {
   id: string;
   title: string;
   minimized: boolean;
+  /** 今前面にある（前面のウィンドウか、その持ち主） */
+  active: boolean;
   /** アイコンの目印（SwitcherUpdate.icons の鍵）。アイコンが取れなかったときは省く */
   icon?: string;
 }
 
-/** 手前にある順のウィンドウと、まだ画面に送っていないアイコン（目印 → data URL）。画面は届いたアイコンを覚えておく */
+/** 帯に並べる順（アプリごと、起動した順）のウィンドウと、まだ画面に送っていないアイコン（目印 → data URL）。画面は届いたアイコンを覚えておく */
 export interface SwitcherUpdate {
   windows: SwitcherWindow[];
   icons: Record<string, string>;

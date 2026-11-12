@@ -9,7 +9,7 @@ import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appb
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
 import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { askWindowList, bringWindowToFront, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { askWindowList, bringWindowToFront, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, windowIcon } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
@@ -440,7 +440,8 @@ function widgetHandle(): string | undefined {
 
 /**
  * ウィンドウの切り替え（docs/design/window-switcher.md）。ウィジェットと同じモニターにある Claude 以外のウィンドウを、数秒おきに調べる。
- * アイコンは実行ファイルのパスごとに 1 回だけ取る。拡大して出すとき（Windows の拡大率と表示の拡大率の積が 1 より大きい）は、
+ * アイコンはウィンドウごとに 1 回だけ取る。タスクバーと同じウィンドウのアイコンを使い、取れないとき（ストアアプリなど）だけ
+ * 実行ファイルのアイコンにする。拡大して出すとき（Windows の拡大率と表示の拡大率の積が 1 より大きい）は、
  * ぼやけないよう 32px のものを取って 16px で描く
  */
 const windowSwitcher = createWindowSwitcher({
@@ -448,9 +449,11 @@ const windowSwitcher = createWindowSwitcher({
     const handle = widgetHandle();
     return handle ? askWindowList(handle, process.pid) : Promise.resolve(undefined);
   },
-  icon: async (path) => {
-    const scale = targetDisplay(getSettings()).scaleFactor * zoomFactor();
-    const image = await app.getFileIcon(path, { size: scale > 1 ? 'normal' : 'small' });
+  icon: async (w) => {
+    const big = targetDisplay(getSettings()).scaleFactor * zoomFactor() > 1;
+    const own = await windowIcon(w.handle, big);
+    if (own || !w.path) return own;
+    const image = await app.getFileIcon(w.path, { size: big ? 'normal' : 'small' });
     return image.isEmpty() ? undefined : image.toDataURL();
   },
   send: (update) => {
@@ -1191,7 +1194,7 @@ app.whenReady().then(() => {
   });
   ipcMain.on('switcher-focus', (e, id: unknown) => {
     if (e.sender !== win?.webContents || typeof id !== 'string' || !windowSwitcher.has(id)) return;
-    // 前に出したら並び（手前にある順）が変わるので、すぐ調べ直す
+    // 前に出したら前面の印が移るので、すぐ調べ直す
     void bringWindowToFront(id).then(() => windowSwitcher.refresh(true));
   });
 

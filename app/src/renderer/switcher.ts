@@ -70,7 +70,10 @@ export function initSwitcher(tooltips: Tooltips, onListOpen: (open: boolean) => 
     return item;
   }
 
-  /** アイコン、タイトル、最小化の見た目を合わせる。変わったところだけを書き換える */
+  /**
+   * アイコン、タイトル、前面・後ろ・最小化の見た目を合わせる。変わったところだけを書き換える。
+   * 前面のものは塗りと長い下線、後ろにあるものは短い下線、最小化しているものは下線なしでアイコンを薄くする（styles.css）
+   */
   function update(item: Item, w: SwitcherWindow) {
     const url = w.icon === undefined ? undefined : icons.get(w.icon);
     const key = url === undefined ? '' : w.icon!;
@@ -91,12 +94,11 @@ export function initSwitcher(tooltips: Tooltips, onListOpen: (open: boolean) => 
       }
     }
     item.el.toggleAttribute('data-min', w.minimized);
-    const tip = w.minimized ? ja.switcher.minimized(w.title) : w.title;
+    item.el.toggleAttribute('data-active', w.active && !w.minimized);
+    const tip = w.minimized ? ja.switcher.minimized(w.title) : w.active ? ja.switcher.front(w.title) : ja.switcher.behind(w.title);
     if (item.title) {
-      // 一覧の行はタイトルを出しているので、ツールチップは最小化のときだけ
       if (item.title.textContent !== w.title) item.title.textContent = w.title;
-      if (w.minimized) item.el.dataset.tip = tip;
-      else delete item.el.dataset.tip;
+      if (item.el.dataset.tip !== tip) item.el.dataset.tip = tip;
     } else {
       if (item.el.dataset.tip !== tip) item.el.dataset.tip = tip;
       if (item.el.getAttribute('aria-label') !== tip) item.el.setAttribute('aria-label', tip);

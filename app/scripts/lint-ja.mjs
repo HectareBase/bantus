@@ -51,6 +51,8 @@ const SAMPLES = {
   'widget.badgeHeld': [[2]],
   'widget.cpuTip': [[12]],
   'switcher.minimized': [['メモ帳']],
+  'switcher.front': [['メモ帳']],
+  'switcher.behind': [['メモ帳']],
   'switcher.more': [[3]],
   'widget.memTip': [['9.3', '16', 58]],
   'flyout.continuedIn': [['feature-x']],
