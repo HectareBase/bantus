@@ -159,6 +159,19 @@ export const ja = {
     memTip: (used: string, total: string, pct: number) => `MEM ${used} / ${total} GB（${pct}%）`,
   },
 
+  /** ウィンドウの切り替え（ウィジェットの一番下の帯。docs/design/window-switcher.md） */
+  switcher: {
+    aria: 'ウィンドウの切り替え',
+    /** 最小化しているウィンドウのツールチップ。title はウィンドウのタイトル */
+    minimized: (title: string) => `${title}\n最小化しています`,
+    /** 今前面にあるウィンドウのツールチップ */
+    front: (title: string) => `${title}\n前面にあります`,
+    /** ほかのウィンドウの後ろにあるウィンドウのツールチップ */
+    behind: (title: string) => `${title}\nほかのウィンドウの後ろにあります`,
+    /** 帯に入りきらないウィンドウをまとめたボタンのツールチップ */
+    more: (n: number) => `ほかのウィンドウ ${n} 件`,
+  },
+
   /** HTML ビューア（ウィジェットの下。docs/design/html-viewer.md） */
   viewer: {
     aria: 'HTML ビューア',
@@ -215,6 +228,7 @@ export const ja = {
       startup: '起動',
       performance: 'パフォーマンス',
       titleBar: 'タイトルバー',
+      switcher: 'ウィンドウの切り替え',
       theme: 'テーマ',
       widget: 'ウィジェット',
       statusColors: '状態の色',
@@ -271,6 +285,10 @@ export const ja = {
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
       showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
       showSystemUsage: { label: 'CPU とメモリ', description: 'PC 全体の使用率を表示する' },
+      showWindowSwitcher: {
+        label: 'ウィンドウのアイコンを表示する',
+        description: 'ウィジェットと同じモニターにある Claude 以外のウィンドウを、一番下に並べる。アイコンを押すと、そのウィンドウを前面に出す',
+      },
       showContext: { label: 'コンテキスト', description: '2 行目の使用率（「12%」）。上限がわからないモデルはトークン数' },
       gitFetch: {
         label: '定期的に取得する',

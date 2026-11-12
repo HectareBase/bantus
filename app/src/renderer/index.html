@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
   <title>Bantus</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -44,6 +44,14 @@
       </div>
     </div>
   </section>
+
+  <!-- ウィンドウの切り替え（docs/design/window-switcher.md）：ウィジェットと同じモニターにある Claude 以外のウィンドウのアイコンを 1 列に並べる。
+       入りきらない分は「+N」にまとめ、押すと帯の上（#switcher-list）に残りの一覧を開く。ボタンと行は switcher.ts が入れる。
+       アイコンはメインプロセスが data URL で送ってくる（上の CSP の img-src に data: を足している） -->
+  <nav id="switcher" class="switcher" hidden data-i18n-aria-label="switcher.aria">
+    <div id="switcher-list" class="switcher-list" hidden></div>
+    <div id="switcher-bar" class="switcher-bar"></div>
+  </nav>
 
   <!-- リポジトリ：見出し（名前、バッジ、カードごとアーカイブした件数）とカードの並び。件数は右端に置く -->
   <template id="repo-template">

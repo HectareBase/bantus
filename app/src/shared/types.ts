@@ -194,6 +194,30 @@ export interface WidgetApi {
   onViewerState(listener: (state: ViewerState) => void): void;
   /** PC 全体の CPU とメモリの使用率。出す設定で、ウィジェットが見えている間だけ、値が変わったときに届く */
   onSystemUsage(listener: (usage: SystemUsage) => void): void;
+  /** ウィンドウの切り替えの一覧（docs/design/window-switcher.md）。出す設定で、ウィジェットが見えている間だけ、変わったときに届く */
+  onWindows(listener: (update: SwitcherUpdate) => void): void;
+  /** 一覧をすぐ調べ直してもらう（マウスをウィジェットに乗せたとき） */
+  refreshWindows(): void;
+  /** 一覧のウィンドウ（id）を前に出す。最小化されていれば元に戻す */
+  focusWindow(id: string): void;
+}
+
+/** ウィンドウの切り替えに並べるウィンドウ 1 つ */
+export interface SwitcherWindow {
+  /** ウィンドウのハンドル（10 進の数字）。前に出すときにそのまま返す */
+  id: string;
+  title: string;
+  minimized: boolean;
+  /** 今前面にある（前面のウィンドウか、その持ち主） */
+  active: boolean;
+  /** アイコンの目印（SwitcherUpdate.icons の鍵）。アイコンが取れなかったときは省く */
+  icon?: string;
+}
+
+/** 帯に並べる順（アプリごと、起動した順）のウィンドウと、まだ画面に送っていないアイコン（目印 → data URL）。画面は届いたアイコンを覚えておく */
+export interface SwitcherUpdate {
+  windows: SwitcherWindow[];
+  icons: Record<string, string>;
 }
 
 /** PC 全体の CPU とメモリ。cpu は使用率（%、整数）、メモリはバイト */
@@ -359,7 +383,7 @@ export interface FlyShow {
 export type WidgetLayout = Pick<
   Settings,
   | 'edge' | 'island' | 'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'pinned' | 'mainArchiveMinutes'
-  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
+  | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'showWindowSwitcher' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors' | 'motion'
   | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerAutoHeight' | 'viewerHeight' | 'viewerCollapsed'
 >;

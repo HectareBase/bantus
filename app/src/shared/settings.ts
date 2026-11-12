@@ -73,6 +73,11 @@ export interface Settings {
   /** タイトルバーに PC 全体の CPU とメモリの使用率を出す。出さないときは取得のタイマーも止める */
   showSystemUsage: boolean;
   /**
+   * ウィジェットの一番下に、同じモニターにある Claude 以外のウィンドウのアイコンを並べる（docs/design/window-switcher.md）。
+   * 出さないときは、ウィンドウを調べるタイマーも止める
+   */
+  showWindowSwitcher: boolean;
+  /**
    * リモートを定期的に取得する（git fetch）。既定はオフ。オンにしたときだけ git の通信をする（docs/design/git-fetch.md）。
    * 元のフォルダのカードの遅れと、リモートでマージしたワークツリーのマージ済みを出すのに使う
    */
@@ -235,6 +240,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showState: true,
   showContext: true,
   showSystemUsage: true,
+  showWindowSwitcher: true,
   gitFetch: false,
   gitFetchMinutes: 10,
   showChanges: true,
@@ -402,6 +408,10 @@ export const SETTING_DEFS: SettingDef[] = [
   {
     key: 'showSystemUsage', category: 'general', group: T.groups.titleBar, type: 'toggle',
     ...T.items.showSystemUsage,
+  },
+  {
+    key: 'showWindowSwitcher', category: 'general', group: T.groups.switcher, type: 'toggle',
+    ...T.items.showWindowSwitcher,
   },
   {
     key: 'openAtLogin', category: 'general', group: T.groups.startup, type: 'toggle', packagedOnly: true,

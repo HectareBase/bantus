@@ -7,6 +7,13 @@
 // - raise：Claude のメインウィンドウを前に出し、前に出せたら 1、出せなかったら 0 を答える
 // - open <base64>：セッションへ切り替える。中身は「local_ID と、データフォルダを改行で区切ったもの」の UTF-8 を base64 にした 1 語。
 //   本体に WM_COPYDATA を送り、受け付けられたら 1、ウィンドウがない・送れない・結果が 0 なら 0 を答える
+// - wins <ウィジェットのハンドル> <自分のプロセス ID>：ウィジェットと同じモニターにある、タスクバーに出るウィンドウを手前から順に答える
+//   （ウィンドウの切り替え。docs/design/window-switcher.md）。答えは「W」のあとに、ウィンドウごとの
+//   「;ハンドル:最小化(0/1):前面(0/1):プロセスの起動時刻:パス:タイトル」。起動時刻は FILETIME（わからなければ 0）、
+//   パスとタイトルは UTF-8 の base64。Claude（プロセス名 claude）と自分のプロセスのウィンドウは入れない。調べられなければ空行
+// - front <ハンドル>：そのウィンドウを前に出す（最小化されていれば元に戻す）。前に出せたら 1、ウィンドウがもうない・断られたら 0
+// - icon <ハンドル> <0/1>：ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の base64 で答える。1 なら大きいほうを先に探す。
+//   取れなければ空行
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
@@ -16,8 +23,23 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 //
 // open では 0x88 を押したことにしてから AllowSetForegroundWindow で本体に前に出る許可を渡し、WM_COPYDATA（0x4A）を
 // SendMessageTimeout（SMTO_ABORTIFHUNG = 2、1 秒で打ち切り）で送る。メッセージ専用ウィンドウの親は HWND_MESSAGE（-3）
+//
+// wins の列挙は C#（List）でまとめて行う。ウィンドウごとに PowerShell のパイプラインや Get-Process を通すと遅い。
+// - タスクバーに出るもの：見えている、タイトルがある、ツールウィンドウ（WS_EX_TOOLWINDOW = 0x80）でない、
+//   WS_EX_APPWINDOW（0x40000）が付いているか「所有者（GW_OWNER = 4）がなく WS_EX_NOACTIVATE（0x08000000）でもない」、
+//   DWM で隠されていない（DWMWA_CLOAKED = 14。ほかの仮想デスクトップや、裏で待っているストアアプリ）、
+//   タスクバーから外されていない（ITaskbarList::DeleteTab で外すと、Windows がウィンドウに ITaskList_Deleted のプロパティを付ける。
+//   Electron の skipTaskbar もこれ。文書にない印なので、Windows が変えたら効かなくなり、そのウィンドウも並ぶだけ）
+// - モニターは MonitorFromWindow（MONITOR_DEFAULTTONEAREST = 2）で比べる。最小化したウィンドウは画面の外（-32000）にあるので、
+//   GetWindowPlacement の元に戻したときの場所（rcNormalPosition）から MonitorFromRect で引く
+// - 実行ファイルのパスは OpenProcess（PROCESS_QUERY_LIMITED_INFORMATION = 0x1000）と QueryFullProcessImageName で引く。
+//   管理者で動いているプロセスでも引ける。引けなければ空のまま並べる。起動時刻（GetProcessTimes）は並び順に使う
+// - 前面の印は GetForegroundWindow と、その一番上の所有者（GetAncestor の GA_ROOTOWNER = 3）
+// - アイコンは WM_GETICON（0x7F。ICON_BIG = 1、ICON_SMALL2 = 2、ICON_SMALL = 0）を SendMessageTimeout（200 ms で打ち切り）で聞き、
+//   なければクラスのアイコン（GCLP_HICON = -14、GCLP_HICONSM = -34）。実行ファイルのアイコンと違い、タスクバーと同じ絵になる。
+//   アイコンはウィンドウのものなので破棄しない
 const SCRIPT = `
-Add-Type -Namespace Bantus -Name Win -MemberDefinition @'
+Add-Type -Namespace Bantus -Name Win -UsingNamespace System.Text, System.Collections.Generic -ReferencedAssemblies System.Drawing -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -28,6 +50,108 @@ Add-Type -Namespace Bantus -Name Win -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
 [DllImport("user32.dll")] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, ref COPYDATASTRUCT lParam, uint flags, uint timeout, out IntPtr result);
 [StructLayout(LayoutKind.Sequential)] public struct COPYDATASTRUCT { public IntPtr dwData; public int cbData; public IntPtr lpData; }
+public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int max);
+[DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int index);
+[DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+[DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+[DllImport("user32.dll")] public static extern IntPtr MonitorFromRect(ref RECT rc, uint flags);
+[DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT wp);
+[DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out int value, int size);
+[DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+[DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern bool QueryFullProcessImageName(IntPtr h, uint flags, StringBuilder name, ref int size);
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int left, top, right, bottom; }
+[StructLayout(LayoutKind.Sequential)] public struct POINT { public int x, y; }
+[StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT { public int length, flags, showCmd; public POINT min, max; public RECT normal; }
+[DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr hWnd, string name);
+[DllImport("kernel32.dll")] public static extern bool GetProcessTimes(IntPtr h, out long creation, out long exit, out long kernel, out long user);
+[DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")] public static extern IntPtr SendIconMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+[DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr hWnd, int index);
+static string B64(string s) { return Convert.ToBase64String(Encoding.UTF8.GetBytes(s)); }
+static string ExePath(uint pid, out long created) {
+  string path = "";
+  created = 0;
+  IntPtr p = OpenProcess(0x1000, false, pid);
+  if (p == IntPtr.Zero) return path;
+  StringBuilder name = new StringBuilder(1024);
+  int size = name.Capacity;
+  if (QueryFullProcessImageName(p, 0, name, ref size)) path = name.ToString(0, size);
+  long exit, kernel, user;
+  if (!GetProcessTimes(p, out created, out exit, out kernel, out user)) created = 0;
+  CloseHandle(p);
+  return path;
+}
+static IntPtr IconMessage(IntPtr h, int which) {
+  IntPtr r;
+  return SendIconMessage(h, 0x7F, (IntPtr)which, IntPtr.Zero, 2, 200, out r) == IntPtr.Zero ? IntPtr.Zero : r;
+}
+public static string IconPng(IntPtr h, bool big) {
+  if (!IsWindow(h)) return "";
+  int[] order = big ? new int[] { 1, -14, 2, 0, -34 } : new int[] { 2, 0, -34, 1, -14 };
+  IntPtr icon = IntPtr.Zero;
+  foreach (int k in order) {
+    icon = k >= 0 ? IconMessage(h, k) : GetClassLongPtr(h, k);
+    if (icon != IntPtr.Zero) break;
+  }
+  if (icon == IntPtr.Zero) return "";
+  try {
+    using (System.Drawing.Icon ic = System.Drawing.Icon.FromHandle(icon))
+    using (System.Drawing.Bitmap bmp = ic.ToBitmap())
+    using (System.IO.MemoryStream ms = new System.IO.MemoryStream()) {
+      bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+      return Convert.ToBase64String(ms.ToArray());
+    }
+  } catch { return ""; }
+}
+public static string List(IntPtr self, uint selfPid) {
+  IntPtr monitor = MonitorFromWindow(self, 2);
+  IntPtr fg = GetForegroundWindow();
+  IntPtr fgRoot = fg == IntPtr.Zero ? IntPtr.Zero : GetAncestor(fg, 3);
+  StringBuilder sb = new StringBuilder("W");
+  StringBuilder text = new StringBuilder(512);
+  Dictionary<uint, string> paths = new Dictionary<uint, string>();
+  Dictionary<uint, long> times = new Dictionary<uint, long>();
+  EnumWindows(delegate(IntPtr h, IntPtr l) {
+    if (h == self || !IsWindowVisible(h)) return true;
+    int ex = GetWindowLong(h, -20);
+    if ((ex & 0x80) != 0) return true;
+    if ((ex & 0x40000) == 0 && ((ex & 0x08000000) != 0 || GetWindow(h, 4) != IntPtr.Zero)) return true;
+    int cloaked;
+    if (DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0) return true;
+    if (GetProp(h, "ITaskList_Deleted") != IntPtr.Zero) return true;
+    text.Length = 0;
+    if (GetWindowText(h, text, text.Capacity) == 0) return true;
+    uint pid;
+    GetWindowThreadProcessId(h, out pid);
+    if (pid == selfPid) return true;
+    bool min = IsIconic(h);
+    IntPtr m;
+    if (min) {
+      WINDOWPLACEMENT wp = new WINDOWPLACEMENT();
+      wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+      if (!GetWindowPlacement(h, ref wp)) return true;
+      m = MonitorFromRect(ref wp.normal, 2);
+    } else m = MonitorFromWindow(h, 2);
+    if (m != monitor) return true;
+    string path;
+    long created;
+    if (!paths.TryGetValue(pid, out path)) { path = ExePath(pid, out created); paths[pid] = path; times[pid] = created; }
+    else created = times[pid];
+    if (path.Length > 0 && string.Equals(System.IO.Path.GetFileNameWithoutExtension(path), "claude", StringComparison.OrdinalIgnoreCase)) return true;
+    string title = text.ToString();
+    if (title.Length > 200) title = title.Substring(0, 200);
+    bool active = h == fg || h == fgRoot;
+    sb.Append(';').Append(h.ToInt64()).Append(':').Append(min ? '1' : '0').Append(':').Append(active ? '1' : '0').Append(':').Append(created)
+      .Append(':').Append(B64(path)).Append(':').Append(B64(title));
+    return true;
+  }, IntPtr.Zero);
+  return sb.ToString();
+}
 '@
 function Get-FgName {
   $id = [uint32]0
@@ -80,11 +204,41 @@ function Invoke-Open([string]$arg) {
   }
   '0'
 }
+function Get-Windows([string]$arg) {
+  $parts = "$arg" -split ' '
+  $h = [long]0
+  $id = [uint32]0
+  if ($parts.Length -ne 2 -or -not [long]::TryParse($parts[0], [ref]$h) -or -not [uint32]::TryParse($parts[1], [ref]$id)) { return '' }
+  try { [Bantus.Win]::List([IntPtr]$h, $id) } catch { '' }
+}
+function Get-Icon([string]$arg) {
+  $parts = "$arg" -split ' '
+  $h = [long]0
+  if ($parts.Length -ne 2 -or -not [long]::TryParse($parts[0], [ref]$h)) { return '' }
+  try { [Bantus.Win]::IconPng([IntPtr]$h, $parts[1] -eq '1') } catch { '' }
+}
+function Invoke-Front([string]$arg) {
+  $n = [long]0
+  if (-not [long]::TryParse("$arg", [ref]$n)) { return '0' }
+  $h = [IntPtr]$n
+  if (-not [Bantus.Win]::IsWindow($h)) { return '0' }
+  if ([Bantus.Win]::IsIconic($h)) { [void][Bantus.Win]::ShowWindow($h, 9) }
+  $ok = [Bantus.Win]::SetForegroundWindow($h)
+  if (-not $ok) {
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 0, [UIntPtr]::Zero)
+    [Bantus.Win]::keybd_event([byte]0x88, 0, 2, [UIntPtr]::Zero)
+    $ok = [Bantus.Win]::SetForegroundWindow($h)
+  }
+  if ($ok) { '1' } else { '0' }
+}
 while ($null -ne ($line = [Console]::In.ReadLine())) {
   $words = $line.Trim() -split ' ', 2
   $answer = switch ($words[0]) {
     'raise' { Invoke-Raise }
     'open' { Invoke-Open $words[1] }
+    'wins' { Get-Windows $words[1] }
+    'front' { Invoke-Front $words[1] }
+    'icon' { Get-Icon $words[1] }
     default { Get-FgName }
   }
   [Console]::Out.WriteLine($answer)
@@ -92,7 +246,7 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 }
 `;
 
-type Command = 'fg' | 'raise' | `open ${string}`;
+type Command = 'fg' | 'raise' | `open ${string}` | `wins ${string}` | `front ${string}` | `icon ${string}`;
 type Waiter = { resolve: (line: string | undefined) => void; done: boolean };
 
 let child: ChildProcessWithoutNullStreams | undefined;
@@ -183,4 +337,35 @@ export async function sendOpenToClaude(id: string, dataFolders: string[], timeou
   if (dataFolders.length === 0) return false;
   const arg = Buffer.from([id, ...dataFolders].join('\n'), 'utf8').toString('base64');
   return (await ask(`open ${arg}`, timeoutMs)) === '1';
+}
+
+/** ウィンドウのハンドル（10 進の数字）として受け付ける形 */
+const HANDLE = /^\d{1,20}$/;
+
+/**
+ * ウィジェット（widgetHandle はそのウィンドウのハンドル）と同じモニターにある、タスクバーに出るウィンドウの一覧を 1 行で返す。
+ * 読み方は window-switcher.ts の parseWindowList。PowerShell が使えないとき、時間切れは undefined
+ */
+export function askWindowList(widgetHandle: string, pid: number, timeoutMs = 1500): Promise<string | undefined> {
+  if (!HANDLE.test(widgetHandle) || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(undefined);
+  return ask(`wins ${widgetHandle} ${pid}`, timeoutMs);
+}
+
+/**
+ * ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の data URL で返す。big なら大きいほう（32px）を先に探す。
+ * 取れないとき、ウィンドウがもうないとき、PowerShell が使えないとき、時間切れは undefined
+ */
+export async function windowIcon(handle: string, big: boolean, timeoutMs = 1500): Promise<string | undefined> {
+  if (!HANDLE.test(handle)) return undefined;
+  const png = await ask(`icon ${handle} ${big ? 1 : 0}`, timeoutMs);
+  return png && /^[A-Za-z0-9+/]+={0,2}$/.test(png) ? `data:image/png;base64,${png}` : undefined;
+}
+
+/**
+ * ハンドルのウィンドウを前に出す（最小化されていれば元に戻す）。前に出せたときだけ true。
+ * ウィンドウがもうない、Windows に断られた、PowerShell が使えない、時間切れは false
+ */
+export async function bringWindowToFront(handle: string, timeoutMs = 1000): Promise<boolean> {
+  if (!HANDLE.test(handle)) return false;
+  return (await ask(`front ${handle}`, timeoutMs)) === '1';
 }

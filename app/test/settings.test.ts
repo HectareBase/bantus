@@ -229,11 +229,12 @@ describe('設定画面のカテゴリ', () => {
       ['変更の数', ['showChanges', 'countUntracked']],
     ]));
   it('git のアイコンは git-branch', () => assert.equal(CATEGORIES.find((c) => c.id === 'git')?.icon, 'git-branch'));
-  it('一般は 位置 → ツールチップ → タイトルバー → 起動 → パフォーマンス', () =>
+  it('一般は 位置 → ツールチップ → タイトルバー → ウィンドウの切り替え → 起動 → パフォーマンス', () =>
     assert.deepEqual(layout('general'), [
       ['位置', ['edge', 'display']],
       ['ツールチップ', ['tooltipDelayMs']],
       ['タイトルバー', ['showSystemUsage']],
+      ['ウィンドウの切り替え', ['showWindowSwitcher']],
       ['起動', ['openAtLogin']],
       ['パフォーマンス', ['hardwareAcceleration']],
     ]));

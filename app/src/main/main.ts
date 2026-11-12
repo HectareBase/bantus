@@ -9,7 +9,7 @@ import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appb
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
 import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe } from './foreground';
+import { askWindowList, bringWindowToFront, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, windowIcon } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
@@ -21,6 +21,7 @@ import { desktopDataFolders, folderKey, InterruptTracker, readFixtureHolds, read
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { createViewer, type Viewer } from './viewer';
+import { createWindowSwitcher } from './window-switcher';
 import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from './viewer-target';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
@@ -348,11 +349,11 @@ function canClickThrough(s: Settings): boolean {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, archive, archivedCards, holds, heldCards,
+    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -417,6 +418,7 @@ function applySettings(s: Settings) {
   if (!canClickThrough(s)) win.setIgnoreMouseEvents(false);
   win.webContents.send('layout', widgetLayout(s));
   updateSystemUsage();
+  updateWindowSwitcher();
 }
 
 /** タイトルバーの CPU とメモリ。取得のタイマーは 1 つだけで、出す設定で、ウィジェットが見えている間だけ動かす */
@@ -427,6 +429,42 @@ const systemUsage = createSystemUsage((usage) => {
 function updateSystemUsage() {
   const shown = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   systemUsage.setActive(shown && getSettings().showSystemUsage);
+}
+
+/** ウィジェットのウィンドウのハンドル（10 進の数字）。同じモニターのウィンドウを選ぶのに PowerShell へ渡す */
+function widgetHandle(): string | undefined {
+  if (!win || win.isDestroyed()) return undefined;
+  const buf = win.getNativeWindowHandle();
+  return (buf.length >= 8 ? buf.readBigUInt64LE(0) : BigInt(buf.readUInt32LE(0))).toString();
+}
+
+/**
+ * ウィンドウの切り替え（docs/design/window-switcher.md）。ウィジェットと同じモニターにある Claude 以外のウィンドウを、数秒おきに調べる。
+ * アイコンはウィンドウごとに 1 回だけ取る。タスクバーと同じウィンドウのアイコンを使い、取れないとき（ストアアプリなど）だけ
+ * 実行ファイルのアイコンにする。拡大して出すとき（Windows の拡大率と表示の拡大率の積が 1 より大きい）は、
+ * ぼやけないよう 32px のものを取って 16px で描く
+ */
+const windowSwitcher = createWindowSwitcher({
+  list: () => {
+    const handle = widgetHandle();
+    return handle ? askWindowList(handle, process.pid) : Promise.resolve(undefined);
+  },
+  icon: async (w) => {
+    const big = targetDisplay(getSettings()).scaleFactor * zoomFactor() > 1;
+    const own = await windowIcon(w.handle, big);
+    if (own || !w.path) return own;
+    const image = await app.getFileIcon(w.path, { size: big ? 'normal' : 'small' });
+    return image.isEmpty() ? undefined : image.toDataURL();
+  },
+  send: (update) => {
+    if (win && !win.isDestroyed()) win.webContents.send('switcher', update);
+  },
+});
+
+/** 撮影だけのとき（WIDGET_SCREENSHOT）は調べない。ほかのウィンドウが写り込み、PowerShell も起動してしまう */
+function updateWindowSwitcher() {
+  const shown = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+  windowSwitcher.setActive(shown && getSettings().showWindowSwitcher && !process.env.WIDGET_SCREENSHOT);
 }
 
 /** 設定画面のモニターの選択肢。値はメインが 'primary'、ほかはモニターのしるし（抜き差しで変わる id は使わない） */
@@ -505,6 +543,11 @@ function createWidget(): BrowserWindow {
   w.on('hide', updateSystemUsage);
   w.on('minimize', updateSystemUsage);
   w.on('restore', updateSystemUsage);
+  // ウィンドウの切り替えの取得も、見えている間だけ
+  w.on('show', updateWindowSwitcher);
+  w.on('hide', updateWindowSwitcher);
+  w.on('minimize', updateWindowSwitcher);
+  w.on('restore', updateWindowSwitcher);
   // 隠したときと最小化したときはアプリバーを外し、出したら登録し直す
   const syncAppBar = () => {
     appBar?.sync();
@@ -518,6 +561,7 @@ function createWidget(): BrowserWindow {
   w.webContents.on('did-finish-load', () => {
     const last = systemUsage.last();
     if (last && getSettings().showSystemUsage) w.webContents.send('system-usage', last);
+    windowSwitcher.resend();
   });
   return w;
 }
@@ -1144,6 +1188,16 @@ app.whenReady().then(() => {
     if (e.sender === win?.webContents) showTitleMenu();
   });
 
+  // ウィンドウの切り替え。前に出すのは、最後に送った一覧にあるハンドルだけ（画面が任意のウィンドウを動かせないように）
+  ipcMain.on('switcher-refresh', (e) => {
+    if (e.sender === win?.webContents) windowSwitcher.refresh();
+  });
+  ipcMain.on('switcher-focus', (e, id: unknown) => {
+    if (e.sender !== win?.webContents || typeof id !== 'string' || !windowSwitcher.has(id)) return;
+    // 前に出したら前面の印が移るので、すぐ調べ直す
+    void bringWindowToFront(id).then(() => windowSwitcher.refresh(true));
+  });
+
   ipcMain.on('flash-taskbar', () => flashTaskbar());
   ipcMain.handle('claude-in-front', () => claudeInFront());
   ipcMain.on('show-toast', (_e, toast: unknown) => {
@@ -1286,6 +1340,7 @@ app.whenReady().then(() => {
     stopWatching();
     clearInterval(fetchTimer);
     systemUsage.setActive(false);
+    windowSwitcher.setActive(false);
     stopSelfUpdate();
     globalShortcut.unregisterAll();
     stopForegroundProbe();
