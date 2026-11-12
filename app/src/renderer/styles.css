@@ -788,7 +788,8 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
 
 /* ---- ウィンドウの切り替え（docs/design/window-switcher.md）：ウィジェットの一番下の 1 列の帯 ----
    アイコンは 16px、ボタンは 24px（switcher.ts の SWITCHER_ITEM と合わせる）。最小化しているウィンドウは薄く出す。
-   入りきらない分の一覧は、帯の上に重ねて開く（ウィジェットの中だけ。別のウィンドウは作らない）。動きは付けない */
+   入りきらない分の一覧は、帯の上に重ねて開く（ウィジェットの中だけ。別のウィンドウは作らない）。
+   出し入れと並べ替えには動きを付けない。乗せたときの短い変化（塗り、アイコンと下線の transform）だけ */
 .switcher { flex: none; position: relative; margin: 0 8px 8px; }
 .switcher[hidden], html.hide-switcher .switcher { display: none; }
 .switcher-bar {
@@ -802,6 +803,9 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
   border: 1px solid var(--card-stroke);
   border-radius: 8px;
 }
+/* アイコンはウィジェットの内側（画面の中央に近い側）から並べる。右端に置いたときは左から、左端に置いたときは右から。
+   「+N」はいつも外側の端に来る */
+html[data-edge="left"] .switcher-bar { flex-direction: row-reverse; }
 .switcher-item, .switcher-more, .switcher-row {
   border: 0;
   border-radius: 4px;
@@ -811,8 +815,15 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
 }
 .switcher-item { position: relative; flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; }
 .switcher-more { flex: none; width: 32px; height: 24px; padding: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
-.switcher-item:hover, .switcher-more:hover, .switcher-row:hover { background: var(--hover); color: var(--text); }
-.switcher-item:active, .switcher-more:active, .switcher-row:active { background: var(--pressed); }
+/* 乗せたとき：タイトルバーのボタンと同じ濃さの塗り（--hover だけでは黒い帯の上でほとんど見えない）。
+   アイコンは少し大きくし、後ろにあるものの下線は伸ばす（押すと前に出ることを示す）。押している間は元の大きさ */
+.switcher-item, .switcher-more { transition: background-color 0.12s ease-out, color 0.12s ease-out; }
+.switcher-item:hover, .switcher-more:hover { background: var(--titlebar-hover); color: var(--text); }
+.switcher-row:hover { background: var(--row-hover); }
+.switcher-item:active, .switcher-more:active, .switcher-row:active { background: var(--pressed); transition: none; }
+.switcher-item .switcher-icon { transition: transform 0.12s ease-out; }
+.switcher-item:hover .switcher-icon { transform: scale(1.15); }
+.switcher-item:active .switcher-icon { transform: none; transition: none; }
 .switcher-item:focus-visible, .switcher-more:focus-visible, .switcher-row:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .switcher-more[aria-expanded="true"] { background: var(--selected); color: var(--text); }
 .switcher-icon { width: 16px; height: 16px; flex: none; pointer-events: none; }
@@ -823,15 +834,24 @@ html.resizing-viewer, html.resizing-viewer * { cursor: ns-resize !important; }
   position: absolute;
   left: 50%;
   bottom: 1px;
-  width: 6px;
+  /* 長さは transform で変える（後ろ：半分、前面と乗せたとき：伸ばす） */
+  width: 12px;
   height: 2px;
-  margin-left: -3px;
+  margin-left: -6px;
   border-radius: 1px;
   background: var(--text-tertiary);
+  transform: scaleX(0.5);
+  transition: transform 0.12s ease-out;
 }
+.switcher-item:hover::after { transform: scaleX(0.85); }
 .switcher-item[data-active] { background: var(--selected); }
 .switcher-item[data-active]:hover { background: var(--selected-hover); }
-.switcher-item[data-active]::after { width: 12px; margin-left: -6px; background: var(--text); }
+.switcher-item[data-active]::after { transform: none; background: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .switcher-item, .switcher-more, .switcher-item .switcher-icon, .switcher-item::after { transition: none; }
+}
+html[data-motion="subtle"] :is(.switcher-item, .switcher-more, .switcher-item .switcher-icon),
+html[data-motion="subtle"] .switcher-item::after { transition: none; }
 .switcher-item[data-min]::after { display: none; }
 .switcher-row[data-active] { background: var(--selected); }
 /* 最小化しているウィンドウ。乗せたときは濃く戻す */
