@@ -23,11 +23,12 @@
 HTML ビューアの HTML は別のビュー（WebContentsView）で画面の一番上に重なるので、一覧を開いている間だけビューアの HTML を引っ込める（`viewer.ts` の `setCovered`）。
 
 ## 並べるもの
-`EnumWindows` で見て、Alt+Tab に出るものだけを残す。
+`EnumWindows` で見て、タスクバーに出るものだけを残す。
 - 見えている（`IsWindowVisible`）、タイトルがある
 - ツールウィンドウ（`WS_EX_TOOLWINDOW`）でない
 - `WS_EX_APPWINDOW` が付いているか、所有者がなく `WS_EX_NOACTIVATE` でもない
 - DWM で隠されていない（`DWMWA_CLOAKED` が 0。ほかの仮想デスクトップや、裏で待っているストアアプリを除く）
+- タスクバーから外されていない。アプリが `ITaskbarList::DeleteTab` でタスクバーのボタンを消すと（Electron の `skipTaskbar` もこれ）、Windows がそのウィンドウに `ITaskList_Deleted` のプロパティを付けるので、`GetProp` で見て除く。Alt+Tab には出るがタスクバーには出ない常駐のウィジェットなどが並んでいたため。タスクバーのボタン（UI Automation で見たアプリの ID）と突き合わせ、印のあるウィンドウだけがタスクバーにないことを確かめた。文書にない印なので、Windows が変えたら効かなくなる（そのウィンドウも並ぶだけで、ほかは困らない）
 - ウィジェットと同じモニター（`MonitorFromWindow`）。最小化したウィンドウは画面の外にあるので、元に戻したときの場所（`GetWindowPlacement`）で決める
 - Claude（実行ファイル名が `claude`）と Bantus 自身のプロセスを除く
 - 多くても 60 個まで

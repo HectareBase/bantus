@@ -7,7 +7,7 @@
 // - raise：Claude のメインウィンドウを前に出し、前に出せたら 1、出せなかったら 0 を答える
 // - open <base64>：セッションへ切り替える。中身は「local_ID と、データフォルダを改行で区切ったもの」の UTF-8 を base64 にした 1 語。
 //   本体に WM_COPYDATA を送り、受け付けられたら 1、ウィンドウがない・送れない・結果が 0 なら 0 を答える
-// - wins <ウィジェットのハンドル> <自分のプロセス ID>：ウィジェットと同じモニターにある、Alt+Tab に出るウィンドウを手前から順に答える
+// - wins <ウィジェットのハンドル> <自分のプロセス ID>：ウィジェットと同じモニターにある、タスクバーに出るウィンドウを手前から順に答える
 //   （ウィンドウの切り替え。docs/design/window-switcher.md）。答えは「W」のあとに、ウィンドウごとの
 //   「;ハンドル:最小化(0/1):前面(0/1):プロセスの起動時刻:パス:タイトル」。起動時刻は FILETIME（わからなければ 0）、
 //   パスとタイトルは UTF-8 の base64。Claude（プロセス名 claude）と自分のプロセスのウィンドウは入れない。調べられなければ空行
@@ -25,9 +25,11 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 // SendMessageTimeout（SMTO_ABORTIFHUNG = 2、1 秒で打ち切り）で送る。メッセージ専用ウィンドウの親は HWND_MESSAGE（-3）
 //
 // wins の列挙は C#（List）でまとめて行う。ウィンドウごとに PowerShell のパイプラインや Get-Process を通すと遅い。
-// - Alt+Tab に出るもの：見えている、タイトルがある、ツールウィンドウ（WS_EX_TOOLWINDOW = 0x80）でない、
+// - タスクバーに出るもの：見えている、タイトルがある、ツールウィンドウ（WS_EX_TOOLWINDOW = 0x80）でない、
 //   WS_EX_APPWINDOW（0x40000）が付いているか「所有者（GW_OWNER = 4）がなく WS_EX_NOACTIVATE（0x08000000）でもない」、
-//   DWM で隠されていない（DWMWA_CLOAKED = 14。ほかの仮想デスクトップや、裏で待っているストアアプリ）
+//   DWM で隠されていない（DWMWA_CLOAKED = 14。ほかの仮想デスクトップや、裏で待っているストアアプリ）、
+//   タスクバーから外されていない（ITaskbarList::DeleteTab で外すと、Windows がウィンドウに ITaskList_Deleted のプロパティを付ける。
+//   Electron の skipTaskbar もこれ。文書にない印なので、Windows が変えたら効かなくなり、そのウィンドウも並ぶだけ）
 // - モニターは MonitorFromWindow（MONITOR_DEFAULTTONEAREST = 2）で比べる。最小化したウィンドウは画面の外（-32000）にあるので、
 //   GetWindowPlacement の元に戻したときの場所（rcNormalPosition）から MonitorFromRect で引く
 // - 実行ファイルのパスは OpenProcess（PROCESS_QUERY_LIMITED_INFORMATION = 0x1000）と QueryFullProcessImageName で引く。
@@ -66,6 +68,7 @@ public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x, y; }
 [StructLayout(LayoutKind.Sequential)] public struct WINDOWPLACEMENT { public int length, flags, showCmd; public POINT min, max; public RECT normal; }
 [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr hWnd, string name);
 [DllImport("kernel32.dll")] public static extern bool GetProcessTimes(IntPtr h, out long creation, out long exit, out long kernel, out long user);
 [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")] public static extern IntPtr SendIconMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
 [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr hWnd, int index);
@@ -120,6 +123,7 @@ public static string List(IntPtr self, uint selfPid) {
     if ((ex & 0x40000) == 0 && ((ex & 0x08000000) != 0 || GetWindow(h, 4) != IntPtr.Zero)) return true;
     int cloaked;
     if (DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0) return true;
+    if (GetProp(h, "ITaskList_Deleted") != IntPtr.Zero) return true;
     text.Length = 0;
     if (GetWindowText(h, text, text.Capacity) == 0) return true;
     uint pid;
@@ -339,7 +343,7 @@ export async function sendOpenToClaude(id: string, dataFolders: string[], timeou
 const HANDLE = /^\d{1,20}$/;
 
 /**
- * ウィジェット（widgetHandle はそのウィンドウのハンドル）と同じモニターにある、Alt+Tab に出るウィンドウの一覧を 1 行で返す。
+ * ウィジェット（widgetHandle はそのウィンドウのハンドル）と同じモニターにある、タスクバーに出るウィンドウの一覧を 1 行で返す。
  * 読み方は window-switcher.ts の parseWindowList。PowerShell が使えないとき、時間切れは undefined
  */
 export function askWindowList(widgetHandle: string, pid: number, timeoutMs = 1500): Promise<string | undefined> {
