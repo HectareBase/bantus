@@ -393,8 +393,10 @@ function openRow(id: string, raise = false) {
   else clearAttention(id);
   // ファイルに書かれるのを待たずに、クリックした行へすぐ移す。ファイルが追いつくか、本体で別のセッションを開くまで保つ。
   // 本体で開けないまま安全のための期限が過ぎたら、ファイルの値に戻す（そのための描き直しを予約しておく）
+  // 本体が前に出たとき、切り替わる前に前のセッションの時刻を書くことがあるので、それで仮の値を捨てないよう覚えておく
   const now = Date.now();
-  pendingFocus = { id, at: now, until: now + PENDING_FOCUS_MS };
+  const from = [latest.find((s) => s.focused)?.id, resolveFocus(latest, pendingFocus, now).id].filter((x): x is string => !!x && x !== id);
+  pendingFocus = { id, at: now, until: now + PENDING_FOCUS_MS, from };
   clearTimeout(pendingTimer);
   pendingTimer = window.setTimeout(() => render(latest), PENDING_FOCUS_MS);
   render(latest);
@@ -550,7 +552,12 @@ function getRow(s: SessionView): RowRefs {
       plan: el.querySelector('.plan')!,
       act: el.querySelector('.act')!,
     };
-    el.addEventListener('click', () => openRow(id));
+    el.addEventListener('click', (e) => {
+      openRow(id);
+      // マウスで開いたら行のフォーカスを外す。残すと、Claude から戻ったときにこの行へフォーカスが戻り、
+      // :focus-visible の枠が一瞬出る（次にクリックした行へ移る前にちらつく）。キーボードで開いたときは残す
+      if (e.detail > 0) el.blur();
+    });
     // ホイールクリックで、トグルと同じ処理を呼ぶ。mousedown で既定の動き（オートスクロール）を止める
     el.addEventListener('mousedown', (e) => {
       if (e.button === 1) e.preventDefault();
