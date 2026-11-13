@@ -58,6 +58,11 @@ export interface SessionView {
    * 手順が 2 つ以上のときだけ。手順の名前は持たない
    */
   plan?: PlanStep[];
+  /**
+   * state が busy のとき、今のターンが始まった時刻（最後の本当のユーザーの発言の timestamp、Unix ミリ秒。src/main/plan-progress.ts）。
+   * 行の 2 行目に「◯分経過」として出す。わからなければ省く
+   */
+  busySince?: number;
   /** 最後のターンのまとめで「対応が必要」とされた内容 */
   needsAction?: string;
   /** 最後のターンのまとめ（ツールチップ用） */

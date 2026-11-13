@@ -11,7 +11,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | | `cwd`、`originCwd`、`gitAnchors`、`worktreeName`、`worktreePath`、`branch` | リポジトリごとにまとめ、ワークツリーごとのカードに分ける。ブランチ名を出す | |
 | | `sourceBranch` | ワークツリーの元のブランチ。遅れとマージ済みを調べる | |
 | | `isArchived`、`spawnedFrom` | アーカイブ済みとサイドチャット（btw）を一覧から外す。`spawnedFrom.sessionId` は、一覧のタイムラインのつながりと起点を見つけるのにも使う | |
-| | `createdAt`、`lastActivityAt` | 並び順と「◯分前」。同じワークツリーで残すセッション（最後に動いたもの）を決める | |
+| | `createdAt`、`lastActivityAt` | 並び順と「◯分前」（処理中で今のターンの始まりがわかるときは、代わりに「◯分経過」）。同じワークツリーで残すセッション（最後に動いたもの）を決める | |
 | | `lastFocusedAt` | デスクトップで今開いているセッション（その行の背景色、`Ctrl+Alt+N` の次の行、通知を出すかどうか）。サイドチャットのときは親に置き換える | |
 | | `postTurnSummary.needs_action`、`postTurnSummary.status_detail` | ツールチップの「対応が必要」と、最後のターンのまとめ | |
 | | `turnWrapUp.description` | 以前のセッションの一覧で、乗せた行のまとめを下の段に出す | |
@@ -20,7 +20,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 | | `status`、`waitingFor` | 状態（対応待ち、処理中、待機）と、対応待ちの理由。判定は [session-status.md](../research/session-status.md) | |
 | | `cwd` | セッションの途中でワークツリーに入ったときに、そのワークツリーを見つける | |
 | `%USERPROFILE%\.claude\projects\<フォルダ>\<cliSessionId>.jsonl` の**末尾だけ**（64 KB から、見つからなければ 4 MB まで広げる） | 最後のアシスタントの発言（`type` が `assistant`、`isSidechain` でないもの）の `message.usage` の `input_tokens`、`cache_read_input_tokens`、`cache_creation_input_tokens`。`local_*.json` に `model` がなければ `message.model` | コンテキストの使用量（分子）。窓の大きさ（分母）はモデルの対応表から決める推定で、表にないモデルは割合を出さない。大きさと更新時刻が変わったときだけ読み直す。アーカイブ済みのセッションの記録は読まない。発言の中身は使わず、どこにも送らない | `src/main/context-usage.ts` |
-| `%USERPROFILE%\.claude\projects\<フォルダ>\<cliSessionId>.jsonl`（**処理中のセッションだけ**。前回読んだ位置から増えた分だけ。最初の 1 回だけ全体） | 本当のユーザーの発言（`type` が `user` で、ツールの結果でも `isMeta` でもないもの）の位置。アシスタントの発言（`isSidechain` でないもの）の `mcp__ccd_turn__update_plan` の呼び出しの `input` のうち、`items[].status` と `advance`、`done`、`start`。`mcp__ccd_turn__wrap_up` の呼び出しがあったこと | 今のターンのタスクリストの手順の数と状態を作り直し、状態の札の中に棒で出す（手順が 2 つ以上のときだけ）。手順の名前（`items[].content`）と発言の中身は使わず、画面にもログにも出さない。処理中の間だけファイルを `fs.watch` で見張り、手順の数か状態が変わったときだけ画面を描き直す。作り直し方と読み方は [work-progress.md](../research/work-progress.md) | `src/main/plan-progress.ts` |
+| `%USERPROFILE%\.claude\projects\<フォルダ>\<cliSessionId>.jsonl`（**処理中のセッションだけ**。前回読んだ位置から増えた分だけ。最初の 1 回だけ全体） | 本当のユーザーの発言（`type` が `user` で、ツールの結果でも `isMeta` でもないもの）の位置と `timestamp`。アシスタントの発言（`isSidechain` でないもの）の `mcp__ccd_turn__update_plan` の呼び出しの `input` のうち、`items[].status` と `advance`、`done`、`start`。`mcp__ccd_turn__wrap_up` の呼び出しがあったこと | 今のターンのタスクリストの手順の数と状態を作り直し、状態の札の中に棒で出す（手順が 2 つ以上のときだけ）。最後の本当のユーザーの発言の `timestamp` を今のターンが始まった時刻とし、行の 2 行目に「12 分経過」と出す（読めなければ「◯分前」のまま）。手順の名前（`items[].content`）と発言の中身は使わず、画面にもログにも出さない。処理中の間だけファイルを `fs.watch` で見張り、手順の数か状態、ターンが始まった時刻が変わったときだけ画面を描き直す。作り直し方と読み方は [work-progress.md](../research/work-progress.md) | `src/main/plan-progress.ts` |
 | 作業フォルダの `.git`（ファイル）と `.git/HEAD`（ワークツリーなら `.git/worktrees/<名前>/HEAD`） | 今のブランチ名 | 元のフォルダのカード（家のアイコン）と、リポジトリの外のワークツリーのカードの見出しに出す。どちらも `local_*.json` の `branch` には入らない | `src/main/sessions.ts` |
 
 | 作業フォルダの中の HTML ファイル（設定の「ファイルの場所」） | ファイルそのもの | HTML ビューアに出す。設定でオンにしたときだけ（既定はオフ）。今開いているセッションの作業フォルダの中だけで、ファイルの入ったフォルダを `fs.watch` で見張る。詳しくは [html-viewer.md](html-viewer.md) | `src/main/viewer.ts` |
@@ -55,7 +55,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 ## しないこと
 - Claude のデータ（`Claude-Data`、`~/.claude`）には書き込みません。動かすことも、消すこともしません
 - 認証情報を含むファイル（`config.json`、`ssh-remote-server-state.json`、`~/.claude.json`、`sessions/*.key`）は読みません
-- 会話の記録（`~/.claude/projects/*.jsonl`）からは、コンテキストの使用量（末尾だけを読み、使用量の数とモデル名）と、処理中のセッションのタスクリストの手順の数と状態のほかは使いません。手順の名前を含む発言の中身を画面に出したり、ほかへ送ったり、ログに出したりはしません。会話の記録のフォルダ全体は見張らず、見張るのは処理中のセッションの記録のファイルだけです
+- 会話の記録（`~/.claude/projects/*.jsonl`）からは、コンテキストの使用量（末尾だけを読み、使用量の数とモデル名）と、処理中のセッションのタスクリストの手順の数と状態、今のターンが始まった時刻のほかは使いません。手順の名前を含む発言の中身を画面に出したり、ほかへ送ったり、ログに出したりはしません。会話の記録のフォルダ全体は見張らず、見張るのは処理中のセッションの記録のファイルだけです
 - `git-worktrees.json`、`window-state.json` は読みません。調査はしましたが、今は使っていません
 - UIA（Windows UI Automation）で画面の部品を読んだり、押したりはしません。セッションは Claude 本体に `WM_COPYDATA` を送って開き、送れなかったときだけ `claude://` のリンクで開きます（[deep-link-and-uia.md](../research/deep-link-and-uia.md#プロセスを起動せずにリンクを渡すwm_copydata)）
 - 読んだ内容をネットワークに送りません。ログにも出しません。取得をオンにしたときの git の通信（リポジトリのリモートとの `git fetch`）だけは除きます。そこでも Bantus が読んだもの（セッション、会話）は送りません

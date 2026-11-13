@@ -22,7 +22,7 @@
 | PC の CPU とメモリ | 3 秒ごと（動き出して最初は 300ms 後）。`os.cpus()`、`os.totalmem()`、`os.freemem()` でファイルは読まない | ウィジェットが見えていないとき、設定で出さないとき | `src/main/system-usage.ts` |
 | ウィンドウの切り替えの一覧 | 3 秒ごと（動き出して最初は 100ms 後）。常駐の PowerShell に `wins` を聞く。アイコンはウィンドウごとに 1 回だけ `icon` で取る | ウィジェットが見えていないとき、設定で出さないとき | `src/main/window-switcher.ts` |
 | カーソルの位置（めくれを出すため） | 近いとき・めくれを出しているときは 30ms、遠いときは 250ms | ウィジェットが見えていないとき | `src/main/flyout.ts`、`src/main/tip-place.ts` |
-| 「◯分前」の描き直しと自動アーカイブ | 画面の中で 60 秒ごと | 終了まで動く | `src/renderer/renderer.ts` |
+| 「◯分前」「◯分経過」「保留 2 日」の描き直しと自動アーカイブ | 画面の中で 60 秒ごと | 終了まで動く | `src/renderer/renderer.ts` |
 | 取得の結果（設定画面） | 設定画面を開いている間、30 秒ごとにメインプロセスに聞く | 設定画面を閉じたとき | `src/renderer/settings.ts` |
 | main に入ったコードへの自動の切り替え | `.git` の `HEAD`、`packed-refs`、`refs/heads` を `fs.watch` で見張り、3 秒待ってまとめる。取りこぼしに備えて 60 秒ごと | `npm start` を main のチェックアウトから動かしたときだけ（インストール版、ワークツリー、見本データでは動かない） | `src/main/self-update.ts` |
 

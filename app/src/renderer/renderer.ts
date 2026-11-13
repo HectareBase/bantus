@@ -22,7 +22,9 @@ import {
   contextLevel,
   contextPercent,
   formatAgo,
+  whenLabel,
   hasAlertOutput,
+  heldLabel,
   holdTooltip,
   isHeld,
   releasedHolds,
@@ -116,6 +118,8 @@ interface CardRefs {
   changes: HTMLElement;
   act: HTMLElement;
   hold: HTMLElement;
+  /** 保留の 2 段目の札（「保留 2 日」） */
+  holdPill: HTMLElement;
   memo: MemoBox;
   rows: HTMLUListElement;
   data?: WorktreeCard;
@@ -589,7 +593,7 @@ function getRow(s: SessionView): RowRefs {
     rows.set(s.id, refs);
   }
   const prev = refs.data;
-  // 保留の行は、状態の印を circle-pause にし、2 行目を「保留」とメモの枠にする（処理中・対応待ちになったら外れる）
+  // 保留の行は、状態の印を circle-pause にし、2 行目を「保留 2 日」とメモの枠にする（処理中・対応待ちになったら外れる）
   const hold = isRunning(s) ? undefined : holds[s.id];
   // 停止中は待機中と同じに見せ、中断だけを stopped として描く（displayState）
   const shown = displayState(s);
@@ -603,10 +607,12 @@ function getRow(s: SessionView): RowRefs {
   refs.act.dataset.tip = ja.widget.archiveTip;
   if (prev?.title !== s.title) refs.titleText.data = s.title;
   setShine(refs, s);
-  const label = hold ? ja.state.held : stateLabel(shown, s.waitingFor, s.background);
+  const label = hold ? heldLabel(hold.since) : stateLabel(shown, s.waitingFor, s.background);
   if (refs.pillText.textContent !== label) refs.pillText.textContent = label;
   setPlan(refs.plan, hold ? undefined : planSteps(s));
-  if (prev?.lastActivityAt !== s.lastActivityAt) refs.when.textContent = formatAgo(s.lastActivityAt);
+  // 処理中は今のターンの経過、ほかは「◯分前」（whenLabel）
+  const when = whenLabel(s);
+  if (refs.when.textContent !== when) refs.when.textContent = when;
   const ctx = contextLabel(s.context);
   if (refs.ctxNum.textContent !== ctx) refs.ctxNum.textContent = ctx;
   refs.ctx.hidden = !ctx;
@@ -882,6 +888,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
       changes: el.querySelector('.changes')!,
       act: el.querySelector('.card-act')!,
       hold,
+      holdPill: hold.querySelector('.state-pill')!,
       memo: createMemo(hold.querySelector('.memo')!, { bound: () => hold, onCommit: (note) => commitCardNote(key, note), onEditing: onMemoEditing }),
       rows: el.querySelector('.rows')!,
     };
@@ -940,7 +947,11 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
   // 動いている（処理中・対応待ちの）セッションがあるカードと保留のカードはアーカイブできないので、トグルを出さない
   refs.act.hidden = card.isMain || running || !!card.held;
   refs.hold.hidden = !card.held && !refs.memo.editing;
-  if (card.held) refs.memo.set(card.held.note);
+  if (card.held) {
+    refs.memo.set(card.held.note);
+    const label = heldLabel(card.held.since);
+    if (refs.holdPill.textContent !== label) refs.holdPill.textContent = label;
+  }
   setChanges(refs.changes, showChanges ? card.changes : undefined, card.base?.branch);
   refs.el.toggleAttribute('data-stack', card.stackCount > 0);
   refs.stackHit.dataset.count = String(card.stackCount);
@@ -1035,10 +1046,10 @@ function startPendingMemo() {
 
 // ---- 画面の操作 ----
 
-// 「◯分前」と main の自動アーカイブのために、1 分に 1 回だけ描き直す（変わったところだけを書き換える）
+// 「◯分前」「◯分経過」「保留 2 日」と main の自動アーカイブのために、1 分に 1 回だけ描き直す（変わったところだけを書き換える）
 setInterval(() => {
   for (const refs of rows.values()) {
-    if (refs.data) refs.when.textContent = formatAgo(refs.data.lastActivityAt);
+    if (refs.data) refs.when.textContent = whenLabel(refs.data);
   }
   render(latest);
 }, 60_000);

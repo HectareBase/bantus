@@ -7,7 +7,7 @@ import {
   nextAttention, nextCycleTarget, FOCUS_FROM_GRACE_MS, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
-  HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds, startupConfirmedAt,
+  HELD_RANK, busyFor, compareSessions, heldFor, heldLabel, whenLabel, holdTooltip, isHeld, rankOf, releasedHolds, startupConfirmedAt,
 } from '../src/renderer/model';
 import type { GitChanges, SessionView } from '../src/shared/types';
 import { cardKeyOf } from '../src/shared/card-key';
@@ -634,6 +634,35 @@ describe('formatAgo', () => {
     assert.equal(formatAgo(now - 60_000, now), '1 分前');
     assert.equal(formatAgo(now - 3_600_000, now), '1 時間前');
     assert.equal(formatAgo(now - 24 * 3_600_000, now), '1 日前');
+  });
+});
+
+describe('busyFor・whenLabel（処理中の経過）', () => {
+  const now = 100 * 24 * 3_600_000;
+  it('境目。1 時間を超えたら時間と分、分が 0 なら時間だけ', () => {
+    assert.equal(busyFor(now - 59_999, now), '始めたばかり');
+    assert.equal(busyFor(now - MIN, now), '1 分経過');
+    assert.equal(busyFor(now - 59 * MIN, now), '59 分経過');
+    assert.equal(busyFor(now - 60 * MIN, now), '1 時間');
+    assert.equal(busyFor(now - 65 * MIN, now), '1 時間 5 分');
+    assert.equal(busyFor(now - 26 * 60 * MIN, now), '26 時間');
+  });
+  it('処理中で始まりがわかるときだけ経過。ほかは「◯分前」', () => {
+    const at = { lastActivityAt: now - 3 * MIN };
+    assert.equal(whenLabel({ ...at, state: 'busy', busySince: now - 12 * MIN }, now), '12 分経過');
+    assert.equal(whenLabel({ ...at, state: 'busy' }, now), '3 分前');
+    assert.equal(whenLabel({ ...at, state: 'idle', busySince: now - 12 * MIN }, now), '3 分前');
+  });
+  it('1 分たつと文字が進む（保留も）', () => {
+    assert.notEqual(busyFor(now - 12 * MIN, now), busyFor(now - 12 * MIN, now + MIN));
+    assert.equal(heldFor(now - 59_999, now), '保留したばかり');
+    assert.equal(heldFor(now - 59_999, now + MIN), '保留 1 分');
+  });
+  it('保留の札は、1 分たつまで短く「保留」（ツールチップは「保留したばかり」のまま）', () => {
+    assert.equal(heldLabel(now - 59_999, now), '保留');
+    assert.equal(heldLabel(now - MIN, now), '保留 1 分');
+    assert.equal(heldLabel(now - 2 * 24 * 60 * MIN, now), '保留 2 日');
+    assert.equal(holdTooltip({ note: '', since: now - 59_999 }, now), '保留したばかり');
   });
 });
 

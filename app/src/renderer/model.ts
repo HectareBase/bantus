@@ -68,7 +68,7 @@ export function compareSessions(order: SortOrder, holds: HoldOptions = NO_HOLDS)
   };
 }
 
-/** 保留にしてからの長さ（「保留 2 日」など）。ツールチップに出す */
+/** 保留にしてからの長さ（「保留 2 日」など）。ツールチップと、保留の札（heldLabel）に出す */
 export function heldFor(since: number, now = Date.now()): string {
   const min = Math.floor((now - since) / 60_000);
   if (min < 1) return ja.time.heldJustNow;
@@ -76,6 +76,11 @@ export function heldFor(since: number, now = Date.now()): string {
   const h = Math.floor(min / 60);
   if (h < 24) return ja.time.heldHours(h);
   return ja.time.heldDays(Math.floor(h / 24));
+}
+
+/** 保留の札（行とカードの 2 段目）の文字。1 分たつまでは短く「保留」とだけ出し、メモの枠に幅を残す */
+export function heldLabel(since: number, now = Date.now()): string {
+  return now - since < 60_000 ? ja.time.heldJustNowShort : heldFor(since, now);
 }
 
 /** 保留の印のツールチップの行。経過と、メモがあればその全文 */
@@ -151,6 +156,19 @@ export function formatAgo(ms: number, now = Date.now()): string {
   const h = Math.floor(min / 60);
   if (h < 24) return ja.time.hoursAgo(h);
   return ja.time.daysAgo(Math.floor(h / 24));
+}
+
+/** 処理中のターンが始まってからの長さ（「12 分経過」「1 時間 5 分」）。描き直しは 1 分ごとなので、分の単位にとどめる */
+export function busyFor(since: number, now = Date.now()): string {
+  const min = Math.floor((now - since) / 60_000);
+  if (min < 1) return ja.time.busyJustNow;
+  if (min < 60) return ja.time.busyMinutes(min);
+  return ja.time.busyHours(Math.floor(min / 60), min % 60);
+}
+
+/** 行の 2 行目の時刻の文字。処理中でターンの始まりがわかれば経過、ほかは最後に動きがあってからの「◯分前」 */
+export function whenLabel(s: Pick<SessionView, 'state' | 'busySince' | 'lastActivityAt'>, now = Date.now()): string {
+  return s.state === 'busy' && s.busySince ? busyFor(s.busySince, now) : formatAgo(s.lastActivityAt, now);
 }
 
 /** 知らない waitingFor はそのまま出す（docs/research/session-status.md：「対応待ち（その他）」） */
