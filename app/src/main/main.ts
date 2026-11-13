@@ -808,7 +808,7 @@ async function readCardGitDetail(key: string) {
   const fixture = process.env.WIDGET_FIXTURE;
   const s = lastSessions.find((v) => (v.workDir || fixture) && cardKeyOf(v) === key);
   if (!s || (!s.workDir && !fixture)) return undefined;
-  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, changes: s.changes };
+  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch, changes: s.changes };
   if (fixture) return fixtureGitDetail(fixture, key, src);
   return gitDetail(src);
 }
@@ -1193,6 +1193,10 @@ app.whenReady().then(() => {
   ipcMain.handle('git-detail', (e, key: unknown) => {
     if (e.sender !== win?.webContents || typeof key !== 'string') return undefined;
     return readCardGitDetail(key);
+  });
+  // git の詳細でコミットの行を押した。写すのは短い ID の形のものだけ（画面が任意の文字をクリップボードに入れないように）
+  ipcMain.on('fly:copy-commit', (e, id: unknown) => {
+    if (e.sender === flyout?.window().webContents && typeof id === 'string' && /^[0-9a-f]{4,64}$/.test(id)) clipboard.writeText(id);
   });
   ipcMain.on('card-menu', (e, key: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string') showCardMenu(key);

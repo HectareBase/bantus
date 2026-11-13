@@ -102,6 +102,7 @@ const flyoutApi: FlyoutApi = {
     );
   },
   requestOpen: () => ipcRenderer.send('fly:request-open'),
+  copyCommitId: (id) => ipcRenderer.send('fly:copy-commit', id),
   action: (action) => ipcRenderer.send('fly:action', action),
   showSessionMenu: (id) => ipcRenderer.send('session-menu', id),
   close: () => ipcRenderer.send('fly:close'),

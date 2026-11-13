@@ -321,6 +321,8 @@ export interface GitCommit {
   subject: string;
   /** 件名が `<種別>(<範囲>): <要約>` の形なら種別。違えば undefined */
   type?: string;
+  /** 同じく範囲。なければ undefined */
+  scope?: string;
   /** 本文に出す文。形が合えば要約、違えば件名 */
   text: string;
   /** 本文（末尾のトレーラーを除き、長いものは切る）。なければ空 */
@@ -333,6 +335,8 @@ export interface GitDetail {
   mode: 'worktree' | 'main';
   /** 今のブランチ。わからなければ undefined */
   branch?: string;
+  /** 見出しに出す短い名前（カードの見出しと同じ）。わからなければ branch を出す */
+  label?: string;
   /** ワークツリーの分岐元 */
   base?: string;
   changed: number;
@@ -412,6 +416,8 @@ export interface FlyoutApi {
   onColors(listener: (colors: StatusColors, highlight: number, motion: Motion, island: boolean) => void): void;
   /** めくれが押された */
   requestOpen(): void;
+  /** git の詳細で、コミットの短い ID をクリップボードへ写す（メインプロセスが ID の形を確かめる） */
+  copyCommitId(id: string): void;
   action(action: FlyAction): void;
   /** 行の右クリックメニュー（ID をコピー）。ウィジェットの showSessionMenu と同じ */
   showSessionMenu(id: string): void;

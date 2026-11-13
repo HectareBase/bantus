@@ -11,9 +11,10 @@ function record(short: string, parents: string, seconds: number, subject: string
 
 describe('splitSubject', () => {
   it('<種別>(<範囲>): <要約> を種別と要約に分ける', () => {
-    assert.deepEqual(splitSubject('feat(app): ツールチップを自前で描く'), { type: 'feat', text: 'ツールチップを自前で描く' });
+    assert.deepEqual(splitSubject('feat(app): ツールチップを自前で描く'), { type: 'feat', scope: 'app', text: 'ツールチップを自前で描く' });
     assert.deepEqual(splitSubject('fix: 直す'), { type: 'fix', text: '直す' });
-    assert.deepEqual(splitSubject('refactor(main)!: 作り直す'), { type: 'refactor', text: '作り直す' });
+    assert.deepEqual(splitSubject('refactor(main)!: 作り直す'), { type: 'refactor', scope: 'main', text: '作り直す' });
+    assert.deepEqual(splitSubject('fix(): 空の範囲'), { type: 'fix', text: '空の範囲' });
   });
 
   it('形が合わなければ件名をそのまま出す', () => {
@@ -47,7 +48,7 @@ describe('parseLog', () => {
   it('ID、親、時刻、件名、本文を読む', () => {
     const out = record('abc1234', 'def5678', 1000, 'feat(app): 足す', '本文\n\nCo-Authored-By: x\n') + record('def5678', '', 900, '最初');
     assert.deepEqual(parseLog(out), [
-      { short: 'abc1234', parents: ['def5678'], at: 1_000_000, subject: 'feat(app): 足す', type: 'feat', text: '足す', body: '本文' },
+      { short: 'abc1234', parents: ['def5678'], at: 1_000_000, subject: 'feat(app): 足す', type: 'feat', scope: 'app', text: '足す', body: '本文' },
       { short: 'def5678', parents: [], at: 900_000, subject: '最初', text: '最初', body: '' },
     ]);
   });

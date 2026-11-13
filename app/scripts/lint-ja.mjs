@@ -35,8 +35,6 @@ const SAMPLES = {
   'tooltip.contextPercent': [[12, '24k', '200k']],
   'tooltip.contextUnknownWindow': [['24k', 'claude-x'], ['24k']],
   'changes.changed': [[2]],
-  'gitDetail.aheadOfBase': [['main', 3]],
-  'gitDetail.unpushed': [[2]],
   'gitDetail.behind': [['origin/main', 2]],
   'gitDetail.uncommittedParts': [[2, 1]],
   'gitDetail.more': [[12]],

@@ -7,7 +7,7 @@
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { ja } from '../shared/strings/ja.js';
-import { renderGit, resetGitFoot } from './flyout-git.js';
+import { renderGit, resetGitFoot, scrollGitFoot } from './flyout-git.js';
 import { createIcon } from './icon.js';
 import { canToggleArchive, hasBackground, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
@@ -383,4 +383,7 @@ document.addEventListener('keydown', (e) => {
 });
 list.addEventListener('pointerleave', () => (gitMode ? resetGitFoot(foot) : showSummary(undefined)));
 // 下の段はスクロールしないので、その上で回したホイールは一覧のスクロールに回す
-foot.addEventListener('wheel', (e) => body.scrollBy({ top: e.deltaY }), { passive: true });
+// git の詳細では、本文が収まらないときだけ本文を送る
+foot.addEventListener('wheel', (e) => {
+  if (!(gitMode && scrollGitFoot(foot, e.deltaY))) body.scrollBy({ top: e.deltaY });
+}, { passive: true });

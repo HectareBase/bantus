@@ -100,5 +100,20 @@
       }
     ],
     "fork": "d4e5f6a"
+  },
+  "my-app|new-api": {
+    "commits": [
+      {
+        "short": "f1e2d3c",
+        "minutesAgo": 5,
+        "subject": "feat(api): 一覧の取得を足す",
+        "body": "ページ送りに対応する。\n件数の上限は設定で変えられる。"
+      },
+      {
+        "short": "e2d3c4b",
+        "minutesAgo": 40,
+        "subject": "test(api): 一覧の取得を確かめる"
+      }
+    ]
   }
 }

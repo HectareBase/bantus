@@ -22,9 +22,11 @@ const CACHE_MAX = 50;
 const FORMAT = '%h%x1f%p%x1f%ct%x1f%s%x1f%b%x1e';
 
 /** 件名を `<種別>(<範囲>): <要約>` の形で分ける。形が合わなければ件名をそのまま本文にする */
-export function splitSubject(subject: string): { type?: string; text: string } {
-  const m = /^([A-Za-z]+)(?:\([^()]*\))?!?:\s+(\S.*)$/.exec(subject);
-  return m ? { type: m[1]!.toLowerCase(), text: m[2]! } : { text: subject };
+export function splitSubject(subject: string): { type?: string; scope?: string; text: string } {
+  const m = /^([A-Za-z]+)(?:\(([^()]*)\))?!?:\s+(\S.*)$/.exec(subject);
+  if (!m) return { text: subject };
+  const scope = m[2]?.trim();
+  return { type: m[1]!.toLowerCase(), ...(scope && { scope }), text: m[3]! };
 }
 
 /** 本文の末尾のトレーラー（`Co-Authored-By: ...` などが並ぶ段落）を除き、長いものは切る */
@@ -110,6 +112,8 @@ export interface DetailSource {
   /** ワークツリーの分岐元。メインのカードでは undefined */
   base?: string;
   branch?: string;
+  /** 見出しに出す短い名前 */
+  label?: string;
   changes?: GitChanges;
 }
 
@@ -122,6 +126,7 @@ export function buildDetail(src: DetailSource, log: GitLog | undefined): GitDeta
   return {
     mode: worktree ? 'worktree' : 'main',
     ...(src.branch && { branch: src.branch }),
+    ...(src.label && { label: src.label }),
     ...(worktree && src.base && { base: src.base }),
     changed: c.changed,
     untracked: c.untracked,

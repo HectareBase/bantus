@@ -219,15 +219,19 @@ export const ja = {
     /** ブランチ名がわからないとき（HEAD がブランチを指していない） */
     detached: 'ブランチなし',
     merged: 'マージ済み',
+    /** 見出しの、今のブランチと分岐元の間の印の読み上げ名 */
+    fromBase: '分岐元',
     /** 見出しの札のツールチップ */
-    aheadOfBase: (base: string, n: number) => `${base} にないコミット：${n}`,
-    unpushed: (n: number) => `push していないコミット：${n}`,
     behind: (upstream: string, n: number) => `${upstream} からの遅れ：${n}`,
     uncommitted: 'コミットしていない変更',
     /** コミットしていない変更の 2 行目 */
     uncommittedParts: (changed: number, untracked: number) => `変更 ${changed}・未追跡 ${untracked}`,
     /** HEAD の行のツールチップの印 */
     head: '今のコミット（HEAD）',
+    /** コミットの行のツールチップの最後の行 */
+    copyHint: 'クリックで ID をコピー',
+    /** 行を押して ID を写したあと、2 行目に少しのあいだ出す */
+    copied: 'ID をコピーしました',
     /** たたんだコミット。押すと全部出す */
     more: (n: number) => `ほか ${n} 件`,
     expand: 'すべて表示',
