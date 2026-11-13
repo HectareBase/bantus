@@ -11,7 +11,7 @@
 | ほかの形 | ポータブル版（zip）も同じビルドで作る | インストールしたくない人向け。試すときにも便利 |
 | 署名 | 最初は**署名しない** | 費用がかかる。SmartScreen の警告が出ることを README に書く。利用者が増えたら考える |
 | 自動更新 | 最初は**なし**。GitHub Releases に置き、手で入れ直す | 署名なしの自動更新は警告が毎回出る。仕組みが落ち着いてから足す |
-| 対象 | Windows x64 だけ | 今の機能（PowerShell、`claude://`、Claude-Data）が Windows 専用 |
+| 対象 | Windows x64 だけ | 今の機能（Windows の API を呼ぶ補助プログラム、`claude://`、Claude-Data）が Windows 専用 |
 
 ## 今のコードで直すところ
 | 場所 | 今 | exe にしたとき | 対応 |
@@ -40,6 +40,7 @@
 
 ## 足したファイルとスクリプト
 - `app/electron-builder.yml`：設定（`appId`、`productName`、`copyright`、`files`、`extraResources`、`win.target: [nsis, zip]`、`nsis.oneClick: false`、`nsis.perMachine: false`、`directories.output: release`）。electron-builder 26 では `zip` という項目がないので、zip の名前は `win.artifactName`、インストーラーの名前は `nsis.artifactName` で決める
+- 常駐の補助プログラム（`bantus-helper.exe`）は、`npm run dist` が `npm run build:native` でビルドし、`extraResources` で `resources/` に置く。MSVC がなければ `dist` は止まる（exe のないインストーラーは作らない）。[native-helper.md](native-helper.md)
 - `app/package.json`：`"dist": "node scripts/clean-dist.mjs && npm run build && electron-builder"`、`"dist:dir"`（同じく `--dir`）。`productName: "Bantus"` と `author`
 - `app/scripts/clean-dist.mjs`：包む前に `dist/` を消す（前のビルドの残りを入れない）
 - 一番上の `package.json`：同じ名前で `app/` に渡すスクリプト
@@ -93,4 +94,4 @@
 - `Ctrl+Alt+N`：いつものウィジェット（`npm start`）が動いていてキーを使っているため、exe では登録できなかった（想定どおり）。いつものウィジェットを止めて確かめる
 - トレイのアイコンの見た目（タスクバーが隠れていて画面で見られなかった。アイコンのファイルを読めることは確かめた）
 - インストーラーの画面（`/S` で画面なしだけを試した）
-- セッションを開く動き（`WM_COPYDATA` は常駐させた PowerShell から送り、予備のリンクは `shell.openExternal` なので、exe でも変わらない見込み）
+- セッションを開く動き（`WM_COPYDATA` は常駐させた補助プログラムから送り、予備のリンクは `shell.openExternal` なので、exe でも変わらない見込み）

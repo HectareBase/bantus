@@ -438,7 +438,7 @@ async function fireAlerts() {
   queuedAlerts = [];
   const n = notify;
   if (!n || !queued.length) return;
-  // Claude が前面かどうかは、今開いているセッションが入っているときだけ調べる（PowerShell に問い合わせるため）
+  // Claude が前面かどうかは、今開いているセッションが入っているときだけ調べる（補助プログラムに問い合わせるため）
   const focused = resolveFocus(latest, pendingFocus).id;
   const askFront = focused !== undefined && queued.some((a) => a.id === focused);
   const openInFront = askFront && (await window.widget.isClaudeInFront()) ? focused : undefined;

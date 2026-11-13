@@ -1,4 +1,4 @@
-// アプリバー（appbar.ts）の場所の計算。Electron も PowerShell も使わない、純粋な計算だけを置く（テストするため）。
+// アプリバー（appbar.ts）の場所の計算。Electron も補助プログラムも使わない、純粋な計算だけを置く（テストするため）。
 
 export interface Rect {
   x: number;

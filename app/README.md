@@ -14,7 +14,7 @@ npm run setup
 npm start
 npm run debug -- empty --cycle 3
 ```
-`npm start` は、TypeScript をビルドしてから Electron を起動します。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
+`npm start` は、TypeScript をビルドしてから Electron を起動します。Visual Studio の C++ のビルドツール（MSVC）があれば、常駐の補助プログラム（`native/bantus-helper.c`）もビルドします。なければ飛ばし、補助プログラムの代わりに PowerShell で動きます（[docs/design/native-helper.md](../docs/design/native-helper.md)）。メインプロセスは `dist/node/`、画面は `dist/web/` に出力します（`src/shared/` を両方で使うため、出力先を分けています）。型だけを調べるときは `npm run typecheck` です。
 
 ### ワークツリーで動かす
 機能の追加はワークツリー（`.claude/worktrees/<名前>`）で進めます。ワークツリーには `app/node_modules` がないので、一番上で `npm run setup` を実行します。

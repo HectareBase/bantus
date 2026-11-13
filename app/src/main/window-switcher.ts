@@ -1,7 +1,7 @@
 // ウィンドウの切り替え（docs/design/window-switcher.md）。ウィジェットと同じモニターにある、Claude 以外のウィンドウの一覧を
 // 数秒おきに調べ、変わったときだけ画面に送る。作りは system-usage.ts と同じで、タイマーは 1 つだけ。
 // ウィジェットが見えていない間と、設定で出さないときは止める。
-// 一覧は foreground.ts の常駐の PowerShell に聞き、アイコンはウィンドウごとに 1 回だけ取って覚える。
+// 一覧は foreground.ts の常駐の補助プログラムに聞き、アイコンはウィンドウごとに 1 回だけ取って覚える。
 // Electron に触れるところ（一覧の問い合わせ、アイコン、画面への送信）は呼ぶ側から受け取る。
 
 import type { SwitcherUpdate, SwitcherWindow } from '../shared/types';
@@ -15,7 +15,7 @@ const ENTER_GAP_MS = 500;
 /** 並べるウィンドウの上限。これより多い分は捨てる（答えの行と画面への送信を小さく保つ） */
 export const WINDOW_LIMIT = 60;
 
-/** PowerShell が答えたウィンドウ 1 つ */
+/** 補助プログラムが答えたウィンドウ 1 つ */
 export interface WindowEntry {
   /** ウィンドウのハンドル（10 進の数字） */
   handle: string;
@@ -162,7 +162,7 @@ export function createWindowSwitcher(deps: WindowSwitcherDeps): WindowSwitcher {
     if (busy) return;
     busy = true;
     try {
-      // 答えがない（PowerShell が使えない、時間切れ）ときは、1 つもないものとして帯を消す
+      // 答えがない（補助プログラムが使えない、時間切れ）ときは、1 つもないものとして帯を消す
       const list = orderWindows(parseWindowList(await deps.list().catch(() => undefined)) ?? []);
       checkedAt = Date.now();
       if (!active) return;
