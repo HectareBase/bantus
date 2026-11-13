@@ -730,6 +730,9 @@ describe('readSessions（フォルダの更新時刻で stat を省く）', () =
     writeJson(file('a'), data('a', 'renamed'));
     // 名前を変えるとフォルダの更新時刻が変わる（この仕組みの前提）
     assert.notEqual(statSync(dir).mtimeMs, before);
+    // このあとの足すと消すが、名前の変更と同じ刻みに入るとフォルダの時刻が変わらない。落ち着いた時刻として覚えさせるので、
+    // 覚える前に過去へずらし、足すと消すで必ず変わるようにする（実際の読み込みは、今に近い時刻を覚えないので取りこぼさない）
+    utimesSync(dir, 2_000_000, 2_000_000);
     const changed = run(1_000);
     assert.deepEqual(changed.list, ['b', 'renamed']);
     writeJson(file('c'), data('c'));
