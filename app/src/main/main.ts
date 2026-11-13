@@ -481,7 +481,14 @@ function displayOptions(): DisplayChoices {
 
 // ---- ウィンドウ ----
 
+/**
+ * 試作：ベゼル表示のときだけ、ウィジェットを不透明なウィンドウで作る（環境変数 BANTUS_OPAQUE_BEZEL=1）。
+ * 透明な合成をやめたときの CPU の差を測るためのもので、角丸と縁の列は崩れる（docs/design/opaque-bezel.md）。既定では使わない
+ */
+const OPAQUE_BEZEL = process.env.BANTUS_OPAQUE_BEZEL === '1';
+
 function createWidget(): BrowserWindow {
+  const opaque = OPAQUE_BEZEL && getSettings().island;
   const w = new BrowserWindow({
     ...sidebarBounds(),
     frame: false,
@@ -492,9 +499,9 @@ function createWidget(): BrowserWindow {
     maximizable: false,
     alwaysOnTop: getSettings().pinned,
     show: false,
-    transparent: true,
+    transparent: !opaque,
     hasShadow: false,
-    backgroundColor: '#00000000',
+    backgroundColor: opaque ? '#000000' : '#00000000',
     icon: ICON,
     // 知らせる音は、クリックなどの操作なしに鳴らす
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' },
