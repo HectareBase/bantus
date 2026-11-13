@@ -45,7 +45,8 @@
 |---|---|---|---|
 | `~/.claude/sessions/<pid>.json` | 毎回すべて読む。`pid` のプロセスがあるかも毎回確かめる | しない（小さく、状態を短い間に書き換えるため） | `src/main/sessions.ts`（`readRunning`） |
 | `Claude-Data\...\local_*.json` のフォルダの一覧 | 毎回 | しない | `src/main/sessions.ts` |
-| `local_*.json` | 毎回 `stat` する。中身は更新時刻、変更時刻、大きさ、ファイルの番号のどれかが変わったときだけ読む | 解釈した中身を、データフォルダごとに覚える | `src/main/sessions.ts`（`createJsonCache`） |
+| `archived-sessions.idx`（`local_*.json` と同じフォルダ） | 毎回 `stat` する。中身は変わったときだけ読む。30 秒ごとの全件の見直しでは読まない | フォルダごとに、アーカイブ済みの ID の集合を覚える。ない、読めない、形が違うときは使わない | `src/main/sessions.ts`（`readArchivedIndex`） |
+| `local_*.json` | `.idx` に載っていて、覚えている中身も `isArchived: true` のものは `stat` しない。ほかは毎回 `stat` し、中身は更新時刻、変更時刻、大きさ、ファイルの番号のどれかが変わったときだけ読む。取りこぼしに備え、30 秒ごとにすべてを `stat` する | 解釈した中身を、データフォルダごとに覚える | `src/main/sessions.ts`（`createJsonCache`、`FULL_SCAN_MS`） |
 | アーカイブ済みのセッションから作った値（通し番号用） | `local_*.json` の中身が変わったときだけ作り直す | 中身ごとに覚える | `src/main/sessions.ts` |
 | 作業フォルダの `.git`（ファイルかフォルダか、`gitdir:` の先、`commondir`） | ワークツリーを探すとき、`gitAnchors` のないセッションのリポジトリを探すとき | 60 秒まで使い回す。元のリポジトリの一番上まで上がったら読まない | `src/main/sessions.ts`（`findWorktreeRoot`、`findGitAnchor`） |
 | `.git/HEAD`、`.git/worktrees/<名前>/HEAD` | 毎回（1 回の読み直しの中では同じものを 1 度だけ） | しない（ブランチの切り替えをすぐ出すため） | `src/main/sessions.ts`（`readHeadBranch`） |

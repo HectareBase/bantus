@@ -80,10 +80,12 @@ export function createJsonCache() {
   /** 今回読んだパス（prune で、消えたファイルを表から外すため） */
   let seen = new Set<string>();
   let reads = 0;
+  let stats = 0;
   return {
     read(path: string): any {
       seen.add(path);
       let stamp: string;
+      stats++;
       try {
         const st = statSync(path);
         stamp = `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
@@ -99,13 +101,22 @@ export function createJsonCache() {
       else entries.set(path, { stamp, data });
       return data;
     },
+    /**
+     * stat をせずに、覚えている中身を返す（覚えていなければ undefined）。prune で外さないよう、読んだものとして数える。
+     * ファイルが変わっていないと別の手がかりで分かっているときだけ使う
+     */
+    peek(path: string): any {
+      const hit = entries.get(path);
+      if (hit) seen.add(path);
+      return hit?.data;
+    },
     /** 前の prune から今までに読まなかったパスを表から外す */
     prune() {
       for (const path of entries.keys()) if (!seen.has(path)) entries.delete(path);
       seen = new Set();
     },
-    /** 表の大きさと、実際にファイルを読んだ回数（テスト用） */
-    stats: () => ({ size: entries.size, reads }),
+    /** 表の大きさと、実際にファイルを読んだ回数、stat した回数（テスト用） */
+    stats: () => ({ size: entries.size, reads, stats }),
   };
 }
 
@@ -502,6 +513,44 @@ interface SessionCaches {
   archived: WeakMap<object, ArchivedEntry>;
   /** アーカイブ済みのセッションを作った回数（テスト用） */
   archivedBuilds: number;
+  /** フォルダごとの archived-sessions.idx の中身（readArchivedIndex） */
+  indexes: Map<string, { stamp: string; ids: Set<string> | undefined }>;
+  /** すべての local_*.json を最後に stat した時刻 */
+  lastFullScan?: number;
+}
+
+/**
+ * archived-sessions.idx を使っても、この間隔ですべての local_*.json を stat し直す（取りこぼしに備える）。
+ * watchSessions の低い頻度の読み直しと同じ周期
+ */
+export const FULL_SCAN_MS = 30_000;
+
+/**
+ * フォルダの archived-sessions.idx（`{"v":1,"archived":["local_<uuid>", ...]}`、docs/research/data-sources.md）から、
+ * アーカイブ済みのセッション ID の集合を返す。stat して、変わったときだけ読み直す。
+ * ない、読めない、形が違うときは undefined（すべてを stat するやり方に戻す）
+ */
+function readArchivedIndex(dir: string, indexes: SessionCaches['indexes']): Set<string> | undefined {
+  const path = join(dir, 'archived-sessions.idx');
+  let stamp: string;
+  try {
+    const st = statSync(path);
+    stamp = `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
+  } catch {
+    indexes.delete(dir);
+    return undefined;
+  }
+  const hit = indexes.get(dir);
+  if (hit?.stamp === stamp) return hit.ids;
+  const d = readJson(path);
+  const ids =
+    d && d.v === 1 && Array.isArray(d.archived) && d.archived.every((id: unknown) => typeof id === 'string')
+      ? new Set<string>(d.archived)
+      : undefined;
+  // 書き込み途中で読めなかったときは覚えない（書き終えても stamp が変わらないことがあるため）
+  if (ids) indexes.set(dir, { stamp, ids });
+  else indexes.delete(dir);
+  return ids;
 }
 
 const sessionCaches = new Map<string, SessionCaches>();
@@ -509,7 +558,7 @@ const sessionCaches = new Map<string, SessionCaches>();
 function sessionCachesFor(dataBase: string): SessionCaches {
   let c = sessionCaches.get(dataBase);
   if (!c) {
-    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0 };
+    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0, indexes: new Map() };
     sessionCaches.set(dataBase, c);
   }
   return c;
@@ -525,7 +574,7 @@ function copyView(view: SessionView): SessionView {
   return { ...view, ...(view.worktree && { worktree: { ...view.worktree } }) };
 }
 
-/** now はテストで差し替える（`.git` の探索を使い回す期限に使う） */
+/** now はテストで差し替える（`.git` の探索を使い回す期限と、すべての local_*.json を stat し直す周期に使う） */
 export function readSessions(paths = defaultPaths(), now = Date.now()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
@@ -561,9 +610,18 @@ export function readSessions(paths = defaultPaths(), now = Date.now()): SessionV
   const byFolder = new Map<SessionView, string>();
   // 解釈した中身は使い回すので、d は読むだけにする（view には値を写す）
   const files = jsonCacheFor(paths.dataBase);
-  for (const dir of sessionDirs(paths.dataBase)) {
+  // archived-sessions.idx に載っていて、覚えている中身もアーカイブ済みのものは stat しない。ただし一定の間隔ですべてを stat し直す
+  const fullScan = caches.lastFullScan === undefined || now < caches.lastFullScan || now - caches.lastFullScan >= FULL_SCAN_MS;
+  if (fullScan) caches.lastFullScan = now;
+  const dirs = sessionDirs(paths.dataBase);
+  for (const key of caches.indexes.keys()) if (!dirs.includes(key)) caches.indexes.delete(key);
+  for (const dir of dirs) {
+    const index = fullScan ? undefined : readArchivedIndex(dir, caches.indexes);
     for (const file of listFiles(dir, /^local_.*\.json$/)) {
-      const d = files.read(file);
+      // .idx とファイルのどちらが先に書かれるか分からないので、両方がアーカイブ済みと言うときだけ stat を省く。
+      // .idx に載ったばかり（覚えている中身がまだアーカイブ済みでない）、覚えていない、.idx から外れたものは stat する
+      let d = index?.has(basename(file, '.json')) ? files.peek(file) : undefined;
+      if (d?.isArchived !== true) d = files.read(file);
       if (!d?.sessionId) continue;
       const archived = Boolean(d.isArchived);
       const at = Number(d.lastFocusedAt) || 0;
@@ -716,7 +774,7 @@ export function readSessions(paths = defaultPaths(), now = Date.now()): SessionV
  * 2 種類のフォルダを見張り、変化があったら（まとめて）onChange を呼ぶ。
  * fs.watch は取りこぼすことがあるので、低い頻度の読み直しも続ける。
  */
-export function watchSessions(onChange: () => void, fallbackMs = 30_000, paths = defaultPaths()): () => void {
+export function watchSessions(onChange: () => void, fallbackMs = FULL_SCAN_MS,paths = defaultPaths()): () => void {
   let timer: NodeJS.Timeout | undefined;
   const schedule = () => {
     clearTimeout(timer);

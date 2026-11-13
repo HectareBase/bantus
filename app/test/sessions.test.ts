@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { renameSync, rmSync, utimesSync } from 'node:fs';
-import { createJsonCache, InterruptTracker, jsonCacheFor, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
+import { createJsonCache, FULL_SCAN_MS, InterruptTracker, jsonCacheFor, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
 
@@ -543,5 +543,120 @@ describe('readSessions（呼び出しをまたぐ使い回し）', () => {
     const s3 = stats();
     assert.equal(live(readSessions(paths, 2)).seq, 2);
     assert.equal(delta(s3).archivedBuilds, 1);
+  });
+});
+
+describe('readSessions（archived-sessions.idx でアーカイブ済みの stat を省く）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  let n = 0;
+  /** テストごとに別のデータフォルダ（使い回しの表と、全件を見直した時刻を分ける） */
+  function setup() {
+    const paths: DataPaths = { runningDir: join(tmp.path, `run${++n}`), dataBase: join(tmp.path, `data${n}`) };
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    const file = (id: string) => join(dir, `local_${id}.json`);
+    const write = (id: string, archived: boolean, extra: object = {}) =>
+      writeJson(file(id), { sessionId: `local_${id}`, title: id, isArchived: archived, createdAt: id.charCodeAt(0), ...extra });
+    const index = (data: unknown) => writeJson(join(dir, 'archived-sessions.idx'), data);
+    const files = jsonCacheFor(paths.dataBase);
+    /** readSessions 1 回の stat の回数と、出た一覧（タイトルと通し番号） */
+    const run = (now: number) => {
+      const before = files.stats().stats;
+      const list = readSessions(paths, now).map((v) => `${v.title}#${v.seq}`);
+      return { stats: files.stats().stats - before, list };
+    };
+    return { write, index, run, files };
+  }
+
+  it('.idx に載り、覚えている中身もアーカイブ済みなら stat しない。結果は全件を見たときと同じ', () => {
+    const { write, index, run, files } = setup();
+    write('a', true);
+    write('b', true);
+    write('c', false);
+    index({ v: 1, archived: ['local_a', 'local_b'] });
+    const first = run(0);
+    assert.equal(first.stats, 3);
+    assert.deepEqual(first.list, ['c#3']);
+    const second = run(1_000);
+    assert.equal(second.stats, 1);
+    assert.deepEqual(second.list, first.list);
+    // stat を省いたものも表から外さない
+    assert.equal(files.stats().size, 3);
+    assert.equal(run(2_000).stats, 1);
+  });
+
+  for (const [name, data] of [
+    ['.idx がない', undefined],
+    ['.idx が JSON でない', '{"v":1,"archived":['],
+    ['.idx の v が違う', { v: 2, archived: ['local_a'] }],
+    ['.idx の archived が文字列の配列でない', { v: 1, archived: ['local_a', 1] }],
+  ] as const) {
+    it(`${name}ときは、すべてを stat する`, () => {
+      const { write, index, run } = setup();
+      write('a', true);
+      write('c', false);
+      if (data !== undefined) index(data);
+      const first = run(0);
+      const second = run(1_000);
+      assert.equal(second.stats, 2);
+      assert.deepEqual(second.list, first.list);
+      assert.deepEqual(second.list, ['c#2']);
+    });
+  }
+
+  it('アーカイブ：ファイルと .idx のどちらが先に書かれても、両方が書かれたら正しい', () => {
+    for (const fileFirst of [true, false]) {
+      const { write, index, run } = setup();
+      write('a', false);
+      index({ v: 1, archived: [] });
+      assert.deepEqual(run(0).list, ['a#1']);
+      if (fileFirst) write('a', true);
+      else index({ v: 1, archived: ['local_a'] });
+      // 途中：.idx だけ先なら、覚えている中身がアーカイブ済みでないので stat して読む（まだ一覧に出る）
+      const mid = run(1_000);
+      assert.equal(mid.stats, 1);
+      assert.deepEqual(mid.list, fileFirst ? [] : ['a#1']);
+      if (fileFirst) index({ v: 1, archived: ['local_a'] });
+      else write('a', true);
+      const done = run(2_000);
+      assert.deepEqual(done.list, []);
+      // 両方がそろったら、次からは stat しない
+      assert.equal(run(3_000).stats, 0);
+    }
+  });
+
+  it('アーカイブを戻す：ファイルと .idx のどちらが先に書かれても、両方が書かれたら正しい', () => {
+    for (const fileFirst of [true, false]) {
+      const { write, index, run } = setup();
+      write('a', true);
+      index({ v: 1, archived: ['local_a'] });
+      assert.deepEqual(run(0).list, []);
+      if (fileFirst) write('a', false, { title: 'back' });
+      else index({ v: 1, archived: [] });
+      run(1_000);
+      if (fileFirst) index({ v: 1, archived: [] });
+      else write('a', false, { title: 'back' });
+      const done = run(2_000);
+      assert.equal(done.stats, 1);
+      assert.deepEqual(done.list, ['back#1']);
+    }
+  });
+
+  it('一定の間隔ですべてを stat し、.idx が取りこぼした変化を拾う', () => {
+    const { write, index, run } = setup();
+    write('a', true);
+    write('c', false);
+    index({ v: 1, archived: ['local_a'] });
+    run(0);
+    // .idx が変わらないまま、ファイルだけアーカイブを戻した（取りこぼし）。周期の前は前の中身のまま
+    write('a', false, { title: 'back' });
+    const before = run(FULL_SCAN_MS - 1);
+    assert.equal(before.stats, 1);
+    assert.deepEqual(before.list, ['c#2']);
+    const after = run(FULL_SCAN_MS);
+    assert.equal(after.stats, 2);
+    assert.deepEqual(after.list.sort(), ['back#1', 'c#2']);
+    // 時計が戻ったときも、すべてを見直す
+    assert.equal(run(0).stats, 2);
   });
 });
