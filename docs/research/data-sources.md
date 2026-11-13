@@ -7,6 +7,7 @@
 | 情報 | 読み取り元 | 主な項目 |
 |---|---|---|
 | サイドバーのセッション一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\<id>\<id>\local_*.json` | タイトル、作業フォルダ、最終更新、アーカイブの有無、最後のターンのまとめ |
+| アーカイブ済みのセッションの一覧 | 同じフォルダの `archived-sessions.idx` | アーカイブ済みのセッションの ID |
 | 実行中のセッションの状態 | `%USERPROFILE%\.claude\sessions\<pid>.json` | `busy` / `idle` / `waiting`、待ちの理由 → [session-status.md](session-status.md) |
 | 会話の全記録 | `%USERPROFILE%\.claude\projects\<フォルダ名>\<CLIのセッションID>.jsonl` | 発言、ツール呼び出し、タイトルの変更、タスクリスト → [work-progress.md](work-progress.md) |
 | ワークツリーの一覧 | `%LOCALAPPDATA%\Claude-Data\claude_*\git-worktrees.json` | ワークツリーの名前、場所、ブランチ、使っているセッション（`leasedBy`） |
@@ -44,6 +45,26 @@
 
 - **ピン留めとサイドバーのグループの情報は、このファイルには入っていません。** アプリのツール（`list_sessions` の `pinned` / `group`）からは取れます。
 - サイドバーに表示されるフォルダ名は、作業フォルダの末尾の名前とは限りません（例：作業フォルダ `my-app` が `MyApp` と表示される。リポジトリ名のようです）。
+
+## `archived-sessions.idx`（`local_*.json` と同じフォルダに 1 つ）
+アーカイブ済みのセッションの ID を並べた JSON です。拡張子は `.idx` ですが、中身は 1 行の JSON です。
+
+```
+{"v":1,"archived":["local_xxxxxxxx-...","local_xxxxxxxx-...", ...]}
+```
+
+| 項目 | 意味 |
+|---|---|
+| `v` | 形式の版。調べたときは `1` |
+| `archived` | アーカイブ済みのセッションの `sessionId`（`local_` で始まる ID）。ファイル名から `.json` を除いたものと同じ |
+
+- 190 件の `local_*.json` と照らし合わせたところ、`isArchived: true` の 96 件とこの一覧の 96 件が 1 件も違わずに一致しました。
+- これを使うと、`local_*.json` を 1 つずつ読まなくても、アーカイブ済みかどうかが分かります。
+- 確かめていないこと
+  - アーカイブしたとき、またアーカイブを戻したときに、このファイルと `local_*.json` のどちらが先に書かれるか
+  - このファイルがないとき（アーカイブしたことがないなど）に、どうなるか
+
+  使うときは、`v` が `1` でない、ファイルがない、読めないときに、`local_*.json` の `isArchived` を見るやり方に戻すのが安全です。
 
 ## `~/.claude/sessions/<pid>.json`（実行中の CLI プロセス1つにつき1ファイル）
 | 項目 | 意味 |
