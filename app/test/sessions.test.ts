@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { renameSync, rmSync, utimesSync } from 'node:fs';
-import { createJsonCache, InterruptTracker, jsonCacheFor, readFixture, readSessions, shortBranch, toState, type DataPaths } from '../src/main/sessions';
+import { createJsonCache, InterruptTracker, jsonCacheFor, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
 
@@ -454,5 +454,94 @@ describe('createJsonCache（置き換え）', () => {
     utimesSync(next, at, at);
     renameSync(next, file);
     assert.deepEqual(cache.read(file), { status: 'idle' });
+  });
+});
+
+describe('readSessions（呼び出しをまたぐ使い回し）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const paths: DataPaths = { runningDir: join(tmp.path, 'sessions'), dataBase: join(tmp.path, 'Claude-Data') };
+  const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+  const file = (n: number) => join(dir, `local_${n}.json`);
+  const repo = join(tmp.path, 'Repo');
+  const anchor = { gitRoot: repo, commonDir: join(repo, '.git') };
+  const stats = () => sessionCacheStats(paths.dataBase);
+  /** 前の値からの増え */
+  const delta = (before: ReturnType<typeof stats>) => {
+    const now = stats();
+    return {
+      archivedBuilds: now.archivedBuilds - before.archivedBuilds,
+      worktreeReads: now.worktreeReads - before.worktreeReads,
+      anchorSearches: now.anchorSearches - before.anchorSearches,
+    };
+  };
+  writeJson(join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+
+  it('作業フォルダがリポジトリの一番上なら、.git を読まずにワークツリーでないとする', () => {
+    writeJson(file(1), { sessionId: 'local_1', title: 'main', cwd: repo, gitAnchors: [anchor], createdAt: 1 });
+    const s = stats();
+    const [view] = readSessions(paths, 0);
+    assert.equal(view!.worktree, undefined);
+    assert.equal(delta(s).worktreeReads, 0);
+  });
+
+  it('.git の探索は期限まで使い回し、期限が切れたら探し直す（その間に作ったワークツリーも反映する）', () => {
+    const wt = join(repo, '.claude', 'worktrees', 'late');
+    writeJson(join(wt, 'README'), 'x');
+    // gitAnchors がなく、作業フォルダから探すセッションと、元のリポジトリの gitAnchors でワークツリーのフォルダから始めたセッション
+    writeJson(file(2), { sessionId: 'local_2', title: 'no anchors', cwd: join(tmp.path, 'Ext', 'app'), createdAt: 2 });
+    writeJson(file(3), { sessionId: 'local_3', title: 'late worktree', cwd: wt, gitAnchors: [anchor], createdAt: 3 });
+    const s = stats();
+    readSessions(paths, 0);
+    const first = delta(s);
+    assert.equal(first.anchorSearches, 1);
+    assert.ok(first.worktreeReads > 0);
+    const byTitle = (list: SessionView[], title: string) => list.find((v) => v.title === title)!;
+
+    // あとからワークツリーにする（.git ファイルを置く）。期限の前は前の結果のまま
+    writeJson(join(wt, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'late')}\n`);
+    writeJson(join(repo, '.git', 'worktrees', 'late', 'HEAD'), 'ref: refs/heads/claude/late-abcdef\n');
+    const s2 = stats();
+    assert.equal(byTitle(readSessions(paths, 59_999), 'late worktree').worktree, undefined);
+    assert.deepEqual(delta(s2), { archivedBuilds: 0, worktreeReads: 0, anchorSearches: 0 });
+
+    const s3 = stats();
+    assert.equal(byTitle(readSessions(paths, 60_000), 'late worktree').worktree?.branch, 'claude/late-abcdef');
+    assert.equal(delta(s3).anchorSearches, 1);
+    rmSync(file(2));
+    rmSync(file(3));
+  });
+
+  it('アーカイブ済みのセッションは中身が変わるまで作り直さず、通し番号は変わらない', () => {
+    const wtPath = join(repo, '.claude', 'worktrees', 'w');
+    const wt = { worktreeName: 'w', worktreePath: wtPath, branch: 'claude/w-123456', gitAnchors: [anchor] };
+    writeJson(file(4), { sessionId: 'local_4', title: 'old', isArchived: true, createdAt: 10, ...wt });
+    writeJson(file(5), { sessionId: 'local_5', title: 'old 2', isArchived: true, createdAt: 11, ...wt });
+    // 名前を持たず、同じワークツリーのフォルダから始めたセッション。アーカイブ済みの名前のカードにまとめる
+    writeJson(join(wtPath, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'w')}\n`);
+    writeJson(join(repo, '.git', 'worktrees', 'w', 'HEAD'), 'ref: refs/heads/claude/w-123456\n');
+    writeJson(file(6), { sessionId: 'local_6', title: 'live', cwd: wtPath, gitAnchors: [anchor], createdAt: 12 });
+    const live = (list: SessionView[]) => list.find((v) => v.title === 'live')!;
+
+    const s = stats();
+    const first = live(readSessions(paths, 0));
+    assert.equal(delta(s).archivedBuilds, 2);
+    assert.equal(first.worktree?.key, 'w');
+    assert.equal(first.seq, 3);
+    // 返した値を書き換えても、使い回す中身に響かない
+    first.worktree!.key = 'changed';
+    first.seq = 99;
+
+    const s2 = stats();
+    const again = live(readSessions(paths, 1));
+    assert.equal(delta(s2).archivedBuilds, 0);
+    assert.equal(again.worktree?.key, 'w');
+    assert.equal(again.seq, 3);
+
+    // 中身が変わったものだけ作り直す。作った順が変われば番号も変わる
+    writeJson(file(4), { sessionId: 'local_4', title: 'old', isArchived: true, createdAt: 13, ...wt });
+    const s3 = stats();
+    assert.equal(live(readSessions(paths, 2)).seq, 2);
+    assert.equal(delta(s3).archivedBuilds, 1);
   });
 });

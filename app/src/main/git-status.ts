@@ -12,9 +12,12 @@ import { findGitDirs, folderKey } from './sessions';
 
 /** 1 回の git status を待つ長さ。大きなリポジトリで止まらないよう、過ぎたら諦める */
 const TIMEOUT_MS = 5_000;
-/** 結果を使い回す長さ。動いているセッションの作業フォルダは短く、停止中だけのフォルダは長く */
+/**
+ * 結果を使い回す長さ。ターンの途中（処理中か対応待ち）のセッションがある作業フォルダは短く、待機中と停止中だけのフォルダは長く。
+ * 待機中はファイルがほとんど変わらず、ターンの終わりにすぐ調べ直すので、長く使い回してよい
+ */
 const MAX_AGE_ACTIVE_MS = 30_000;
-const MAX_AGE_STOPPED_MS = 5 * 60_000;
+const MAX_AGE_QUIET_MS = 5 * 60_000;
 
 /** `git status --porcelain=v2 --branch` の出力を数える */
 export function parseStatus(output: string): GitChanges {
@@ -359,8 +362,9 @@ export function createGitStatus(
       lastStates.set(key, states);
       if (queue.some((q) => q.key === key)) continue;
       const entry = cache.get(key);
-      const active = states.some((s) => s !== 'stopped');
-      const maxAge = active ? MAX_AGE_ACTIVE_MS : MAX_AGE_STOPPED_MS;
+      // 対応待ちも入れる：許可を待つ間などもターンの途中で、それまでの処理で変更が増えていることが多い
+      const active = states.some((s) => s === 'busy' || s === 'waiting');
+      const maxAge = active ? MAX_AGE_ACTIVE_MS : MAX_AGE_QUIET_MS;
       // 処理中だったセッションが処理中でなくなった：ターンが終わり、変更が増えたかもしれない
       const turnEnded = prev !== undefined && prev.filter((s) => s === 'busy').length > states.filter((s) => s === 'busy').length;
       if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir) });
