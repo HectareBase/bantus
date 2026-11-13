@@ -3,7 +3,8 @@
 // 線と丸の形はタイムライン（flyout.ts の .node / .dot / .ln）にそろえる。
 // コミットの件名と本文はリポジトリから来た文字なので、textContent だけで出す。
 
-import type { GitCommit, GitDetail } from '../shared/types';
+import type { GitCommit, GitDetail, GitMerge } from '../shared/types';
+import { mergeCountLabel, mergeHeadline } from '../shared/git-merge.js';
 import { ja } from '../shared/strings/ja.js';
 import { createIcon } from './icon.js';
 import { formatAgo } from './model.js';
@@ -27,6 +28,8 @@ interface Parts {
 
 /** たたんだものを広げたか。新しく開いたときに戻す */
 let expanded = false;
+/** 取り込んだコミットを開いたマージ（短い ID）。ポップアップを開いている間だけ覚える */
+const openMerges = new Set<string>();
 let current: GitDetail | undefined;
 /** 下の段に出しているコミット */
 let footCommit: GitCommit | undefined;
@@ -105,44 +108,120 @@ function renderHead(head: HTMLElement, d: GitDetail | undefined) {
   head.replaceChildren(...parts);
 }
 
+/** 種別（と範囲）の札。マージは「マージ」の札 */
+function typeTag(c: GitCommit): HTMLElement | undefined {
+  if (c.merge) return span('ctype mtag', ja.gitDetail.mergeTag);
+  if (!c.type) return undefined;
+  const tag = span('ctype', c.type);
+  if (c.scope) tag.append(span('cscope', c.scope));
+  return tag;
+}
+
+/** 行に出す文。マージはセッションのタイトルかブランチ名、分岐元を取り込んだものは「<分岐元> を取り込み」 */
+function commitText(c: GitCommit): string {
+  const m = c.merge;
+  if (!m) return c.text;
+  if (m.fromBase) return ja.gitDetail.mergeOf(m.name ?? current?.base ?? c.text);
+  return mergeHeadline(m, c.text);
+}
+
 /**
- * コミットの行。1 行目は要約だけにして、どの行も文の頭をそろえる。種別（と範囲）の札は 2 行目の頭に置く
- * （1 行目に置くと、札の幅で文の頭がずれるため）。押すと短い ID を写す
+ * コミットの行に、押すと短い ID を写す働きと、乗せると下の段に本文を出す働きを付ける。
+ * 写したことは feedback（2 行目、子の行では 1 行目）を少しのあいだ差し替えて知らせる
  */
-function commitRow(c: GitCommit, isHead: boolean, faded: boolean, link: { in?: Link; out?: Link }, parts: Parts): HTMLElement {
-  const subParts: (string | Node)[] = [];
-  if (c.type) {
-    const tag = span('ctype', c.type);
-    if (c.scope) tag.append(span('cscope', c.scope));
-    subParts.push(tag);
-  }
-  subParts.push(c.short, formatAgo(c.at));
-  const el = row(isHead ? 'head' : 'commit', [span('ctext', c.text)], subParts, link);
+function makeCopyable(el: HTMLElement, c: GitCommit, isHead: boolean, feedback: HTMLElement, parts: Parts) {
   el.classList.add('git-commit');
   el.tabIndex = 0;
   // ツールチップに件名と本文の全体と日時を出す（下の段と行の中の本文は途中で切ることがあるため）
   const stamp = [when(c.at), isHead ? ja.gitDetail.head : ''].filter(Boolean).join(' · ');
   el.title = [c.subject, ...(c.body ? ['', c.body] : []), '', stamp, ja.gitDetail.copyHint].join('\n');
-  el.toggleAttribute('data-faded', faded);
-  const sub = el.querySelector<HTMLElement>('.sub')!;
-  const copied = subLine([ja.gitDetail.copied]);
+  const copied = feedback.classList.contains('sub') ? subLine([ja.gitDetail.copied]) : span('ctext', ja.gitDetail.copied);
   copied.classList.add('copied');
   let timer: ReturnType<typeof setTimeout> | undefined;
   const copy = () => {
     window.flyoutApi.copyCommitId(c.short);
     clearTimeout(timer);
-    if (sub.isConnected) sub.replaceWith(copied);
-    timer = setTimeout(() => copied.replaceWith(sub), COPIED_MS);
+    if (feedback.isConnected) feedback.replaceWith(copied);
+    timer = setTimeout(() => copied.replaceWith(feedback), COPIED_MS);
   };
   el.addEventListener('click', copy);
   el.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
     copy();
   });
   el.addEventListener('pointermove', (e) => {
     if (e.movementX || e.movementY) showFoot(parts.foot, c);
   });
+}
+
+/** マージの取り込んだコミットを開け閉めするトグル（›N）。2 行目の右に置く */
+function mergeToggle(c: GitCommit, m: GitMerge, parts: Parts): HTMLElement {
+  const open = openMerges.has(c.short);
+  const btn = document.createElement('button');
+  btn.className = 'git-toggle';
+  btn.setAttribute('aria-expanded', String(open));
+  btn.title = open ? ja.gitDetail.hideMerged : ja.gitDetail.showMerged;
+  btn.append(createIcon(open ? 'chevron-up' : 'chevron-down'), mergeCountLabel(m));
+  // 行を押すと ID を写すので、トグルの押下は行へ伝えない
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (open) openMerges.delete(c.short);
+    else openMerges.add(c.short);
+    renderBody(parts);
+    parts.onResize();
+    parts.body.querySelector<HTMLElement>(`.git-toggle[data-id="${c.short}"]`)?.focus();
+  });
+  // Enter／Space は行の「ID を写す」に回さない。Esc などほかのキーは通す（一覧を閉じるため）
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+  });
+  btn.dataset.id = c.short;
+  return btn;
+}
+
+/**
+ * コミットの行。1 行目は要約だけにして、どの行も文の頭をそろえる。種別（と範囲）の札は 2 行目の頭に置く
+ * （1 行目に置くと、札の幅で文の頭がずれるため）。押すと短い ID を写す。
+ * マージは二重の丸と「マージ」の札にし、取り込んだコミットがあれば 2 行目の右にトグルを置く
+ */
+function commitRow(c: GitCommit, isHead: boolean, faded: boolean, link: { in?: Link; out?: Link }, parts: Parts): HTMLElement {
+  const m = c.merge;
+  const subParts: (string | Node)[] = [];
+  const tag = typeTag(c);
+  if (tag) subParts.push(tag);
+  if (m?.fromBase && (m.children.length || m.more)) subParts.push(ja.gitDetail.baseCommits(m.name ?? current?.base ?? '', mergeCountLabel(m)));
+  subParts.push(c.short, formatAgo(c.at));
+  const el = row(isHead ? 'head' : 'commit', [span('ctext', commitText(c))], subParts, link);
+  // トグルは 2 行にまたがる高さで行の右端に置く（2 行目の中の小さな印では、押せることが分かりにくかった）
+  if (m && !m.fromBase && m.children.length) el.append(mergeToggle(c, m, parts));
+  el.toggleAttribute('data-merge', !!m);
+  el.toggleAttribute('data-faded', faded || !!m?.fromBase);
+  makeCopyable(el, c, isHead, el.querySelector<HTMLElement>('.sub')!, parts);
+  return el;
+}
+
+/**
+ * マージの子（取り込んだコミット）の行。1 段下げた小さい点と細い 2 本目の線で並べ、種別の札と件名だけを 1 行で出す。
+ * 本線は行を貫いて次の行へつなぐ。last は子の最後（more なら、範囲の外へ続くので線を点線で伸ばす）
+ */
+function childRow(c: GitCommit, main: { in?: Link; out?: Link }, last: boolean, more: boolean, faded: boolean, parts: Parts): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'node linked git-node git-child';
+  el.dataset.dot = 'commit';
+  if (main.in) el.append(line('in', main.in));
+  if (main.out) el.append(line('out', main.out));
+  el.append(span('ln2 in'));
+  if (!last || more) el.append(span(`ln2 out${last ? ' dashed' : ''}`));
+  el.append(span('dot'));
+  const t = document.createElement('div');
+  t.className = 'title';
+  const tag = typeTag(c);
+  const text = span('ctext', commitText(c));
+  t.append(...(tag ? [tag] : []), text);
+  el.append(t);
+  el.toggleAttribute('data-faded', faded);
+  makeCopyable(el, c, false, text, parts);
   return el;
 }
 
@@ -181,8 +260,14 @@ function showFoot(foot: HTMLElement, c: GitCommit | undefined) {
   b.textContent = [c.short, when(c.at)].filter(Boolean).join(' · ');
   const text = document.createElement('div');
   text.className = 'summary';
-  if (c.body) text.textContent = c.body;
-  else text.append(span('hint', ja.gitDetail.noBody));
+  // マージは、何をいくつ取り込んだか（分岐元なら、このブランチの作業に数えないこと）を本文の前に出す
+  const m = c.merge;
+  if (m) {
+    const what = m.fromBase ? ja.gitDetail.baseNotCounted : m.name ? ja.gitDetail.mergeSummary(m.name, mergeCountLabel(m)) : '';
+    if (what) text.append(span('merge-what', what));
+  }
+  if (c.body) text.append(document.createTextNode(c.body));
+  else if (!text.childNodes.length) text.append(span('hint', ja.gitDetail.noBody));
   foot.replaceChildren(b, text);
 }
 
@@ -191,33 +276,68 @@ function renderBody(parts: Parts) {
   if (!d || d.failed) return parts.body.replaceChildren();
   const nodes: HTMLElement[] = [];
   // 上から順に並べる行。線は前の行とつなぐ
-  type Item = { kind: 'wip' } | { kind: 'commit'; c: GitCommit; head: boolean } | { kind: 'fold'; n: number } | { kind: 'beyond'; n: number } | { kind: 'merge' } | { kind: 'base' };
+  type Item =
+    | { kind: 'wip' }
+    | { kind: 'commit'; c: GitCommit; head: boolean }
+    | { kind: 'child'; c: GitCommit; last: boolean; more: boolean; faded: boolean }
+    | { kind: 'fold'; n: number }
+    | { kind: 'beyond'; n: number }
+    | { kind: 'merge' }
+    | { kind: 'base' };
   const items: Item[] = [];
   if (d.merged) items.push({ kind: 'merge' });
   if (d.changed || d.untracked) items.push({ kind: 'wip' });
+  // 並べるのは本線だけ。マージの子は、トグルで開いたものだけをマージのすぐ下に出す
   const all = d.commits;
-  const truncated = d.total > all.length;
+  const pushCommit = (c: GitCommit, head: boolean) => {
+    items.push({ kind: 'commit', c, head });
+    const m = c.merge;
+    if (!m || m.fromBase || !openMerges.has(c.short)) return;
+    m.children.forEach((k, i) => items.push({ kind: 'child', c: k, last: i === m.children.length - 1, more: !!m.more, faded: d.merged }));
+  };
+  // 件数は、本線のコミットとマージの子を合わせて数える（分岐元を取り込んだものは数えない。total と同じ数え方）
+  const weight = (c: GitCommit) => (c.merge?.fromBase ? 0 : 1 + (c.merge?.children.length ?? 0));
+  const counted = all.reduce((n, c) => n + weight(c), 0);
+  const truncated = d.mode === 'worktree' || d.tracking ? d.total > counted : false;
   if (all.length > FOLD_OVER && !expanded) {
-    items.push({ kind: 'commit', c: all[0]!, head: true }, { kind: 'commit', c: all[1]!, head: false });
-    if (truncated) items.push({ kind: 'fold', n: d.total - 2 });
-    else items.push({ kind: 'fold', n: all.length - 3 }, { kind: 'commit', c: all.at(-1)!, head: false });
+    pushCommit(all[0]!, true);
+    pushCommit(all[1]!, false);
+    // たたんだ行の数は、隠した行の数（分岐元を取り込んだマージも 1 行）と、その子の数
+    const hidden = (list: GitCommit[]) => list.reduce((n, c) => n + Math.max(1, weight(c)), 0);
+    if (truncated) items.push({ kind: 'fold', n: d.total - weight(all[0]!) - weight(all[1]!) });
+    else {
+      items.push({ kind: 'fold', n: hidden(all.slice(2, -1)) });
+      pushCommit(all.at(-1)!, false);
+    }
   } else {
-    all.forEach((c, i) => items.push({ kind: 'commit', c, head: i === 0 }));
-    if (truncated) items.push({ kind: 'beyond', n: d.total - all.length });
+    all.forEach((c, i) => pushCommit(c, i === 0));
+    if (truncated) items.push({ kind: 'beyond', n: d.total - counted });
   }
   // 一番下の ◇：ワークツリーは分岐元、メインのカードは push していないコミットがあるときの追跡するブランチ
   if (d.mode === 'worktree' || d.tracking) items.push({ kind: 'base' });
   /** i 番目と次の行をつなぐ線。コミットしていない変更、たたんだ行、マージした先の前後は点線 */
+  // マージの子の行は本線の外にあるので飛ばし、本線は子の行を貫いて次の行へつなぐ
   const linkAfter = (i: number): Link | undefined => {
     const a = items[i];
-    const b = items[i + 1];
+    let j = i + 1;
+    while (items[j]?.kind === 'child') j++;
+    const b = items[j];
     if (!a || !b) return undefined;
     const loose = (k: Item['kind']) => k === 'fold' || k === 'beyond';
     return a.kind === 'wip' || a.kind === 'merge' || loose(a.kind) || loose(b.kind) ? 'dashed' : 'solid';
   };
+  let prevMain = -1;
   items.forEach((it, i) => {
-    const out = linkAfter(i);
-    const link = { ...(i > 0 && { in: linkAfter(i - 1) }), ...(out && { out }) };
+    let link: { in?: Link; out?: Link };
+    if (it.kind === 'child') {
+      const through = prevMain >= 0 ? linkAfter(prevMain) : undefined;
+      link = through ? { in: through, out: through } : {};
+    } else {
+      const out = linkAfter(i);
+      const into = prevMain >= 0 ? linkAfter(prevMain) : undefined;
+      link = { ...(into && { in: into }), ...(out && { out }) };
+      prevMain = i;
+    }
     if (it.kind === 'wip') {
       const el = row('wip', [document.createTextNode(ja.gitDetail.uncommitted)], [ja.gitDetail.uncommittedParts(d.changed, d.untracked)], link);
       el.addEventListener('pointermove', (e) => {
@@ -225,6 +345,7 @@ function renderBody(parts: Parts) {
       });
       nodes.push(el);
     } else if (it.kind === 'commit') nodes.push(commitRow(it.c, it.head && !d.merged, d.merged, link, parts));
+    else if (it.kind === 'child') nodes.push(childRow(it.c, link, it.last, it.more, it.faded, parts));
     else if (it.kind === 'fold') nodes.push(foldRow(it.n, parts));
     else if (it.kind === 'beyond') nodes.push(row('none', [document.createTextNode(ja.gitDetail.beyondLimit(it.n, LOG_LIMIT))], [], link));
     else if (it.kind === 'merge') {
@@ -242,7 +363,10 @@ function renderBody(parts: Parts) {
 
 /** git の詳細を描く。detail がなければ読み込み中。fresh は新しく開いたとき（たたみ直す） */
 export function renderGit(detail: GitDetail | undefined, parts: Parts, fresh: boolean) {
-  if (fresh) expanded = false;
+  if (fresh) {
+    expanded = false;
+    openMerges.clear();
+  }
   current = detail;
   footCommit = undefined;
   parts.head.hidden = !detail;

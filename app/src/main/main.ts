@@ -815,7 +815,10 @@ async function readCardGitDetail(key: string) {
   const fixture = process.env.WIDGET_FIXTURE;
   const s = lastSessions.find((v) => (v.workDir || fixture) && cardKeyOf(v) === key);
   if (!s || (!s.workDir && !fixture)) return undefined;
-  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch, changes: s.changes };
+  // マージの件名に出すため、同じリポジトリのワークツリーのブランチから、そこで作業したセッションのタイトルを引けるようにする
+  const titles = new Map<string, string>();
+  for (const v of lastSessions) if (v.repoKey === s.repoKey && v.worktree?.branch && !titles.has(v.worktree.branch)) titles.set(v.worktree.branch, v.title);
+  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch, changes: s.changes, titles };
   if (fixture) return fixtureGitDetail(fixture, key, src);
   return gitDetail(src);
 }
