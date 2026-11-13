@@ -523,13 +523,25 @@ interface SessionCaches {
 
 /** 更新時刻、変更時刻、大きさ、番号をまとめた目印。stat できなければ undefined */
 function stampOf(path: string): string | undefined {
+  return stampAndTimeOf(path)?.stamp;
+}
+
+/** 目印と、更新時刻と変更時刻の新しいほう。stat できなければ undefined */
+function stampAndTimeOf(path: string): { stamp: string; time: number } | undefined {
   try {
     const st = statSync(path);
-    return `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
+    return { stamp: `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`, time: Math.max(st.mtimeMs, st.ctimeMs) };
   } catch {
     return undefined;
   }
 }
+
+/**
+ * フォルダの時刻がこれより新しい（今に近い）ときは、その時刻を覚えない。ファイルの時刻の刻みは粗く
+ * （Windows では 1 ミリ秒から十数ミリ秒）、同じ刻みのうちに続けて名前が変わると、フォルダの時刻は変わらない。
+ * 覚えた直後に同じ刻みで書かれた変化を取りこぼさないよう、時刻が落ち着いてから覚える（git の racy-git と同じ考え）
+ */
+export const DIR_SETTLE_MS = 1_000;
 
 /**
  * archived-sessions.idx を使っても、この間隔ですべての local_*.json を stat し直す（取りこぼしに備える）。
@@ -583,8 +595,11 @@ function copyView(view: SessionView): SessionView {
   return { ...view, ...(view.worktree && { worktree: { ...view.worktree } }) };
 }
 
-/** now はテストで差し替える（`.git` の探索を使い回す期限と、すべての local_*.json を stat し直す周期に使う） */
-export function readSessions(paths = defaultPaths(), now = Date.now()): SessionView[] {
+/**
+ * now はテストで差し替える（`.git` の探索を使い回す期限と、すべての local_*.json を stat し直す周期に使う）。
+ * fsNow はファイルの時刻と比べる今の時刻（フォルダの時刻が落ち着いたかを見る）。テストで差し替える
+ */
+export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = Date.now()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
   const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
@@ -630,12 +645,13 @@ export function readSessions(paths = defaultPaths(), now = Date.now()): SessionV
     // （docs/research/data-sources.md）。フォルダの時刻が前回と同じなら、一覧も中のファイルの stat も省き、前回の結果を使う。
     // 上書きで書かれたとき（フォルダの時刻が変わらない）に備え、全件の見直しではフォルダの時刻にかかわらず調べる。
     // フォルダの時刻は中を調べる前に取る（調べている間の書き込みは、次の読み直しで時刻の違いとして見つかる）
-    const dirStamp = stampOf(dir);
+    // 時刻が今に近いときは覚えない（同じ刻みのうちに続けて書かれると、フォルダの時刻が変わらないため。DIR_SETTLE_MS）
+    const dirStamp = stampAndTimeOf(dir);
     const prev = caches.dirs.get(dir);
-    const same = !fullScan && dirStamp !== undefined && prev?.stamp === dirStamp;
+    const same = !fullScan && dirStamp !== undefined && prev?.stamp === dirStamp.stamp;
     const list = same ? prev!.files : listFiles(dir, /^local_.*\.json$/);
     if (!same) {
-      if (dirStamp) caches.dirs.set(dir, { stamp: dirStamp, files: list });
+      if (dirStamp && dirStamp.time <= fsNow - DIR_SETTLE_MS) caches.dirs.set(dir, { stamp: dirStamp.stamp, files: list });
       else caches.dirs.delete(dir);
     }
     const index = fullScan || same ? undefined : readArchivedIndex(dir, caches.indexes);

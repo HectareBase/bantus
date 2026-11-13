@@ -47,7 +47,7 @@
 | `Claude-Data\...\local_*.json` のフォルダ | 毎回 `stat` する | 更新時刻と変更時刻を覚える | `src/main/sessions.ts` |
 | `Claude-Data\...\local_*.json` のフォルダの一覧 | フォルダの時刻が変わったときと、30 秒ごとの全件の見直しのときだけ取り直す | 前回の一覧を覚える | `src/main/sessions.ts` |
 | `archived-sessions.idx`（`local_*.json` と同じフォルダ） | フォルダの時刻が変わったときに `stat` する。中身は変わったときだけ読む。30 秒ごとの全件の見直しでは読まない | フォルダごとに、アーカイブ済みの ID の集合を覚える。ない、読めない、形が違うときは使わない | `src/main/sessions.ts`（`readArchivedIndex`） |
-| `local_*.json` | フォルダの時刻が前回と同じなら、どれも `stat` しない（Claude は一時ファイルに書いて名前を変えるので、書き込むとフォルダの時刻が変わる）。フォルダの時刻が変わったときは、`.idx` に載っていて、覚えている中身も `isArchived: true` のものは `stat` しない。ほかは `stat` し、中身は更新時刻、変更時刻、大きさ、ファイルの番号のどれかが変わったときだけ読む。取りこぼしと上書き（フォルダの時刻が変わらない）に備え、30 秒ごとにフォルダの時刻にかかわらずすべてを `stat` する | 解釈した中身を、データフォルダごとに覚える | `src/main/sessions.ts`（`createJsonCache`、`FULL_SCAN_MS`） |
+| `local_*.json` | フォルダの時刻が前回と同じなら、どれも `stat` しない（Claude は一時ファイルに書いて名前を変えるので、書き込むとフォルダの時刻が変わる）。ただし時刻の刻みが粗く、同じ刻みのうちに続けて書かれると時刻が変わらないので、今から 1 秒以内の時刻は覚えない（`DIR_SETTLE_MS`）。フォルダの時刻が変わったときは、`.idx` に載っていて、覚えている中身も `isArchived: true` のものは `stat` しない。ほかは `stat` し、中身は更新時刻、変更時刻、大きさ、ファイルの番号のどれかが変わったときだけ読む。取りこぼしと上書き（フォルダの時刻が変わらない）に備え、30 秒ごとにフォルダの時刻にかかわらずすべてを `stat` する | 解釈した中身を、データフォルダごとに覚える | `src/main/sessions.ts`（`createJsonCache`、`FULL_SCAN_MS`） |
 | アーカイブ済みのセッションから作った値（通し番号用） | `local_*.json` の中身が変わったときだけ作り直す | 中身ごとに覚える | `src/main/sessions.ts` |
 | 作業フォルダの `.git`（ファイルかフォルダか、`gitdir:` の先、`commondir`） | ワークツリーを探すとき、`gitAnchors` のないセッションのリポジトリを探すとき | 60 秒まで使い回す。元のリポジトリの一番上まで上がったら読まない | `src/main/sessions.ts`（`findWorktreeRoot`、`findGitAnchor`） |
 | `.git/HEAD`、`.git/worktrees/<名前>/HEAD` | 毎回（1 回の読み直しの中では同じものを 1 度だけ） | しない（ブランチの切り替えをすぐ出すため） | `src/main/sessions.ts`（`readHeadBranch`） |

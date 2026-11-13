@@ -685,13 +685,27 @@ describe('readSessions（フォルダの更新時刻で stat を省く）', () =
     const file = (id: string) => join(dir, `local_${id}.json`);
     const data = (id: string, title = id) => ({ sessionId: `local_${id}`, title, createdAt: id.charCodeAt(0) });
     const files = jsonCacheFor(paths.dataBase);
-    const run = (now: number) => {
+    // フォルダの時刻が落ち着いた（DIR_SETTLE_MS より前に書かれた）ものとして読む。settled: false なら今の時刻と比べる
+    const run = (now: number, settled = true) => {
       const before = files.stats().stats;
-      const list = readSessions(paths, now).map((v) => v.title).sort();
+      const list = readSessions(paths, now, settled ? Infinity : Date.now()).map((v) => v.title).sort();
       return { stats: files.stats().stats - before, list };
     };
     return { dir, file, data, run, files };
   }
+
+  it('フォルダの時刻が今に近いときは覚えない。同じ刻みのうちに続けて書かれた変化も拾う', () => {
+    const { dir, file, data, run } = setup();
+    writeJson(file('a'), data('a'));
+    assert.deepEqual(run(0, false).list, ['a']);
+    // 同じ刻みのうちの書き込み（フォルダの時刻が変わらない）を、上書きで再現する
+    const before = statSync(dir).mtimeMs;
+    writeFileSync(file('a'), JSON.stringify(data('a', 'same-tick')));
+    assert.equal(statSync(dir).mtimeMs, before);
+    const again = run(1_000, false);
+    assert.equal(again.stats, 1);
+    assert.deepEqual(again.list, ['same-tick']);
+  });
 
   it('フォルダの時刻が同じなら、中のファイルを stat しない。省いたものも表から外さない', () => {
     const { file, data, run, files } = setup();
@@ -709,6 +723,8 @@ describe('readSessions（フォルダの更新時刻で stat を省く）', () =
     const { dir, file, data, run } = setup();
     writeJson(file('a'), data('a'));
     writeJson(file('b'), data('b'));
+    // 時刻の刻みは粗く、同じ刻みのうちの名前の変更では時刻が変わらないので、前の時刻を過去にずらしておく
+    utimesSync(dir, 1_000_000, 1_000_000);
     run(0);
     const before = statSync(dir).mtimeMs;
     writeJson(file('a'), data('a', 'renamed'));
