@@ -125,7 +125,7 @@ function ltrb(r: Ltrb): string {
 /** Windows 以外では何もしないものを返す */
 export function createAppBar(host: AppBarHost): AppBar {
   if (process.platform !== 'win32') return { sync: () => {}, refresh: () => {}, stop: () => {} };
-  const ps = createPowerShellLine(SCRIPT);
+  const ps = createPowerShellLine(SCRIPT, 'appbar');
   /** 登録しているウィンドウのハンドル */
   let registered: string | undefined;
   /** メッセージを受ける仕掛けをしたウィンドウ */

@@ -2,6 +2,7 @@
 // PowerShell は最初の命令を送るときに起動し、落ちたら次の命令で起動し直す。
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { helperCommand, type HelperMode } from './native-helper';
 
 type Waiter = { resolve: (line: string | undefined) => void; done: boolean };
 
@@ -14,7 +15,7 @@ export interface PowerShellLine {
   close(): void;
 }
 
-export function createPowerShellLine(script: string): PowerShellLine {
+export function createPowerShellLine(script: string, mode: HelperMode): PowerShellLine {
   let child: ChildProcessWithoutNullStreams | undefined;
   let buffer = '';
   let closed = false;
@@ -30,9 +31,8 @@ export function createPowerShellLine(script: string): PowerShellLine {
   function ensureChild(): ChildProcessWithoutNullStreams | undefined {
     if (child) return child;
     if (closed || process.platform !== 'win32') return undefined;
-    // -EncodedCommand（UTF-16LE の base64）なら、引数の引用符を気にしなくてよい
-    const encoded = Buffer.from(script, 'utf16le').toString('base64');
-    const p = spawn('powershell.exe', ['-NoProfile', '-NoLogo', '-NonInteractive', '-EncodedCommand', encoded], { windowsHide: true });
+    const { command, args } = helperCommand(mode, script);
+    const p = spawn(command, args, { windowsHide: true });
     p.stdout.setEncoding('utf8');
     p.stdout.on('data', (chunk: string) => {
       buffer += chunk;

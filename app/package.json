@@ -13,6 +13,7 @@
     "start": "npm run build && electron .",
     "debug": "npm run build && node scripts/debug.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
+    "build:native": "node scripts/build-native.mjs",
     "icons": "electron scripts/make-icons.mjs",
     "lucide-icons": "node scripts/make-lucide-icons.mjs",
     "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\" && npm run lint:ja",

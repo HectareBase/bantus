@@ -17,6 +17,7 @@
 //   取れなければ空行
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { helperCommand } from './native-helper';
 
 // 前面にないプロセスの SetForegroundWindow は Windows に断られる（タスクバーが点滅するだけ）。
 // 断られたら、どこにも割り当てのない仮想キー（0x88）を押して離したことにしてから、もう一度呼ぶ。
@@ -296,11 +297,8 @@ function settle(w: Waiter | undefined, line: string | undefined) {
 function ensureChild(): ChildProcessWithoutNullStreams | undefined {
   if (child) return child;
   if (process.platform !== 'win32') return undefined;
-  // -EncodedCommand（UTF-16LE の base64）なら、引数の引用符を気にしなくてよい
-  const encoded = Buffer.from(SCRIPT, 'utf16le').toString('base64');
-  const p = spawn('powershell.exe', ['-NoProfile', '-NoLogo', '-NonInteractive', '-EncodedCommand', encoded], {
-    windowsHide: true,
-  });
+  const { command, args } = helperCommand('foreground', SCRIPT);
+  const p = spawn(command, args, { windowsHide: true });
   p.stdout.setEncoding('utf8');
   p.stdout.on('data', (chunk: string) => {
     buffer += chunk;
