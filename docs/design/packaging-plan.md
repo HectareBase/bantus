@@ -55,6 +55,9 @@
 | `author`、`copyright`、`publisherName` | 公開してよい名前（git の `user.name`）だけ。`copyright` は年なしの `Copyright © <名前>` |
 | electron-builder の版 | 26.17.0（出てから 2 週間以上たった版） |
 | アンインストール | 設定（`%APPDATA%Bantus`）は消さない（`deleteAppDataOnUninstall: false`）。消すかを聞く画面は作らない |
+| 古い版に戻したとき | 上書きインストールで古い版に戻しても、新しい版の設定は消えない。知らない項目は読んだときの値のまま保存する。今の版が知っている項目で、値が知らないもの（新しい版の選択肢など）は、ユーザーがその項目を変えるまで元の値を残す（変えたら今の版の値で書く）。前の版の値を置き換える項目（強調の濃さの 3 択）と、前の版の項目（`alwaysShow`）は今の版の形で書く。ただし、この仕組みより前の版（0.8.0 まで）に戻すと、その版は知らない項目を捨てる |
+| 設定のバックアップ | 設定と同じフォルダ（`%APPDATA%\Bantus`）に置く。前回と版が違う起動のとき、書き込む前に `settings.<前の版>.bak` にコピーする（上げるときも戻すときも）。前回の版は `settings.json` の `lastVersion` に書く。`lastVersion` のないファイル（0.8.0 までの版が書いたもの）は `settings.unknown.bak` にする。`.bak` は更新日時の新しいほうから 3 個だけを残す。戻すときは、アプリを止めて `.bak` を `settings.json` にコピーする |
+| 壊れた設定 | 読めない `settings.json` は `settings.json.bad` に移してから既定値で動く（前の `.bad` は上書き）。保存は `settings.json.tmp` に書いてから置き換えるので、途中で止まっても元のファイルは壊れない |
 | ポータブル版の設定 | インストール版と同じ `%APPDATA%Bantus` |
 | 使用許諾と第三者の表記 | `LICENSE.txt` と `THIRD_PARTY_NOTICES.txt` を `Bantus.exe` の隣に置く。インストーラーでは MIT の使用許諾の画面を出す |
 | 言語ファイル | Electron の言語ファイルは `ja` と `en-US` だけを入れる |
@@ -89,6 +92,15 @@
 |---|---|
 | `npm run dist:dir` | `win-unpacked/` の一番上に `LICENSE.txt` と `THIRD_PARTY_NOTICES.txt` ができ、中身はリポジトリの一番上のものと同じ |
 | `npm run dist` | インストーラーと zip ができる。zip の一番上に 2 つのファイルが入っている。インストーラーの NSIS スクリプトに使用許諾の画面（`MUI_PAGE_LICENSE`）が入る。インストーラーの中身は `win-unpacked/` を包んだものなので、同じ 2 つが入る |
+
+### 設定を消さないための仕組みを入れたあと
+`npm run dist:dir` で作った exe を `--user-data-dir` で別のフォルダを指定して起動して確かめた。
+
+| 確かめたこと | 結果 |
+|---|---|
+| `settings.json` を壊しておく | `settings.json.bad` に元の中身が残り、既定値で動く |
+| 知らない項目（`futureOption`）と知らない値（`theme: "sepia"`）を足して、ピンを切り替える | ピンの値は保存され、知らない項目と値はそのまま残る |
+| `lastVersion` を別の値にし、`.bak` を 3 個置いておく | `settings.<前の版>.bak` ができ、いちばん古い `.bak` が消えて 3 個になる。Windows のコピーは元の更新日時を引き継ぐので、作った `.bak` の更新日時は今にそろえる |
 
 ### まだ確かめていないこと
 - `Ctrl+Alt+N`：いつものウィジェット（`npm start`）が動いていてキーを使っているため、exe では登録できなかった（想定どおり）。いつものウィジェットを止めて確かめる
