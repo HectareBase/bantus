@@ -70,6 +70,8 @@ export interface GitLog {
   commits: GitCommit[];
   total: number;
   fork?: string;
+  /** メインのカードで push していないコミットを並べたとき、追跡するブランチ（`origin/main` など） */
+  tracking?: string;
 }
 
 type Run = typeof git;
@@ -79,18 +81,27 @@ function strip({ parents: _parents, ...c }: ParsedCommit): GitCommit {
 }
 
 /**
- * コミットの並びを読む。base（ワークツリーの分岐元）がなければ、最近のコミットを RECENT_LIMIT 件。
- * base があれば、分岐元にないコミットを新しい順に LOG_LIMIT 件まで。マージ済み（merged）なら、マージした先（mergedInto、なければ base）の
- * first-parent の線で HEAD を取り込む前のコミットから数える（git-status.ts の mergedInto と同じ見方）
+ * コミットの並びを読む。
+ * - base（ワークツリーの分岐元）があれば、分岐元にないコミットを新しい順に LOG_LIMIT 件まで。マージ済み（merged）なら、マージした先
+ *   （mergedInto、なければ base）の first-parent の線で HEAD を取り込む前のコミットから数える（git-status.ts の mergedInto と同じ見方）
+ * - base がなく unpushed（push していないコミットがある）なら、追跡するブランチにないコミットを同じく並べ、追跡するブランチを分岐元の代わりにする
+ * - どちらでもなければ、最近のコミットを RECENT_LIMIT 件
  */
-export async function readLog(dir: string, base: string | undefined, merged: boolean, mergedInto: string | undefined, run: Run = git): Promise<GitLog> {
+export async function readLog(
+  dir: string,
+  base: string | undefined,
+  merged: boolean,
+  mergedInto: string | undefined,
+  run: Run = git,
+  unpushed = false,
+): Promise<GitLog> {
   const log = (args: string[]) => run(dir, ['log', '--no-show-signature', `--format=${FORMAT}`, ...args]);
-  if (!base) {
+  if (!base && !unpushed) {
     const commits = parseLog(await log(['-n', String(RECENT_LIMIT), 'HEAD'])).map(strip);
     return { mode: 'main', commits, total: commits.length };
   }
-  let from = `refs/heads/${base}`;
-  if (merged) {
+  let from = base ? `refs/heads/${base}` : '@{upstream}';
+  if (base && merged) {
     const target = `refs/heads/${mergedInto ?? base}`;
     const first = (await run(dir, ['rev-list', '--first-parent', '--reverse', `HEAD..${target}`])).split('\n')[0]?.trim();
     if (first) from = `${first}^1`;
@@ -103,7 +114,8 @@ export async function readLog(dir: string, base: string | undefined, merged: boo
   // 並びの一番古いものの親が分岐点。コミットがない、または上限で切ったときだけ git に聞く
   if (!fork) fork = (await run(dir, ['merge-base', from, 'HEAD'])).trim().slice(0, shown[0]?.short.length ?? 7) || undefined;
   if (truncated) total = Number((await run(dir, ['rev-list', '--count', `${from}..HEAD`])).trim()) || shown.length;
-  return { mode: 'worktree', commits: shown.map(strip), total, ...(fork && { fork }) };
+  const tracking = base ? undefined : (await run(dir, ['rev-parse', '--abbrev-ref', '@{upstream}'])).trim() || undefined;
+  return { mode: base ? 'worktree' : 'main', commits: shown.map(strip), total, ...(fork && { fork }), ...(tracking && { tracking }) };
 }
 
 /** 詳細を調べるカードの様子（メインプロセスがセッションから決める） */
@@ -139,6 +151,7 @@ export function buildDetail(src: DetailSource, log: GitLog | undefined): GitDeta
     commits: log?.commits ?? [],
     total: log?.total ?? 0,
     ...(log?.fork && { fork: log.fork }),
+    ...(log?.tracking && { tracking: log.tracking }),
     baseAhead: worktree ? c.behind : 0,
     ...(!log && { failed: true }),
   };
@@ -163,7 +176,10 @@ export function createGitDetailReader(run: Run = git, refs: typeof readRefs = re
     const found = refs(src.dir, names);
     // 分岐元が手元にない：分岐元と比べられないので、メインのカードと同じく最近のコミットを出す
     if (base && found && found.refs[0] === null) base = undefined;
-    const id = found && JSON.stringify([base, c.merged, into, found.head, found.refs]);
+    // メインのカードで push していないコミットがあれば、追跡するブランチと比べる。追跡するブランチの先頭は名前がわからず読めないので、
+    // push していない数と遅れも組に入れる（push と取得で変わる）
+    const unpushed = !base && c.ahead > 0 && !c.aheadOfBase;
+    const id = found && JSON.stringify([base, c.merged, into, found.head, found.refs, unpushed && [c.ahead, c.behind]]);
     const key = folderKey(src.dir);
     const hit = cache.get(key);
     if (id && hit?.id === id) {
@@ -173,7 +189,7 @@ export function createGitDetailReader(run: Run = git, refs: typeof readRefs = re
     }
     let log: GitLog | undefined;
     try {
-      log = await readLog(src.dir, base, c.merged, into, counted);
+      log = await readLog(src.dir, base, c.merged, into, counted, unpushed);
     } catch {
       log = undefined;
     }
@@ -200,7 +216,7 @@ interface FixtureCommit {
  * 見本の作業フォルダは本物ではないので、git は起動しない
  */
 export function fixtureGitDetail(fixture: string, key: string, src: DetailSource, now = Date.now()): GitDetail {
-  let entry: { commits?: FixtureCommit[]; total?: number; fork?: string } | undefined;
+  let entry: { commits?: FixtureCommit[]; total?: number; fork?: string; tracking?: string } | undefined;
   try {
     const all = JSON.parse(readFileSync(join(dirname(fixture), 'git-detail', 'details.json'), 'utf8')) as Record<string, typeof entry>;
     entry = all[key];
@@ -209,5 +225,5 @@ export function fixtureGitDetail(fixture: string, key: string, src: DetailSource
   }
   if (!entry) return buildDetail(src, undefined);
   const commits = (entry.commits ?? []).map((c) => ({ short: c.short, at: now - c.minutesAgo * 60_000, subject: c.subject, ...splitSubject(c.subject), body: c.body ?? '' }));
-  return buildDetail(src, { mode: src.base ? 'worktree' : 'main', commits, total: entry.total ?? commits.length, ...(entry.fork && { fork: entry.fork }) });
+  return buildDetail(src, { mode: src.base ? 'worktree' : 'main', commits, total: entry.total ?? commits.length, ...(entry.fork && { fork: entry.fork }), ...(!src.base && entry.tracking && { tracking: entry.tracking }) });
 }

@@ -297,16 +297,11 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .node.git-node[data-dot="none"] .title { font-size: 11px; color: var(--text-tertiary); }
 /* マージ済みのブランチのコミットは薄く */
 .git-node[data-faded] { opacity: 0.55; }
-/* 種別（feat、fix など）と範囲の札 */
-.ctype { display: inline-block; margin-right: 5px; padding: 0 4px; border-radius: 3px; background: var(--selected); color: var(--text-secondary); font-size: 10.5px; line-height: 15px; vertical-align: 1px; }
+/* 種別（feat、fix など）と範囲の札。2 行目の頭に置く */
+.ctype { flex: none; padding: 0 4px; border-radius: 3px; background: var(--selected); color: var(--text-secondary); font-size: 10px; line-height: 14px; }
+.ctext { display: block; overflow: hidden; text-overflow: ellipsis; }
 .cscope { color: var(--text-tertiary); }
 .cscope::before { content: "·"; margin: 0 3px; }
-/* コミットが少ないときに行の中に出す本文 */
-.cbody { margin-top: 2px; font-size: 11px; line-height: 1.4; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-/* 本文を中に出した行は高いので、丸と線を題名の行にそろえる（縦の真ん中にしない） */
-.git-node:has(.cbody) .dot { top: 5px; }
-.git-node:has(.cbody) .ln.in { height: 5px; }
-.git-node:has(.cbody) .ln.out { top: 18px; }
 .sub.copied { color: var(--text-secondary); }
 /* 下の段：1 行目は ID と日時、残りの 4 行は本文（一覧より 1 行高い）。収まらない本文はホイールで送る */
 .list.git .list-foot { height: calc(5 * 1.4em + 2px + 12px); }

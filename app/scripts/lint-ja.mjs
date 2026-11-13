@@ -43,6 +43,7 @@ const SAMPLES = {
   'gitDetail.totalAhead': [['main', 3]],
   'gitDetail.totalMerged': [[3]],
   'gitDetail.totalRecent': [[5]],
+  'gitDetail.totalUnpushed': [[9]],
   'gitDetail.noCommits': [['main']],
   'changes.untracked': [[1]],
   'changes.uncommitted': [['変更 2・未追跡 1']],

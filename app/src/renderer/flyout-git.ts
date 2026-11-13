@@ -12,8 +12,6 @@ import { formatAgo } from './model.js';
 const FOLD_OVER = 8;
 /** 並べる上限（src/main/git-detail.ts の LOG_LIMIT と同じ） */
 const LOG_LIMIT = 50;
-/** これ以下のコミットなら、本文を行の中に出し、下の段は出さない（段のほうが図より大きくなるため） */
-const INLINE_MAX = 2;
 /** ID を写したことを 2 行目に出しておく長さ */
 const COPIED_MS = 1200;
 
@@ -49,19 +47,22 @@ function when(at: number): string {
   return at ? new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
 }
 
-/** 2 行目。空でない項目を「·」で区切る */
-function subLine(parts: string[]): HTMLElement {
+/** 2 行目。空でない項目を「·」で区切る。札（要素）の後ろには区切りを置かない */
+function subLine(parts: (string | Node)[]): HTMLElement {
   const s = document.createElement('div');
   s.className = 'sub';
-  parts.filter(Boolean).forEach((part, i) => {
-    if (i) s.append(span('sep', '·'));
+  let prevText = false;
+  for (const part of parts.filter(Boolean)) {
+    const text = typeof part === 'string';
+    if (text && prevText) s.append(span('sep', '·'));
     s.append(part);
-  });
+    prevText = text;
+  }
   return s;
 }
 
 /** 図の 1 行。dot は丸の形（commit：塗った丸、head：中が空の丸、wip：点線の中が空の丸、base：◇、none：丸なし） */
-function row(dot: 'commit' | 'head' | 'wip' | 'base' | 'none', title: Node[], sub: string[], link: { in?: Link; out?: Link }): HTMLElement {
+function row(dot: 'commit' | 'head' | 'wip' | 'base' | 'none', title: Node[], sub: (string | Node)[], link: { in?: Link; out?: Link }): HTMLElement {
   const el = document.createElement('div');
   el.className = 'node linked git-node';
   el.dataset.dot = dot;
@@ -84,11 +85,13 @@ function renderHead(head: HTMLElement, d: GitDetail | undefined) {
   const name = span('name', d.label ?? d.branch ?? ja.gitDetail.detached);
   if (d.branch) name.title = d.branch;
   const parts: Node[] = [createIcon(d.merged ? 'git-merge' : 'git-branch'), name];
-  if (d.mode === 'worktree' && d.base) {
+  // 比べている先（ワークツリーは分岐元、メインのカードは追跡するブランチ）。一番下の ◇ と同じもの
+  const against = d.mode === 'worktree' ? d.mergedInto ?? d.base : d.tracking;
+  if (against) {
     const to = createIcon('chevron-right');
     to.classList.add('to');
     to.setAttribute('aria-label', ja.gitDetail.fromBase);
-    parts.push(to, span('base', d.mergedInto ?? d.base));
+    parts.push(to, span('base', against));
   }
   parts.push(span('gap'));
   if (d.merged) parts.push(span('tag', ja.gitDetail.merged));
@@ -102,28 +105,25 @@ function renderHead(head: HTMLElement, d: GitDetail | undefined) {
   head.replaceChildren(...parts);
 }
 
-/** コミットの行。題名は種別（と範囲）の札と要約に分ける。押すと短い ID を写す */
-function commitRow(c: GitCommit, isHead: boolean, faded: boolean, inline: boolean, link: { in?: Link; out?: Link }, parts: Parts): HTMLElement {
-  const title: Node[] = [];
+/**
+ * コミットの行。1 行目は要約だけにして、どの行も文の頭をそろえる。種別（と範囲）の札は 2 行目の頭に置く
+ * （1 行目に置くと、札の幅で文の頭がずれるため）。押すと短い ID を写す
+ */
+function commitRow(c: GitCommit, isHead: boolean, faded: boolean, link: { in?: Link; out?: Link }, parts: Parts): HTMLElement {
+  const subParts: (string | Node)[] = [];
   if (c.type) {
     const tag = span('ctype', c.type);
     if (c.scope) tag.append(span('cscope', c.scope));
-    title.push(tag);
+    subParts.push(tag);
   }
-  title.push(span('ctext', c.text));
-  const el = row(isHead ? 'head' : 'commit', title, [c.short, formatAgo(c.at)], link);
+  subParts.push(c.short, formatAgo(c.at));
+  const el = row(isHead ? 'head' : 'commit', [span('ctext', c.text)], subParts, link);
   el.classList.add('git-commit');
   el.tabIndex = 0;
   // ツールチップに件名と本文の全体と日時を出す（下の段と行の中の本文は途中で切ることがあるため）
   const stamp = [when(c.at), isHead ? ja.gitDetail.head : ''].filter(Boolean).join(' · ');
   el.title = [c.subject, ...(c.body ? ['', c.body] : []), '', stamp, ja.gitDetail.copyHint].join('\n');
   el.toggleAttribute('data-faded', faded);
-  if (inline && c.body) {
-    const body = document.createElement('div');
-    body.className = 'cbody';
-    body.textContent = c.body;
-    el.querySelector('.txt')!.append(body);
-  }
   const sub = el.querySelector<HTMLElement>('.sub')!;
   const copied = subLine([ja.gitDetail.copied]);
   copied.classList.add('copied');
@@ -160,23 +160,17 @@ function foldRow(n: number, parts: Parts): HTMLElement {
   return el;
 }
 
-/** 下の段を出すか。読み込み中と失敗は段で知らせる。コミットが少なければ本文は行の中に出す */
-function wantsFoot(d: GitDetail | undefined): boolean {
-  return !d || !!d.failed || d.commits.length > INLINE_MAX;
-}
-
 /** 下の段。乗せた行のコミットの ID と日時、本文。乗せていなければ全体の件数 */
 function showFoot(foot: HTMLElement, c: GitCommit | undefined) {
   if (c && c === footCommit) return;
   footCommit = c;
   const d = current;
-  if (foot.hidden) return;
   const b = document.createElement('b');
   if (!c) {
     const hint = span('hint', d?.failed || !d ? '' : ja.gitDetail.hint);
     if (!d) b.textContent = ja.gitDetail.loading;
     else if (d.failed) b.textContent = ja.gitDetail.failed;
-    else if (d.mode === 'main') b.textContent = ja.gitDetail.totalRecent(d.commits.length);
+    else if (d.mode === 'main') b.textContent = d.tracking ? ja.gitDetail.totalUnpushed(d.total) : ja.gitDetail.totalRecent(d.commits.length);
     else if (d.merged) b.textContent = ja.gitDetail.totalMerged(d.total);
     else if (!d.total) b.textContent = ja.gitDetail.noCommits(d.base ?? '');
     else b.textContent = ja.gitDetail.totalAhead(d.base ?? '', d.total);
@@ -196,7 +190,6 @@ function renderBody(parts: Parts) {
   const d = current;
   if (!d || d.failed) return parts.body.replaceChildren();
   const nodes: HTMLElement[] = [];
-  const inline = !wantsFoot(d);
   // 上から順に並べる行。線は前の行とつなぐ
   type Item = { kind: 'wip' } | { kind: 'commit'; c: GitCommit; head: boolean } | { kind: 'fold'; n: number } | { kind: 'beyond'; n: number } | { kind: 'merge' } | { kind: 'base' };
   const items: Item[] = [];
@@ -212,7 +205,8 @@ function renderBody(parts: Parts) {
     all.forEach((c, i) => items.push({ kind: 'commit', c, head: i === 0 }));
     if (truncated) items.push({ kind: 'beyond', n: d.total - all.length });
   }
-  if (d.mode === 'worktree') items.push({ kind: 'base' });
+  // 一番下の ◇：ワークツリーは分岐元、メインのカードは push していないコミットがあるときの追跡するブランチ
+  if (d.mode === 'worktree' || d.tracking) items.push({ kind: 'base' });
   /** i 番目と次の行をつなぐ線。コミットしていない変更、たたんだ行、マージした先の前後は点線 */
   const linkAfter = (i: number): Link | undefined => {
     const a = items[i];
@@ -230,12 +224,14 @@ function renderBody(parts: Parts) {
         if (e.movementX || e.movementY) showFoot(parts.foot, undefined);
       });
       nodes.push(el);
-    } else if (it.kind === 'commit') nodes.push(commitRow(it.c, it.head && !d.merged, d.merged, inline, link, parts));
+    } else if (it.kind === 'commit') nodes.push(commitRow(it.c, it.head && !d.merged, d.merged, link, parts));
     else if (it.kind === 'fold') nodes.push(foldRow(it.n, parts));
     else if (it.kind === 'beyond') nodes.push(row('none', [document.createTextNode(ja.gitDetail.beyondLimit(it.n, LOG_LIMIT))], [], link));
     else if (it.kind === 'merge') {
       // 図の端の印なので、題名は控えめにして、どこへ入ったかを 2 行目に出す
       nodes.push(row('base', [document.createTextNode(ja.gitDetail.mergedHere)], [d.mergedInto ?? d.base ?? ''], link));
+    } else if (d.mode === 'main') {
+      nodes.push(row('base', [document.createTextNode(ja.gitDetail.pushedHere)], [d.tracking ?? '', d.fork ?? ''], link));
     } else {
       const sub = [d.base ?? '', d.fork ?? '', d.baseAhead && !d.merged ? ja.gitDetail.baseAhead(d.baseAhead) : ''];
       nodes.push(row('base', [document.createTextNode(ja.gitDetail.forkHere)], sub, link));
@@ -251,8 +247,8 @@ export function renderGit(detail: GitDetail | undefined, parts: Parts, fresh: bo
   footCommit = undefined;
   parts.head.hidden = !detail;
   renderHead(parts.head, detail);
-  // 下の段の高さは開いている間は変えない。出すかどうかだけを中身で決める
-  parts.foot.hidden = !wantsFoot(detail);
+  // 下の段はコミットの数によらずいつも出す（本文の出る場所を変えない）。高さも変えない
+  parts.foot.hidden = false;
   renderBody(parts);
   showFoot(parts.foot, undefined);
 }

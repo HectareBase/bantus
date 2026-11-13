@@ -238,6 +238,8 @@ export const ja = {
     /** 上限で切ったとき、並べていない分 */
     beyondLimit: (n: number, limit: number) => `ほかに ${n} 件（表示は ${limit} 件まで）`,
     forkHere: 'ここから分岐',
+    /** メインのカードで、追跡するブランチの所（一番下の ◇） */
+    pushedHere: 'ここまで push 済み',
     /** 分岐点から分岐元が先に進んだ件数 */
     baseAhead: (n: number) => `その後 ${n} 件進んでいる`,
     /** マージ済みのとき、一番上の ◇ の 2 行目 */
@@ -246,6 +248,7 @@ export const ja = {
     totalAhead: (base: string, n: number) => `${base} にないコミット：${n} 件`,
     totalMerged: (n: number) => `マージしたコミット：${n} 件`,
     totalRecent: (n: number) => `最近のコミット：${n} 件`,
+    totalUnpushed: (n: number) => `push していないコミット：${n} 件`,
     noCommits: (base: string) => `${base} にないコミットはありません`,
     hint: 'マウスを乗せると、コミットの本文を表示します',
     noBody: '本文はありません',

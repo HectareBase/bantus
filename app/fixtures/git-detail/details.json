@@ -4,29 +4,12 @@
       {
         "short": "a1b2c3d",
         "minutesAgo": 20,
-        "subject": "feat(app): ツールチップを自前で描く"
-      },
-      {
-        "short": "b2c3d4e",
-        "minutesAgo": 90,
-        "subject": "fix(main): 起動の順を直す"
-      },
-      {
-        "short": "c3d4e5f",
-        "minutesAgo": 300,
-        "subject": "docs: README を整える"
-      },
-      {
-        "short": "d4e5f6a",
-        "minutesAgo": 1500,
-        "subject": "chore(deps): electron を上げる"
-      },
-      {
-        "short": "e5f6a7b",
-        "minutesAgo": 3000,
-        "subject": "Initial commit"
+        "subject": "feat(app): ツールチップを自前で描く",
+        "body": "OS のツールチップは遅れて出るので、自前の窓で描く。"
       }
-    ]
+    ],
+    "fork": "b2c3d4e",
+    "tracking": "origin/main"
   },
   "handoff|notify": {
     "commits": [

@@ -331,7 +331,7 @@ export interface GitCommit {
 
 /** カードの git の詳細（docs/design/git-detail.md）。カードの見出しの印を押したときだけ調べる */
 export interface GitDetail {
-  /** worktree：分岐元にないコミットを並べる。main：最近のコミットを数件 */
+  /** worktree：分岐元にないコミットを並べる。main：push していないコミット（なければ最近のコミットを数件） */
   mode: 'worktree' | 'main';
   /** 今のブランチ。わからなければ undefined */
   branch?: string;
@@ -354,8 +354,10 @@ export interface GitDetail {
   commits: GitCommit[];
   /** 分岐元にないコミットの数（上限で切った分も含む） */
   total: number;
-  /** 分岐点の短い ID */
+  /** 分岐点の短い ID。メインのカードでは、追跡するブランチと分かれた所 */
   fork?: string;
+  /** メインのカードで push していないコミットを並べたとき、追跡するブランチ（`origin/main` など）。一番下の ◇ に出す */
+  tracking?: string;
   /** 分岐点から分岐元が先に進んだ件数 */
   baseAhead: number;
   /** git を読めなかった */

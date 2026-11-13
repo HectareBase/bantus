@@ -86,6 +86,13 @@ describe('readLog', () => {
     assert.match(g.calls[0]!, new RegExp(`-n ${RECENT_LIMIT} HEAD$`));
   });
 
+  it('メインのカードで push していないコミットがあれば、追跡するブランチにないものを全部読む', async () => {
+    const many = Array.from({ length: 9 }, (_, i) => record(`b${String(i).padStart(6, '0')}`, i === 8 ? 'f000000' : `b${String(i + 1).padStart(6, '0')}`, 100 - i, `c${i}`)).join('');
+    const g = fakeGit([[/^log .*@\{upstream\}\.\.HEAD$/, many], [/^rev-parse --abbrev-ref @\{upstream\}$/, 'origin/main\n']]);
+    const log = await readLog('/r', undefined, false, undefined, g.run, true);
+    assert.deepEqual({ mode: log.mode, n: log.commits.length, total: log.total, fork: log.fork, tracking: log.tracking }, { mode: 'main', n: 9, total: 9, fork: 'f000000', tracking: 'origin/main' });
+  });
+
   it('ワークツリーは分岐元にないコミットを読み、一番古いものの親を分岐点にする（git は 1 回）', async () => {
     const g = fakeGit([[/^log /, record('aaaa111', 'bbbb222', 2, 'b') + record('bbbb222', 'cccc333', 1, 'a')]]);
     const log = await readLog('/r', 'main', false, undefined, g.run);
@@ -173,6 +180,18 @@ describe('createGitDetailReader', () => {
     await noRefs(src);
     await noRefs(src);
     assert.equal(noRefs.stats().calls, 2);
+  });
+
+  it('メインのカードは push していない数と遅れが変わったら読み直す（追跡するブランチの先頭は読まない）', async () => {
+    const g = fakeGit([[/^log /, record('aaaa111', 'bbbb222', 1, 'x')], [/^rev-parse /, 'origin/main\n']]);
+    const read = createGitDetailReader(g.run, () => ({ head: 'h', refs: [] }));
+    const main = { dir: '/repo', branch: 'main', changes: { changed: 0, untracked: 0, ahead: 1, behind: 0, merged: false } };
+    const d = await read(main);
+    assert.equal(d.tracking, 'origin/main');
+    await read(main);
+    assert.equal(read.stats().calls, 2);
+    await read({ ...main, changes: { ...main.changes, ahead: 0 } });
+    assert.equal(read.stats().calls, 3);
   });
 
   it('分岐元が手元になければ、最近のコミットを出す', async () => {
