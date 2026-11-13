@@ -80,11 +80,11 @@ describe('createGitStatus', () => {
     assert.equal(status.apply([view({ workDir: 'C:/NoGit' })])[0]!.changes, undefined);
   });
 
-  it('古くなったら調べ直す。停止中だけのフォルダは長く使い回す', async () => {
+  it('古くなったら調べ直す。ターンの途中のセッションがないフォルダは長く使い回す', async () => {
     const git = fakeGit({ 'C:/A': '', 'C:/B': '' });
     let now = 0;
     const status = createGitStatus(() => {}, git.run, () => now, noBranch, () => true);
-    const list = () => [view({ workDir: 'C:/A', state: 'idle' }), view({ workDir: 'C:/B', state: 'stopped' })];
+    const list = () => [view({ workDir: 'C:/A', state: 'busy' }), view({ workDir: 'C:/B', state: 'stopped' })];
     status.apply(list());
     await tick();
     now = 60_000;
@@ -95,6 +95,44 @@ describe('createGitStatus', () => {
     status.apply(list());
     await tick();
     assert.deepEqual(git.calls.slice(3).sort(), ['C:/A', 'C:/B']);
+  });
+
+  it('待機中と停止中だけのフォルダは 5 分まで調べ直さない。対応待ちがあれば 30 秒で調べ直す', async () => {
+    const git = fakeGit({ 'C:/Idle': '', 'C:/Wait': '' });
+    let now = 0;
+    const status = createGitStatus(() => {}, git.run, () => now, noBranch, () => true);
+    const list = () => [
+      view({ workDir: 'C:/Idle', state: 'idle' }),
+      view({ workDir: 'C:/Idle', state: 'stopped' }),
+      view({ workDir: 'C:/Wait', state: 'waiting' }),
+    ];
+    status.apply(list());
+    await tick();
+    assert.deepEqual(git.calls.sort(), ['C:/Idle', 'C:/Wait']);
+    for (const t of [60_000, 2 * 60_000, 4 * 60_000 + 59_000]) {
+      now = t;
+      status.apply(list());
+      await tick();
+    }
+    assert.equal(git.calls.filter((c) => c === 'C:/Idle').length, 1);
+    assert.ok(git.calls.filter((c) => c === 'C:/Wait').length >= 3);
+    now = 5 * 60_000;
+    status.apply(list());
+    await tick();
+    assert.equal(git.calls.filter((c) => c === 'C:/Idle').length, 2);
+  });
+
+  it('待機中のフォルダでも、取得のあとや設定の変更（invalidate）ではすぐ調べ直す', async () => {
+    const git = fakeGit({ 'C:/Idle': '' });
+    let now = 0;
+    const status = createGitStatus(() => {}, git.run, () => now, noBranch, () => true);
+    status.apply([view({ workDir: 'C:/Idle', state: 'idle' })]);
+    await tick();
+    now = 1_000;
+    status.invalidate();
+    status.apply([view({ workDir: 'C:/Idle', state: 'idle' })]);
+    await tick();
+    assert.equal(git.calls.length, 2);
   });
 
   it('処理中のセッションが処理中でなくなったら、新しくてもすぐ調べ直す', async () => {
@@ -115,10 +153,10 @@ describe('createGitStatus', () => {
     let now = 0;
     let updates = 0;
     const status = createGitStatus(() => updates++, git.run, () => now, noBranch, () => true);
-    status.apply([view({ workDir: 'C:/A' })]);
+    status.apply([view({ workDir: 'C:/A', state: 'busy' })]);
     await tick();
     now = 60_000;
-    status.apply([view({ workDir: 'C:/A' })]);
+    status.apply([view({ workDir: 'C:/A', state: 'busy' })]);
     await tick();
     assert.equal(git.calls.length, 2);
     assert.equal(updates, 1);

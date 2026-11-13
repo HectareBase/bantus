@@ -219,10 +219,15 @@ function readWorktreeBranch(worktreeDir: string, heads: Map<string, string | und
 
 /**
  * folder を含むワークツリーのフォルダ（`.git` がファイルで、その先が commonDir の中）。
- * メインのリポジトリ（`.git` がフォルダ）、別のリポジトリのワークツリー、git の外なら undefined
+ * メインのリポジトリ（`.git` がフォルダ）、別のリポジトリのワークツリー、git の外なら undefined。
+ * mainRoot（`.git` が commonDir そのものの、元のリポジトリの一番上）まで上がったら、読まずに undefined を返す
+ * （そこはワークツリーではない。`.git` がフォルダなので、読んでも EISDIR で失敗するだけ）
  */
-function findWorktreeRoot(folder: string, commonDir: string): string | undefined {
+function findWorktreeRoot(folder: string, commonDir: string, mainRoot?: string): string | undefined {
+  const stop = mainRoot && folderKey(join(mainRoot, '.git')) === folderKey(resolve(commonDir)) ? folderKey(resolve(mainRoot)) : undefined;
   for (let dir = resolve(folder); ; dir = dirname(dir)) {
+    if (stop && folderKey(dir) === stop) return undefined;
+    gitSearchCount.worktreeReads++;
     try {
       const m = /^gitdir: (.+)$/m.exec(readFileSync(join(dir, '.git'), 'utf8'));
       const gitDir = m?.[1] ? folderKey(resolve(dir, m[1].trim())) : '';
@@ -246,6 +251,7 @@ interface GitAnchor {
  * （なければ `<gitdir>/../..`）を commonDir とする。git の外なら undefined
  */
 function findGitAnchor(folder: string): GitAnchor | undefined {
+  gitSearchCount.anchorSearches++;
   const found = findGitDirs(folder);
   return found && { gitRoot: found.gitRoot, commonDir: found.commonDir };
 }
@@ -451,7 +457,76 @@ export function disposeBackgroundReaders(): void {
   planReaders.clear();
 }
 
-export function readSessions(paths = defaultPaths()): SessionView[] {
+/** `.git` の探索の結果を覚えておく長さ。ワークツリーを作ったり消したりしても、これが過ぎれば反映される */
+const GIT_SEARCH_TTL_MS = 60_000;
+
+/** `.git` を実際に探した回数（テスト用）。worktreeReads は findWorktreeRoot が `.git` を読もうとした回数 */
+const gitSearchCount = { worktreeReads: 0, anchorSearches: 0 };
+
+/** 期限付きで、探した結果を使い回す表。期限の過ぎたものは sweep でまとめて捨てる */
+function createTtlCache<T>() {
+  const entries = new Map<string, { value: T; at: number }>();
+  return {
+    get(key: string, now: number, compute: () => T): T {
+      const hit = entries.get(key);
+      if (hit && now - hit.at < GIT_SEARCH_TTL_MS) return hit.value;
+      const value = compute();
+      entries.set(key, { value, at: now });
+      return value;
+    },
+    sweep(now: number) {
+      for (const [key, e] of entries) if (now - e.at >= GIT_SEARCH_TTL_MS) entries.delete(key);
+    },
+  };
+}
+
+type TtlCache<T> = ReturnType<typeof createTtlCache<T>>;
+
+/** Claude でアーカイブ済みのセッションから作ったもの。通し番号と、カードをまとめるためだけに使う */
+interface ArchivedEntry {
+  view: SessionView;
+  named?: [string, Pick<SessionView, 'worktree' | 'baseBranch'>];
+  byFolder?: string;
+}
+
+/** データフォルダ（dataBase）ごとの、呼び出しをまたいで使い回す表 */
+interface SessionCaches {
+  /** 作業フォルダから探したワークツリーのフォルダ */
+  roots: TtlCache<string | undefined>;
+  /** gitAnchors のないセッションの作業フォルダから探した git の情報 */
+  anchors: TtlCache<GitAnchor | undefined>;
+  /**
+   * 解釈した local_*.json の中身 → アーカイブ済みのセッションから作ったもの。createJsonCache はファイルの stamp
+   * （更新時刻、変更時刻、大きさ、番号）が変わるまで同じ中身を返し、変われば読み直した別の中身を返すので、stamp が変われば作り直しになる
+   */
+  archived: WeakMap<object, ArchivedEntry>;
+  /** アーカイブ済みのセッションを作った回数（テスト用） */
+  archivedBuilds: number;
+}
+
+const sessionCaches = new Map<string, SessionCaches>();
+
+function sessionCachesFor(dataBase: string): SessionCaches {
+  let c = sessionCaches.get(dataBase);
+  if (!c) {
+    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0 };
+    sessionCaches.set(dataBase, c);
+  }
+  return c;
+}
+
+/** 使い回しが効いているかを見るため（テスト用）。`.git` の探索の回数は、すべてのデータフォルダの合計 */
+export function sessionCacheStats(dataBase: string) {
+  return { archivedBuilds: sessionCachesFor(dataBase).archivedBuilds, ...gitSearchCount };
+}
+
+/** 書き換えてもよい複製（assignSeq は seq を、カードをまとめる処理は worktree と baseBranch を書き換える） */
+function copyView(view: SessionView): SessionView {
+  return { ...view, ...(view.worktree && { worktree: { ...view.worktree } }) };
+}
+
+/** now はテストで差し替える（`.git` の探索を使い回す期限に使う） */
+export function readSessions(paths = defaultPaths(), now = Date.now()): SessionView[] {
   if (process.env.WIDGET_FIXTURE) return readFixture(process.env.WIDGET_FIXTURE);
   const running = readRunning(paths.runningDir);
   const contextReader = paths.projectsDir ? contextReaderFor(paths.projectsDir) : undefined;
@@ -469,20 +544,17 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
   let focused: { id: string; at: number } | undefined;
   /** セッションごとの最後に開いた時刻。サイドチャットは親に入れ、新しいほうを残す */
   const focusedAt = new Map<string, number>();
-  /** 作業フォルダから探したワークツリーのフォルダ（同じフォルダを何度も探さない） */
-  const roots = new Map<string, string | undefined>();
-  const worktreeRootOf = (folder: string, commonDir: string) => {
-    const k = `${folderKey(folder)}|${folderKey(commonDir)}`;
-    if (!roots.has(k)) roots.set(k, findWorktreeRoot(folder, commonDir));
-    return roots.get(k);
-  };
-  /** gitAnchors のないセッションの作業フォルダから探した git の情報（同じフォルダを何度も探さない） */
-  const found = new Map<string, GitAnchor | undefined>();
-  const gitAnchorOf = (folder: string) => {
-    const k = folderKey(folder);
-    if (!found.has(k)) found.set(k, findGitAnchor(folder));
-    return found.get(k);
-  };
+  // 探した結果は、呼び出しをまたいで期限まで使い回す（同じフォルダを何度も探さない）
+  const caches = sessionCachesFor(paths.dataBase);
+  caches.roots.sweep(now);
+  caches.anchors.sweep(now);
+  /** 作業フォルダから探したワークツリーのフォルダ */
+  const worktreeRootOf = (folder: string, commonDir: string, mainRoot: string | undefined) =>
+    caches.roots.get(`${folderKey(folder)}|${folderKey(commonDir)}|${mainRoot ? folderKey(mainRoot) : ''}`, now, () =>
+      findWorktreeRoot(folder, commonDir, mainRoot),
+    );
+  /** gitAnchors のないセッションの作業フォルダから探した git の情報 */
+  const gitAnchorOf = (folder: string) => caches.anchors.get(folderKey(folder), now, () => findGitAnchor(folder));
   /** アプリが作ったワークツリーのフォルダ → そのセッションのワークツリー（同じフォルダで始めたセッションを同じカードにまとめる） */
   const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
   /** ワークツリーの名前を持たず、フォルダから見つけたセッション → そのフォルダ */
@@ -502,6 +574,18 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
       if (!archived && at > (focusedAt.get(focusId) ?? 0)) focusedAt.set(focusId, at);
       if (btwParent) continue;
       const r = running.get(d.cliSessionId);
+      // アーカイブ済みは通し番号とカードをまとめるためだけに使うので、作ったものを中身が変わるまで使い回す（git の探索をやり直さない）。
+      // 動いているもの（作業フォルダが途中で変わることがある）は毎回作る
+      const reuse = archived && !r;
+      const hit = reuse ? caches.archived.get(d) : undefined;
+      if (hit) {
+        const view = copyView(hit.view);
+        // まとめた先のカードに worktree をそのまま渡すので、表の中身を渡さず複製する
+        if (hit.named) named.set(hit.named[0], { ...hit.named[1], ...(hit.named[1].worktree && { worktree: { ...hit.named[1].worktree } }) });
+        if (hit.byFolder) byFolder.set(view, hit.byFolder);
+        numbered.push(view);
+        continue;
+      }
       const state = toState(r);
       const summary = d.postTurnSummary ?? {};
       // リポジトリの外のワークツリー（git worktree add）で始めたセッションには gitAnchors がないことがあるので、作業フォルダから探す
@@ -524,7 +608,7 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         : anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root)
           ? anchor.gitRoot
           : commonDir && (r?.cwd || d.cwd)
-            ? worktreeRootOf(r?.cwd || d.cwd, commonDir)
+            ? worktreeRootOf(r?.cwd || d.cwd, commonDir, anchor?.gitRoot)
             : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const view: SessionView = {
@@ -555,11 +639,24 @@ export function readSessions(paths = defaultPaths()): SessionView[] {
         const base = typeof d.sourceBranch === 'string' && d.sourceBranch ? d.sourceBranch : mainBranch;
         if (base && base !== view.worktree.branch) view.baseBranch = base;
       }
+      let namedKey: string | undefined;
+      let folderEntry: string | undefined;
       if (view.worktree && d.worktreeName && typeof d.worktreePath === 'string' && d.worktreePath) {
-        named.set(`${view.repoKey}|${folderKey(d.worktreePath)}`, { worktree: view.worktree, baseBranch: view.baseBranch });
-      } else if (view.worktree && outside) byFolder.set(view, `${view.repoKey}|${folderKey(outside)}`);
+        namedKey = `${view.repoKey}|${folderKey(d.worktreePath)}`;
+        named.set(namedKey, { worktree: view.worktree, baseBranch: view.baseBranch });
+      } else if (view.worktree && outside) byFolder.set(view, (folderEntry = `${view.repoKey}|${folderKey(outside)}`));
       if (typeof d.spawnedFrom?.sessionId === 'string') view.spawnedFrom = d.spawnedFrom.sessionId;
       if (typeof d.turnWrapUp?.description === 'string' && d.turnWrapUp.description) view.summary = d.turnWrapUp.description;
+      if (reuse) {
+        // 表に入れるのは、まだ手を付けていない複製。一覧に使うほうは、このあとカードをまとめる処理と assignSeq が書き換える
+        const kept = copyView(view);
+        caches.archived.set(d, {
+          view: kept,
+          ...(namedKey && { named: [namedKey, { worktree: kept.worktree, baseBranch: kept.baseBranch }] }),
+          ...(folderEntry && { byFolder: folderEntry }),
+        });
+        caches.archivedBuilds++;
+      }
       numbered.push(view);
       if (archived) continue;
       // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない
