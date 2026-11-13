@@ -252,6 +252,19 @@ export const ja = {
     noCommits: (base: string) => `${base} にないコミットはありません`,
     hint: 'マウスを乗せると、コミットの本文を表示します',
     noBody: '本文はありません',
+    /** マージコミットの 2 行目の札 */
+    mergeTag: 'マージ',
+    /** 分岐元を取り込んだマージの 1 行目 */
+    mergeOf: (name: string) => `${name} を取り込み`,
+    /** 分岐元を取り込んだマージの 2 行目に足す（count は「3」や「3+」） */
+    baseCommits: (base: string, count: string) => `${base} の ${count} コミット`,
+    /** マージに乗せたときの下の段（count は「3」や「3+」） */
+    mergeSummary: (name: string, count: string) => `${name} を取り込み · ${count} コミット`,
+    /** 分岐元を取り込んだマージに乗せたときの下の段 */
+    baseNotCounted: 'このブランチの作業には数えない',
+    /** マージの取り込んだコミットを開け閉めするトグル */
+    showMerged: '取り込んだコミットを表示',
+    hideMerged: '取り込んだコミットを隠す',
   },
 
   /** 設定の画面 */

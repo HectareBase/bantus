@@ -2,7 +2,9 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LOG_LIMIT, RECENT_LIMIT, buildDetail, cleanBody, createGitDetailReader, parseLog, readLog, splitSubject } from '../src/main/git-detail';
+import { LOG_LIMIT, RECENT_FETCH, RECENT_LIMIT, buildDetail, cleanBody, createGitDetailReader, groupMerges, parseLog, parseMergeSubject, readLog, shortBranch, splitSubject, withTitles } from '../src/main/git-detail';
+import type { ParsedCommit } from '../src/main/git-detail';
+import { mergeCountLabel, mergeHeadline } from '../src/shared/git-merge';
 
 /** `git log --format=...` と同じ形の出力を作る */
 function record(short: string, parents: string, seconds: number, subject: string, body = ''): string {
@@ -78,12 +80,13 @@ function fakeGit(answers: [RegExp, string][]) {
 
 describe('readLog', () => {
   it('メインのカードは最近のコミットを数件だけ読む', async () => {
-    const g = fakeGit([[/^log /, record('aaaa111', 'bbbb222', 1, 'x')]]);
+    const many = Array.from({ length: 9 }, (_, i) => record(`b${String(i).padStart(6, '0')}`, `b${String(i + 1).padStart(6, '0')}`, 100 - i, `c${i}`)).join('');
+    const g = fakeGit([[/^log /, many]]);
     const log = await readLog('/r', undefined, false, undefined, g.run);
     assert.equal(log.mode, 'main');
-    assert.equal(log.commits.length, 1);
+    assert.equal(log.commits.length, RECENT_LIMIT);
     assert.equal(g.calls.length, 1);
-    assert.match(g.calls[0]!, new RegExp(`-n ${RECENT_LIMIT} HEAD$`));
+    assert.match(g.calls[0]!, new RegExp(`-n ${RECENT_FETCH} HEAD$`));
   });
 
   it('メインのカードで push していないコミットがあれば、追跡するブランチにないものを全部読む', async () => {
@@ -200,5 +203,153 @@ describe('createGitDetailReader', () => {
     const d = await read(src);
     assert.equal(d.mode, 'main');
     assert.match(g.calls[0]!, /HEAD$/);
+  });
+
+  it('マージにセッションのタイトルを付ける。覚えた並びは使い回し、タイトルの変化は反映する', async () => {
+    const out = record('eeee111', 'bbbb222 aaaa111', 2, "Merge branch 'claude/aaa-1a2b3c'") + record('aaaa111', 'bbbb222', 1, 'a') + record('bbbb222', 'f000000', 1, 'b');
+    const read = createGitDetailReader(fakeGit([[/^log /, out]]).run, () => ({ head: 'h', refs: ['b'] }));
+    const d1 = await read({ ...src, titles: new Map([['claude/aaa-1a2b3c', '一つ目']]) });
+    assert.equal(d1.commits[0]!.merge!.title, '一つ目');
+    const d2 = await read({ ...src, titles: new Map([['claude/aaa-1a2b3c', '二つ目']]) });
+    assert.equal(d2.commits[0]!.merge!.title, '二つ目');
+    assert.equal(read.stats().calls, 1);
+  });
+});
+
+describe('parseMergeSubject', () => {
+  it('Merge branch の形から取り込んだブランチを読む', () => {
+    assert.deepEqual(parseMergeSubject("Merge branch 'refs/heads/claude/fix-login-1a2b3c'"), { branch: 'claude/fix-login-1a2b3c', remote: false });
+    assert.deepEqual(parseMergeSubject("Merge branch 'main' into claude/x-1a2b3c"), { branch: 'main', remote: false });
+    assert.deepEqual(parseMergeSubject("Merge remote-tracking branch 'origin/main'"), { branch: 'origin/main', remote: true });
+    assert.deepEqual(parseMergeSubject("Merge remote-tracking branch 'refs/remotes/origin/main' into main"), { branch: 'origin/main', remote: true });
+  });
+
+  it('形が読めなければ undefined', () => {
+    assert.equal(parseMergeSubject('Merge pull request #1 from a/b'), undefined);
+    assert.equal(parseMergeSubject('feat(app): 足す'), undefined);
+    assert.equal(parseMergeSubject("Merge branch ''"), undefined);
+  });
+});
+
+describe('shortBranch', () => {
+  it('refs/heads/ と末尾の乱数を除く', () => {
+    assert.equal(shortBranch('refs/heads/claude/fix-login-1a2b3c'), 'claude/fix-login');
+    assert.equal(shortBranch('claude/git-detail-merges-5f69ab'), 'claude/git-detail-merges');
+  });
+
+  it('数字のない語や 6 桁でないものは残す', () => {
+    assert.equal(shortBranch('feature/facade'), 'feature/facade');
+    assert.equal(shortBranch('fix-decade'), 'fix-decade');
+    assert.equal(shortBranch('main'), 'main');
+    assert.equal(shortBranch('topic-12345'), 'topic-12345');
+  });
+});
+
+/** 親を指定したコミット（groupMerges 用） */
+function pc(short: string, parents: string[], subject = short): ParsedCommit {
+  return { short, parents, at: 0, subject, text: subject, body: '' };
+}
+
+describe('groupMerges', () => {
+  it('first-parent の線を本線にし、マージの 2 番目の親から辿れるものを子にたたむ', () => {
+    // m1 ← m2 ← c0 が本線。m1 は a2 ← a1 を、m2 は b1 を取り込んだ
+    const commits = [
+      pc('m1', ['m2', 'a2'], "Merge branch 'refs/heads/claude/aaa-1a2b3c'"),
+      pc('a2', ['a1']),
+      pc('m2', ['c0', 'b1'], "Merge branch 'claude/bbb-4d5e6f'"),
+      pc('a1', ['c0']),
+      pc('b1', ['c0']),
+      pc('c0', ['f0']),
+    ];
+    const g = groupMerges(commits, { complete: true });
+    assert.deepEqual(g.commits.map((c) => c.short), ['m1', 'm2', 'c0']);
+    const m1 = g.commits[0]!.merge!;
+    assert.deepEqual({ branch: m1.branch, name: m1.name, children: m1.children.map((c) => c.short), more: m1.more }, { branch: 'claude/aaa-1a2b3c', name: 'claude/aaa', children: ['a2', 'a1'], more: undefined });
+    assert.deepEqual(g.commits[1]!.merge!.children.map((c) => c.short), ['b1']);
+    assert.equal(g.commits[2]!.merge, undefined);
+    assert.equal(g.excluded, 0);
+    // 画面へは親を渡さない
+    assert.ok(!('parents' in g.commits[0]!));
+  });
+
+  it('マージの子が日時のずれでマージより前に並んでいても本線に出さない', () => {
+    const g = groupMerges([pc('h1', ['m1']), pc('a1', ['c0']), pc('m1', ['c0', 'a1']), pc('c0', [])], { complete: true });
+    assert.deepEqual(g.commits.map((c) => c.short), ['h1', 'm1', 'c0']);
+    assert.deepEqual(g.commits[1]!.merge!.children.map((c) => c.short), ['a1']);
+  });
+
+  it('範囲の外へ続くまとまりは N+（complete のときは分岐元のものとして数えない）', () => {
+    const commits = [pc('m1', ['c0', 'a2']), pc('a2', ['a1']), pc('c0', ['x'])];
+    assert.equal(mergeCountLabel(groupMerges(commits, { complete: false }).commits[0]!.merge!), '1+');
+    assert.equal(mergeCountLabel(groupMerges(commits, { complete: true }).commits[0]!.merge!), '1');
+  });
+
+  it('分岐元を取り込んだマージは fromBase にし、件数から外す', () => {
+    const commits = [pc('h1', ['m1']), pc('m1', ['w1', 'b9'], "Merge branch 'main' into claude/x-1a2b3c"), pc('w1', ['f0'])];
+    const g = groupMerges(commits, { base: 'main', complete: true });
+    assert.equal(g.commits[1]!.merge!.fromBase, true);
+    assert.equal(g.excluded, 1);
+    const remote = groupMerges([pc('m1', ['w1', 'b9'], "Merge remote-tracking branch 'origin/main'"), pc('w1', ['f0'])], { base: 'main', complete: true });
+    assert.equal(remote.commits[0]!.merge!.fromBase, true);
+    // 分岐元以外のブランチは fromBase にしない
+    assert.equal(groupMerges([pc('m1', ['w1', 'b9'], "Merge branch 'develop'"), pc('w1', [])], { base: 'main', complete: true }).commits[0]!.merge!.fromBase, undefined);
+  });
+
+  it('件名の形が読めないマージは名前を持たず、件名をそのまま出す', () => {
+    const g = groupMerges([pc('m1', ['c0', 'a1'], 'Merge pull request #3'), pc('a1', ['c0']), pc('c0', [])], { complete: true });
+    const m = g.commits[0]!.merge!;
+    assert.equal(m.name, undefined);
+    assert.equal(mergeHeadline(m, g.commits[0]!.text), 'Merge pull request #3');
+  });
+});
+
+describe('withTitles', () => {
+  it('取り込んだブランチのセッションのタイトルを付ける（分岐元のものには付けない）', () => {
+    const g = groupMerges([pc('m1', ['m2', 'a1'], "Merge branch 'claude/aaa-1a2b3c'"), pc('a1', ['m2']), pc('m2', ['c0', 'b1'], "Merge branch 'main'"), pc('b1', []), pc('c0', [])], { base: 'main', complete: true });
+    const out = withTitles(g.commits, new Map([['claude/aaa-1a2b3c', 'ログインのバグ修正'], ['main', 'x']]));
+    assert.equal(mergeHeadline(out[0]!.merge!, out[0]!.text), 'ログインのバグ修正');
+    assert.equal(out[1]!.merge!.title, undefined);
+    // 元の並び（覚えておくもの）は変えない。タイトルがなければブランチ名
+    assert.equal(g.commits[0]!.merge!.title, undefined);
+    assert.equal(mergeHeadline(g.commits[0]!.merge!, g.commits[0]!.text), 'claude/aaa');
+  });
+});
+
+describe('readLog とマージ', () => {
+  it('ワークツリーで分岐元を取り込んだマージは total に数えず、分岐点は first-parent の線の端（git は 1 回）', async () => {
+    const out =
+      record('aaaa111', 'eeee111', 3, 'feat: b') +
+      record('eeee111', 'bbbb222 9999999', 2, "Merge branch 'main' into claude/x-1a2b3c") +
+      record('bbbb222', 'ffff000', 1, 'feat: a');
+    const g = fakeGit([[/^log /, out]]);
+    const log = await readLog('/r', 'main', false, undefined, g.run);
+    assert.equal(g.calls.length, 1);
+    assert.equal(log.total, 2);
+    assert.equal(log.fork, 'ffff000');
+    assert.equal(log.commits[1]!.merge!.fromBase, true);
+  });
+
+  it('一番古いものが取り込んだブランチのコミットでも、分岐点は本線の端', async () => {
+    const out = record('eeee111', 'bbbb222 aaaa111', 3, "Merge branch 'claude/aaa-1a2b3c'") + record('bbbb222', 'ffff000', 2, 'b') + record('aaaa111', 'cccc000', 1, 'a');
+    const log = await readLog('/r', 'main', false, undefined, fakeGit([[/^log /, out]]).run);
+    assert.equal(log.fork, 'ffff000');
+    assert.equal(log.total, 3);
+  });
+
+  it('メインのカードの最近のコミットは、マージの子をたたんで本線で数える（git は 1 回）', async () => {
+    const out =
+      record('eeee111', 'eeee222 aaaa111', 5, "Merge branch 'refs/heads/claude/aaa-1a2b3c'") +
+      record('aaaa111', 'cccc000', 4, 'feat: a') +
+      record('eeee222', 'cccc000 bbbb111', 3, "Merge branch 'claude/bbb-4d5e6f'") +
+      record('bbbb111', 'bbbb000', 2, 'fix: b') +
+      record('cccc000', 'dddd000', 1, 'docs: c');
+    const g = fakeGit([[/^log /, out]]);
+    const log = await readLog('/r', undefined, false, undefined, g.run);
+    assert.equal(g.calls.length, 1);
+    assert.deepEqual(log.commits.map((c) => c.short), ['eeee111', 'eeee222', 'cccc000']);
+    assert.equal(log.total, 3);
+    assert.equal(mergeCountLabel(log.commits[0]!.merge!), '1');
+    // bbbb111 の親は取ってきた範囲の外
+    assert.equal(mergeCountLabel(log.commits[1]!.merge!), '1+');
   });
 });

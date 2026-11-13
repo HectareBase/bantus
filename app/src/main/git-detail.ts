@@ -6,7 +6,7 @@
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { GitChanges, GitCommit, GitDetail } from '../shared/types';
+import type { GitChanges, GitCommit, GitDetail, GitMerge } from '../shared/types';
 import { git, readRefs } from './git-status';
 import { folderKey } from './sessions';
 
@@ -27,6 +27,97 @@ export function splitSubject(subject: string): { type?: string; scope?: string; 
   if (!m) return { text: subject };
   const scope = m[2]?.trim();
   return { type: m[1]!.toLowerCase(), ...(scope && { scope }), text: m[3]! };
+}
+
+/**
+ * マージの件名（`Merge branch '<名前>'`、`refs/heads/` 付き、`into ...` 付き、`Merge remote-tracking branch '<名前>'`）から、
+ * 取り込んだブランチを読む。remote-tracking なら remote が true（名前は `origin/main` の形）。形が合わなければ undefined
+ */
+export function parseMergeSubject(subject: string): { branch: string; remote: boolean } | undefined {
+  const m = /^Merge (remote-tracking )?branch '([^']+)'(?: of \S+)?(?: into \S+)?$/.exec(subject.trim());
+  if (!m) return undefined;
+  const branch = m[2]!.replace(/^refs\/(?:heads|remotes)\//, '');
+  return branch ? { branch, remote: !!m[1] } : undefined;
+}
+
+/** 画面に出すブランチ名。`refs/heads/` と、末尾の乱数（`-1a2b3c` の形。数字を 1 つ以上含む 16 進 6 桁）を除く */
+export function shortBranch(branch: string): string {
+  return branch.replace(/^refs\/heads\//, '').replace(/-(?=[0-9a-f]*\d)[0-9a-f]{6}$/, '');
+}
+
+/** 取り込んだブランチがワークツリーの分岐元か（remote-tracking なら `<リモート>/<分岐元>`） */
+function isBase(parsed: { branch: string; remote: boolean }, base: string | undefined): boolean {
+  if (!base) return false;
+  return parsed.remote ? parsed.branch.slice(parsed.branch.indexOf('/') + 1) === base : parsed.branch === base;
+}
+
+/** マージの様子のうち、件名から決まる所 */
+function mergeInfo(subject: string, base: string | undefined): Omit<GitMerge, 'children'> {
+  const parsed = parseMergeSubject(subject);
+  if (!parsed) return {};
+  return { branch: parsed.branch, name: shortBranch(parsed.branch), ...(isBase(parsed, base) && { fromBase: true }) };
+}
+
+/**
+ * 取ってきたコミット（新しい順）を、マージごとにまとめる。git は動かさず、親のつながりだけをたどる。
+ * - HEAD（先頭）から first-parent をたどった線を本線にする。本線にもマージにも属さないものは、本線と同じ段に並べる
+ * - 本線のマージの 2 番目以降の親から辿れて、本線になく、ほかのマージに属していないコミットを、そのマージの子にする
+ * - complete でない（取ってきた範囲の外にも続きうる）とき、子をたどって範囲の外の親に当たったら more にする。
+ *   complete のとき（分岐元から数えて上限で切っていない並び）、範囲の外の親は分岐元のものなので数えない
+ * - excluded：分岐元を取り込んだマージとその子の数（分岐元から数える件数に入れない）
+ */
+export function groupMerges(commits: ParsedCommit[], opts: { base?: string; complete: boolean }): { commits: GitCommit[]; excluded: number } {
+  const byId = new Map(commits.map((c) => [c.short, c]));
+  const main = new Set<string>();
+  for (let c = commits[0]; c && !main.has(c.short); c = byId.get(c.parents[0] ?? '')) main.add(c.short);
+  const claimed = new Set<string>();
+  const groups = new Map<string, { children: Set<string>; more: boolean }>();
+  const claim = (m: ParsedCommit) => {
+    const children = new Set<string>();
+    let more = false;
+    const queue = m.parents.slice(1);
+    while (queue.length) {
+      const id = queue.shift()!;
+      const c = byId.get(id);
+      if (!c) {
+        if (!opts.complete) more = true;
+        continue;
+      }
+      if (main.has(id) || claimed.has(id) || id === m.short) continue;
+      claimed.add(id);
+      children.add(id);
+      queue.push(...c.parents);
+    }
+    groups.set(m.short, { children, more });
+  };
+  // 本線のマージから先に（日時のずれで、子がマージより前に並んでいても本線に出さない）
+  for (const c of commits) if (main.has(c.short) && c.parents.length > 1) claim(c);
+  for (const c of commits) if (!main.has(c.short) && !claimed.has(c.short) && c.parents.length > 1) claim(c);
+  const toCommit = (c: ParsedCommit, children?: ParsedCommit[], more = false): GitCommit => {
+    const { parents, ...rest } = c;
+    if (parents.length < 2) return rest;
+    return { ...rest, merge: { ...mergeInfo(c.subject, opts.base), children: (children ?? []).map((k) => toCommit(k)), ...(more && { more: true }) } };
+  };
+  let excluded = 0;
+  const out: GitCommit[] = [];
+  for (const c of commits) {
+    if (claimed.has(c.short)) continue;
+    const g = groups.get(c.short);
+    const commit = toCommit(c, g && commits.filter((k) => g.children.has(k.short)), g?.more);
+    if (commit.merge?.fromBase) excluded += 1 + commit.merge.children.length;
+    out.push(commit);
+  }
+  return { commits: out, excluded };
+}
+
+/** マージに、取り込んだブランチで作業したセッションのタイトルを付ける（titles はブランチ名からタイトル） */
+export function withTitles(commits: GitCommit[], titles: ReadonlyMap<string, string> | undefined): GitCommit[] {
+  if (!titles) return commits;
+  return commits.map((c) => {
+    if (!c.merge) return c;
+    const title = c.merge.branch && !c.merge.fromBase ? titles.get(c.merge.branch) : undefined;
+    return { ...c, merge: { ...c.merge, ...(title && { title }), children: withTitles(c.merge.children, titles) } };
+  });
 }
 
 /** 本文の末尾のトレーラー（`Co-Authored-By: ...` などが並ぶ段落）を除き、長いものは切る */
@@ -76,16 +167,30 @@ export interface GitLog {
 
 type Run = typeof git;
 
-function strip({ parents: _parents, ...c }: ParsedCommit): GitCommit {
-  return c;
+/** 最近のコミットを出すとき、マージの子を数えるために取ってくる数（git の起動は 1 回のまま） */
+export const RECENT_FETCH = 30;
+
+/** 先頭から first-parent をたどった線の、並びの中で一番古いコミットの親（分岐点） */
+function firstParentEnd(commits: ParsedCommit[]): string | undefined {
+  const byId = new Map(commits.map((c) => [c.short, c]));
+  const seen = new Set<string>();
+  let c = commits[0];
+  while (c && !seen.has(c.short)) {
+    seen.add(c.short);
+    const next = byId.get(c.parents[0] ?? '');
+    if (!next) return c.parents[0];
+    c = next;
+  }
+  return undefined;
 }
 
 /**
- * コミットの並びを読む。
+ * コミットの並びを読む。マージは groupMerges で本線とマージの子にまとめる（git は増やさない）。
  * - base（ワークツリーの分岐元）があれば、分岐元にないコミットを新しい順に LOG_LIMIT 件まで。マージ済み（merged）なら、マージした先
  *   （mergedInto、なければ base）の first-parent の線で HEAD を取り込む前のコミットから数える（git-status.ts の mergedInto と同じ見方）
  * - base がなく unpushed（push していないコミットがある）なら、追跡するブランチにないコミットを同じく並べ、追跡するブランチを分岐元の代わりにする
- * - どちらでもなければ、最近のコミットを RECENT_LIMIT 件
+ * - どちらでもなければ、最近のコミットを本線で RECENT_LIMIT 件（マージの子を数えるため、RECENT_FETCH 件を取ってくる）
+ * - 分岐元を取り込んだマージとその子は、total に数えない
  */
 export async function readLog(
   dir: string,
@@ -97,7 +202,7 @@ export async function readLog(
 ): Promise<GitLog> {
   const log = (args: string[]) => run(dir, ['log', '--no-show-signature', `--format=${FORMAT}`, ...args]);
   if (!base && !unpushed) {
-    const commits = parseLog(await log(['-n', String(RECENT_LIMIT), 'HEAD'])).map(strip);
+    const commits = groupMerges(parseLog(await log(['-n', String(RECENT_FETCH), 'HEAD'])), { complete: false }).commits.slice(0, RECENT_LIMIT);
     return { mode: 'main', commits, total: commits.length };
   }
   let from = base ? `refs/heads/${base}` : '@{upstream}';
@@ -109,13 +214,16 @@ export async function readLog(
   const parsed = parseLog(await log(['-n', String(LOG_LIMIT + 1), `${from}..HEAD`]));
   const truncated = parsed.length > LOG_LIMIT;
   const shown = parsed.slice(0, LOG_LIMIT);
+  const grouped = groupMerges(shown, { ...(base && { base }), complete: !truncated });
   let total = shown.length;
-  let fork = !truncated ? shown.at(-1)?.parents[0] : undefined;
+  // 一番古いものが取り込んだブランチのコミットのこともあるので、first-parent の線の端を見る
+  let fork = !truncated ? firstParentEnd(shown) : undefined;
   // 並びの一番古いものの親が分岐点。コミットがない、または上限で切ったときだけ git に聞く
   if (!fork) fork = (await run(dir, ['merge-base', from, 'HEAD'])).trim().slice(0, shown[0]?.short.length ?? 7) || undefined;
   if (truncated) total = Number((await run(dir, ['rev-list', '--count', `${from}..HEAD`])).trim()) || shown.length;
   const tracking = base ? undefined : (await run(dir, ['rev-parse', '--abbrev-ref', '@{upstream}'])).trim() || undefined;
-  return { mode: base ? 'worktree' : 'main', commits: shown.map(strip), total, ...(fork && { fork }), ...(tracking && { tracking }) };
+  total = Math.max(0, total - grouped.excluded);
+  return { mode: base ? 'worktree' : 'main', commits: grouped.commits, total, ...(fork && { fork }), ...(tracking && { tracking }) };
 }
 
 /** 詳細を調べるカードの様子（メインプロセスがセッションから決める） */
@@ -127,6 +235,8 @@ export interface DetailSource {
   /** 見出しに出す短い名前 */
   label?: string;
   changes?: GitChanges;
+  /** ブランチ名から、そのブランチで作業したセッションのタイトル（マージの件名に使う） */
+  titles?: ReadonlyMap<string, string>;
 }
 
 const NO_CHANGES: GitChanges = { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false };
@@ -148,7 +258,8 @@ export function buildDetail(src: DetailSource, log: GitLog | undefined): GitDeta
     ...(!worktree && c.upstream && { upstream: c.upstream }),
     merged: c.merged,
     ...(c.mergedInto && { mergedInto: c.mergedInto }),
-    commits: log?.commits ?? [],
+    // タイトルは変わることがあるので、覚えた並びには入れず、ここで付ける
+    commits: withTitles(log?.commits ?? [], src.titles),
     total: log?.total ?? 0,
     ...(log?.fork && { fork: log.fork }),
     ...(log?.tracking && { tracking: log.tracking }),
@@ -209,6 +320,8 @@ interface FixtureCommit {
   minutesAgo: number;
   subject: string;
   body?: string;
+  /** 親の短い ID。書かなければ次の行（一番下は分岐点） */
+  parents?: string[];
 }
 
 /**
@@ -224,6 +337,18 @@ export function fixtureGitDetail(fixture: string, key: string, src: DetailSource
     entry = undefined;
   }
   if (!entry) return buildDetail(src, undefined);
-  const commits = (entry.commits ?? []).map((c) => ({ short: c.short, at: now - c.minutesAgo * 60_000, subject: c.subject, ...splitSubject(c.subject), body: c.body ?? '' }));
-  return buildDetail(src, { mode: src.base ? 'worktree' : 'main', commits, total: entry.total ?? commits.length, ...(entry.fork && { fork: entry.fork }), ...(!src.base && entry.tracking && { tracking: entry.tracking }) });
+  // 親を書いていなければ、次の行（一番下は分岐点）を親にする
+  const list = entry.commits ?? [];
+  const parsed: ParsedCommit[] = list.map((c, i) => ({
+    short: c.short,
+    parents: c.parents ?? [list[i + 1]?.short ?? entry.fork ?? ''].filter(Boolean),
+    at: now - c.minutesAgo * 60_000,
+    subject: c.subject,
+    ...splitSubject(c.subject),
+    body: c.body ?? '',
+  }));
+  const recent = !src.base && !entry.tracking;
+  const grouped = groupMerges(parsed, { ...(src.base && { base: src.base }), complete: !recent });
+  const commits = recent ? grouped.commits.slice(0, RECENT_LIMIT) : grouped.commits;
+  return buildDetail(src, { mode: src.base ? 'worktree' : 'main', commits, total: entry.total ?? (recent ? commits.length : parsed.length - grouped.excluded), ...(entry.fork && { fork: entry.fork }), ...(!src.base && entry.tracking && { tracking: entry.tracking }) });
 }

@@ -327,6 +327,24 @@ export interface GitCommit {
   text: string;
   /** 本文（末尾のトレーラーを除き、長いものは切る）。なければ空 */
   body: string;
+  /** マージコミット（親が 2 つ以上）のとき。取り込んだものの様子 */
+  merge?: GitMerge;
+}
+
+/** マージコミットの様子（docs/design/git-detail.md の「マージ」） */
+export interface GitMerge {
+  /** 取り込んだブランチ（`refs/heads/` を除く）。件名を読めなければ undefined */
+  branch?: string;
+  /** 画面に出すブランチ名（末尾の乱数を除く）。件名を読めなければ undefined */
+  name?: string;
+  /** 取り込んだブランチで作業したセッションのタイトル */
+  title?: string;
+  /** ワークツリーで分岐元を取り込んだ。このブランチの作業には数えない */
+  fromBase?: boolean;
+  /** 取り込んだコミットのうち、本線になく取ってきた範囲にあるもの（新しい順） */
+  children: GitCommit[];
+  /** 取ってきた範囲の外にも続く（件数を「N+」と出す） */
+  more?: boolean;
 }
 
 /** カードの git の詳細（docs/design/git-detail.md）。カードの見出しの印を押したときだけ調べる */

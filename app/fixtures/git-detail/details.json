@@ -2,14 +2,98 @@
   "my-app|": {
     "commits": [
       {
+        "short": "e1a2b3c",
+        "minutesAgo": 15,
+        "subject": "Merge branch 'refs/heads/claude/fix-login-1a2b3c'",
+        "parents": [
+          "d0e1f2a",
+          "f3a4b5c"
+        ]
+      },
+      {
+        "short": "f3a4b5c",
+        "minutesAgo": 40,
+        "subject": "fix(app): ログインの失敗を画面に出す",
+        "body": "エラーの理由を下の段に出す。",
+        "parents": [
+          "f2a3b4c"
+        ]
+      },
+      {
+        "short": "f2a3b4c",
+        "minutesAgo": 55,
+        "subject": "test(app): ログインの失敗を確かめる",
+        "parents": [
+          "f1a2b3c"
+        ]
+      },
+      {
+        "short": "d0e1f2a",
+        "minutesAgo": 60,
+        "subject": "Merge branch 'claude/new-api-4d5e6f' into main",
+        "parents": [
+          "c9d0e1f",
+          "a2b3c4d"
+        ]
+      },
+      {
+        "short": "f1a2b3c",
+        "minutesAgo": 70,
+        "subject": "fix(app): 入力を確かめる順を直す",
+        "parents": [
+          "c9d0e1f"
+        ]
+      },
+      {
+        "short": "a2b3c4d",
+        "minutesAgo": 90,
+        "subject": "feat(api): 一覧の取得を足す",
+        "parents": [
+          "a1b2c3d"
+        ]
+      },
+      {
+        "short": "c9d0e1f",
+        "minutesAgo": 120,
+        "subject": "docs: README に手順を足す",
+        "parents": [
+          "c8d9e0f"
+        ]
+      },
+      {
         "short": "a1b2c3d",
-        "minutesAgo": 20,
-        "subject": "feat(app): ツールチップを自前で描く",
-        "body": "OS のツールチップは遅れて出るので、自前の窓で描く。"
+        "minutesAgo": 150,
+        "subject": "test(api): 一覧の取得を確かめる",
+        "parents": [
+          "0f1e2d3"
+        ]
+      },
+      {
+        "short": "c8d9e0f",
+        "minutesAgo": 180,
+        "subject": "Merge branch 'claude/old-experiment-9f8e7d'",
+        "parents": [
+          "c7d8e9f",
+          "b1c2d3e"
+        ]
+      },
+      {
+        "short": "b1c2d3e",
+        "minutesAgo": 200,
+        "subject": "refactor(app): 設定の読み込みをまとめる",
+        "parents": [
+          "c7d8e9f"
+        ]
+      },
+      {
+        "short": "c7d8e9f",
+        "minutesAgo": 240,
+        "subject": "chore: 依存関係を更新する",
+        "parents": [
+          "c6d7e8f"
+        ]
       }
-    ],
-    "fork": "b2c3d4e",
-    "tracking": "origin/main"
+    ]
   },
   "handoff|notify": {
     "commits": [
@@ -57,7 +141,11 @@
       {
         "short": "1c3d2a4",
         "minutesAgo": 260,
-        "subject": "Merge branch 'main' into spike"
+        "subject": "Merge branch 'main' into spike",
+        "parents": [
+          "0b2c1f3",
+          "9a8b7c6"
+        ]
       },
       {
         "short": "0b2c1f3",
