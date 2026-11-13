@@ -664,6 +664,19 @@ describe('resolveFocus', () => {
   it('クリックしたセッションがなくなったら、ファイルの値', () =>
     assert.deepEqual(resolveFocus([view({ id: 'a', focused: true, focusedAt: 500 })], pending, 1500), { id: 'a', pending: undefined }));
 
+  it('ファイルがクリックより前の値で同じセッションを指しているだけなら、まだ待つ', () => {
+    // a → b → a とすばやくクリックし、b のクリックがまだ書かれていない。ファイルは古いまま a を指している
+    const backToA = { id: 'a', at: 2000, until: 2000 + PENDING_FOCUS_MS, from: ['b'] };
+    const stale = [view({ id: 'a', focused: true, focusedAt: 500 }), view({ id: 'b' })];
+    assert.deepEqual(resolveFocus(stale, backToA, 2100), { id: 'a', pending: backToA });
+    // 遅れて b のクリックの書き込み（クリックより前の時刻）が届いても、a のまま
+    const lateB = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b', focused: true, focusedAt: 1100 })];
+    assert.deepEqual(resolveFocus(lateB, backToA, 2300), { id: 'a', pending: backToA });
+    // a の書き込みが届いたら、待つのをやめる
+    const caught = [view({ id: 'a', focused: true, focusedAt: 2100 }), view({ id: 'b', focusedAt: 1100 })];
+    assert.deepEqual(resolveFocus(caught, backToA, 3300), { id: 'a', pending: undefined });
+  });
+
   describe('クリックしたときに開いていたセッション', () => {
     const fromA = { ...pending, from: ['a'] };
     it('本体が前に出たときに前のセッションの時刻が書かれても、クリックしたセッションを保つ', () => {
