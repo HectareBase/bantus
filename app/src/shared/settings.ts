@@ -204,6 +204,17 @@ export function highlightScale(percent: number): number {
 /** 前の版の 3 択（薄い・標準・濃い）の値を、同じ倍率になる濃さ（%）に置き換える（倍率 0.5・1・2） */
 const LEGACY_HIGHLIGHT: Record<string, number> = { subtle: 25, normal: 50, strong: 100 };
 
+/**
+ * 前の版の値を今の版の値に置き換える項目か。置き換えたものは、保存のときに今の版の値で上書きする
+ * （settings-file.ts の mergeForSave。古い値のまま残さない）
+ */
+export function isLegacyValue(key: string, value: unknown): boolean {
+  return key === 'activeHighlight' && typeof value === 'string' && value in LEGACY_HIGHLIGHT;
+}
+
+/** 前の版にあった項目で、読んだときに今の項目へ移すもの。保存のときは残さない */
+export const LEGACY_KEYS: readonly string[] = ['alwaysShow'];
+
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
 
