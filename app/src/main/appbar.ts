@@ -1,10 +1,12 @@
 // ウィジェットを Windows のアプリバー（SHAppBarMessage）として登録する。登録すると、ほかのウィンドウを最大化しても
 // ウィジェットの帯に重ならない（作業領域からウィジェットの分が引かれる）。
 //
-// Node から shell32.dll を直接呼べないので、foreground.ts と同じく PowerShell を 1 つ動かし続け、1 行（命令）送るたびに 1 行で答えさせる。
-// foreground.ts の PowerShell には相乗りせず、別に動かす。理由は 3 つ：
+// Node から shell32.dll を直接呼べないので、foreground.ts と同じく補助プログラムを 1 つ動かし続け、1 行（命令）送るたびに 1 行で答えさせる
+// （helper-line.ts。exe の bantus-helper.exe を引数 appbar で起動し、使えないときは下の PowerShell のスクリプトに切り替える。
+// 2 つは同じ命令に同じ形で答えるので、変えるときは両方を直す）。
+// foreground.ts の補助プログラムには相乗りせず、別に動かす。理由は 3 つ：
 // - 終わり方が違う。foreground.ts は終了時に kill するが、こちらは ABM_REMOVE を確実に呼びたいので、標準入力を閉じて
-//   PowerShell 自身に外させる。Bantus が落ちたときも、標準入力が切れるので PowerShell が外してから終わる
+//   補助プログラム自身に外させる。Bantus が落ちたときも、標準入力が切れるので補助プログラムが外してから終わる
 // - SHAppBarMessage はエクスプローラーに SendMessage するので、エクスプローラーが固まると待たされる。同じ列に並べると、
 //   前面のプロセス名の問い合わせやセッションを開く命令まで遅れる
 // - 固定（pinned）がオンのときだけ要る。撮影だけのときなど、foreground.ts を起動しない場面とも切り離せる
@@ -14,12 +16,12 @@
 // - query <hwnd> <edge> <left> <top> <right> <bottom>：ABM_QUERYPOS。答えはシェルが直した矩形「left top right bottom」
 // - set <hwnd> <edge> <left> <top> <right> <bottom>：ABM_SETPOS。答えは決まった矩形
 // - remove <hwnd>：ABM_REMOVE。答えは 1
-// 標準入力が閉じたら（Bantus が終わった、落ちた）、PowerShell は登録したままのものを外してから終わる（スクリプトの finally）。
-// 座標はどれも物理ピクセル。PowerShell はふつう DPI を意識しないので、呼ぶたびにスレッドを Per-Monitor v2 にしてから呼ぶ
+// 標準入力が閉じたら（Bantus が終わった、落ちた）、補助プログラムは登録したままのものを外してから終わる（スクリプトの finally）。
+// 座標はどれも物理ピクセル。exe はプロセスを Per-Monitor v2 にしている。PowerShell はふつう DPI を意識しないので、呼ぶたびにスレッドを Per-Monitor v2 にしてから呼ぶ
 
 import { screen, type BrowserWindow } from 'electron';
 import { abEdge, fitWidth, fromLtrb, proposeRect, sameLtrb, toLtrb, type Edge, type Ltrb, type PlacedBar, type Rect } from './appbar-place';
-import { createPowerShellLine } from './powershell-line';
+import { createHelperLine } from './helper-line';
 
 const SCRIPT = `
 Add-Type -Namespace Bantus -Name AppBar -MemberDefinition @'
@@ -102,7 +104,7 @@ export interface AppBar {
    * 同じ場所でも SETPOS し直して onPlaced を呼ぶ（呼ばないと、ウィジェットと縁取りが古い DIP の場所のまま残る）
    */
   refresh(): void;
-  /** 外して PowerShell を終える（終了するとき） */
+  /** 外して補助プログラムを終える（終了するとき） */
   stop(): void;
 }
 
@@ -125,7 +127,7 @@ function ltrb(r: Ltrb): string {
 /** Windows 以外では何もしないものを返す */
 export function createAppBar(host: AppBarHost): AppBar {
   if (process.platform !== 'win32') return { sync: () => {}, refresh: () => {}, stop: () => {} };
-  const ps = createPowerShellLine(SCRIPT, 'appbar');
+  const ps = createHelperLine('appbar', SCRIPT);
   /** 登録しているウィンドウのハンドル */
   let registered: string | undefined;
   /** メッセージを受ける仕掛けをしたウィンドウ */
@@ -229,7 +231,7 @@ export function createAppBar(host: AppBarHost): AppBar {
     stopped = true;
     if (registered) ps.send(`remove ${registered}`);
     registered = undefined;
-    // 標準入力を閉じる。PowerShell は残りの命令を片付け、登録したままのものを外してから終わる
+    // 標準入力を閉じる。補助プログラムは残りの命令を片付け、登録したままのものを外してから終わる
     ps.close();
   }
 

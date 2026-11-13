@@ -1,6 +1,7 @@
 // 前面にあるウィンドウのプロセス名を調べる。Claude のウィンドウを前に出す（docs/research/deep-link-and-uia.md）。
-// Node から user32.dll を直接呼べないので、PowerShell を 1 つ動かし続け、1 行（命令）送るたびに 1 行で答えさせる。
-// 起動と Add-Type に 1〜2 秒かかるので、起動したら一度だけ作っておく。
+// Node から user32.dll を直接呼べないので、補助プログラムを 1 つ動かし続け、1 行（命令）送るたびに 1 行で答えさせる（helper-line.ts）。
+// 補助プログラムは C で書いた exe（native/bantus-helper.c）。exe を使えないときは、下の PowerShell のスクリプトに切り替える。
+// 2 つは同じ命令に同じ形で答える。命令を足したり変えたりするときは、両方を直す（docs/design/native-helper.md）。
 //
 // 命令
 // - fg：前面のウィンドウのプロセス名を答える（わからなければ空行）
@@ -16,8 +17,7 @@
 // - icon <ハンドル> <0/1>：ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の base64 で答える。1 なら大きいほうを先に探す。
 //   取れなければ空行
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { helperCommand } from './native-helper';
+import { createHelperLine } from './helper-line';
 
 // 前面にないプロセスの SetForegroundWindow は Windows に断られる（タスクバーが点滅するだけ）。
 // 断られたら、どこにも割り当てのない仮想キー（0x88）を押して離したことにしてから、もう一度呼ぶ。
@@ -281,69 +281,21 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 `;
 
 type Command = 'fg' | 'raise' | `open ${string}` | `wins ${string}` | `front ${string}` | `icon ${string}`;
-type Waiter = { resolve: (line: string | undefined) => void; done: boolean };
+const helper = createHelperLine('foreground', SCRIPT);
 
-let child: ChildProcessWithoutNullStreams | undefined;
-let buffer = '';
-/** 答えは送った順に返ってくる。時間切れになったものも、答えが来るまで列に残す（順番をずらさないため） */
-const waiting: Waiter[] = [];
-
-function settle(w: Waiter | undefined, line: string | undefined) {
-  if (!w || w.done) return;
-  w.done = true;
-  w.resolve(line);
-}
-
-function ensureChild(): ChildProcessWithoutNullStreams | undefined {
-  if (child) return child;
-  if (process.platform !== 'win32') return undefined;
-  const { command, args } = helperCommand('foreground', SCRIPT);
-  const p = spawn(command, args, { windowsHide: true });
-  p.stdout.setEncoding('utf8');
-  p.stdout.on('data', (chunk: string) => {
-    buffer += chunk;
-    let at: number;
-    while ((at = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, at).trim();
-      buffer = buffer.slice(at + 1);
-      settle(waiting.shift(), line);
-    }
-  });
-  const reset = () => {
-    if (child !== p) return;
-    child = undefined;
-    buffer = '';
-    for (const w of waiting.splice(0)) settle(w, undefined);
-  };
-  p.on('exit', reset);
-  p.on('error', reset);
-  p.stdin.on('error', reset);
-  child = p;
-  return p;
-}
-
-/** 命令を 1 行送り、答えの 1 行を返す。PowerShell が使えないときや時間切れは undefined */
+/** 命令を 1 行送り、答えの 1 行を返す。補助プログラムが使えないときや時間切れは undefined */
 function ask(command: Command, timeoutMs: number): Promise<string | undefined> {
-  const p = ensureChild();
-  if (!p) return Promise.resolve(undefined);
-  return new Promise((resolve) => {
-    const w: Waiter = { resolve, done: false };
-    waiting.push(w);
-    setTimeout(() => settle(w, undefined), timeoutMs);
-    p.stdin.write(`${command}\n`);
-  });
+  return helper.ask(command, timeoutMs);
 }
 
-/** 先に PowerShell を起動しておく（最初の問い合わせを待たせない） */
+/** 先に補助プログラムを起動しておく（最初の問い合わせを待たせない） */
 export function startForegroundProbe() {
-  ensureChild();
+  helper.start();
 }
 
+/** 終わるとき。標準入力を閉じ、補助プログラムに自分で終わらせる */
 export function stopForegroundProbe() {
-  const p = child;
-  child = undefined;
-  for (const w of waiting.splice(0)) settle(w, undefined);
-  p?.kill();
+  helper.close();
 }
 
 /** 前面のウィンドウのプロセス名（例：claude）。わからないときや時間切れは undefined */
@@ -353,7 +305,7 @@ export async function foregroundProcessName(timeoutMs = 1000): Promise<string | 
 
 /**
  * Claude のメインウィンドウを前に出す（最小化されていれば元に戻す）。
- * 前に出して、前面のプロセスが claude になったときだけ true。断られたとき、PowerShell が使えないとき、時間切れは false
+ * 前に出して、前面のプロセスが claude になったときだけ true。断られたとき、補助プログラムが使えないとき、時間切れは false
  */
 export async function raiseClaudeWindow(timeoutMs = 1000): Promise<boolean> {
   return (await ask('raise', timeoutMs)) === '1';
@@ -362,7 +314,7 @@ export async function raiseClaudeWindow(timeoutMs = 1000): Promise<boolean> {
 /**
  * プロセスを起動せずにセッションへ切り替える。Electron の単一インスタンスの仕組みと同じ WM_COPYDATA を、
  * 本体のメッセージ専用ウィンドウ（タイトルがデータフォルダのパス）に直接送る（docs/research/deep-link-and-uia.md）。
- * 受け付けられたときだけ true。ウィンドウがない、送れない、結果が 0、PowerShell が使えない、時間切れは false
+ * 受け付けられたときだけ true。ウィンドウがない、送れない、結果が 0、補助プログラムが使えない、時間切れは false
  */
 export async function sendOpenToClaude(id: string, dataFolders: string[], timeoutMs = 1500): Promise<boolean> {
   if (dataFolders.length === 0) return false;
@@ -375,7 +327,7 @@ const HANDLE = /^\d{1,20}$/;
 
 /**
  * ウィジェット（widgetHandle はそのウィンドウのハンドル）と同じモニターにある、タスクバーに出るウィンドウの一覧を 1 行で返す。
- * 読み方は window-switcher.ts の parseWindowList。PowerShell が使えないとき、時間切れは undefined
+ * 読み方は window-switcher.ts の parseWindowList。補助プログラムが使えないとき、時間切れは undefined
  */
 export function askWindowList(widgetHandle: string, pid: number, timeoutMs = 1500): Promise<string | undefined> {
   if (!HANDLE.test(widgetHandle) || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(undefined);
@@ -384,7 +336,7 @@ export function askWindowList(widgetHandle: string, pid: number, timeoutMs = 150
 
 /**
  * ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の data URL で返す。big なら大きいほう（32px）を先に探す。
- * 取れないとき、ウィンドウがもうないとき、PowerShell が使えないとき、時間切れは undefined
+ * 取れないとき、ウィンドウがもうないとき、補助プログラムが使えないとき、時間切れは undefined
  */
 export async function windowIcon(handle: string, big: boolean, timeoutMs = 1500): Promise<string | undefined> {
   if (!HANDLE.test(handle)) return undefined;
@@ -395,7 +347,7 @@ export async function windowIcon(handle: string, big: boolean, timeoutMs = 1500)
 /**
  * ハンドルのウィンドウを前に出す（最小化されていれば元に戻す）。もう前面にあれば最小化する（タスクバーのボタンと同じ）。
  * pid は Bantus 自身のプロセス（帯を押してウィジェットが前面になったときに、直前の前面のウィンドウを見るため）。
- * 前に出したら 'front'、最小化したら 'minimized'。ウィンドウがもうない、Windows に断られた、PowerShell が使えない、時間切れは undefined
+ * 前に出したら 'front'、最小化したら 'minimized'。ウィンドウがもうない、Windows に断られた、補助プログラムが使えない、時間切れは undefined
  */
 export async function toggleWindow(handle: string, pid: number, timeoutMs = 1000): Promise<'front' | 'minimized' | undefined> {
   if (!HANDLE.test(handle) || !Number.isInteger(pid) || pid <= 0) return undefined;

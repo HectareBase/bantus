@@ -431,7 +431,7 @@ function updateSystemUsage() {
   systemUsage.setActive(shown && getSettings().showSystemUsage);
 }
 
-/** ウィジェットのウィンドウのハンドル（10 進の数字）。同じモニターのウィンドウを選ぶのに PowerShell へ渡す */
+/** ウィジェットのウィンドウのハンドル（10 進の数字）。同じモニターのウィンドウを選ぶのに 補助プログラムへ渡す */
 function widgetHandle(): string | undefined {
   if (!win || win.isDestroyed()) return undefined;
   const buf = win.getNativeWindowHandle();
@@ -461,7 +461,7 @@ const windowSwitcher = createWindowSwitcher({
   },
 });
 
-/** 撮影だけのとき（WIDGET_SCREENSHOT）は調べない。ほかのウィンドウが写り込み、PowerShell も起動してしまう */
+/** 撮影だけのとき（WIDGET_SCREENSHOT）は調べない。ほかのウィンドウが写り込み、補助プログラムも起動してしまう */
 function updateWindowSwitcher() {
   const shown = !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   windowSwitcher.setActive(shown && getSettings().showWindowSwitcher && !process.env.WIDGET_SCREENSHOT);
@@ -869,7 +869,7 @@ async function claudeInFront(): Promise<boolean> {
 
 /**
  * セッションを開く。claude:// リンクだと毎回 claude.exe がもう 1 つ起動するので（ウイルス対策の検査で遅れることがある）、
- * 本体に WM_COPYDATA を直接送って切り替える。送れなかったとき（ウィンドウがない、結果が 0、PowerShell が使えない、
+ * 本体に WM_COPYDATA を直接送って切り替える。送れなかったとき（ウィンドウがない、結果が 0、補助プログラムが使えない、
  * 時間切れ）だけリンクで開く。時間切れのあとで送られた場合は同じセッションに 2 回切り替わるだけで、害はない
  */
 async function openSession(id: unknown) {
@@ -886,7 +886,7 @@ async function openSession(id: unknown) {
 /**
  * もう開いているセッションの Claude のウィンドウを前に出す。
  * リンクだと 2 つ目の claude.exe が起動して URL を渡すまでに約 260 ms かかるので、直接前に出す。
- * 前に出せなかったとき（Windows に断られた、PowerShell が使えない）は、openSession で開き直す
+ * 前に出せなかったとき（Windows に断られた、補助プログラムが使えない）は、openSession で開き直す
  */
 async function raiseSession(id: unknown) {
   if (typeof id !== 'string' || !SESSION_ID.test(id)) return;

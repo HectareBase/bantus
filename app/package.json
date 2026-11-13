@@ -9,7 +9,7 @@
   "main": "dist/node/main/main.js",
   "scripts": {
     "prebuild": "node scripts/check-deps.mjs",
-    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs && node scripts/build-native.mjs --if-available",
     "start": "npm run build && electron .",
     "debug": "npm run build && node scripts/debug.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
@@ -19,8 +19,8 @@
     "test": "tsc -p tsconfig.test.json && node --test \"dist/test/test/**/*.test.js\" && npm run lint:ja",
     "lint:ja": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/lint-ja.mjs",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "dist": "node scripts/clean-dist.mjs && npm run build && electron-builder",
-    "dist:dir": "node scripts/clean-dist.mjs && npm run build && electron-builder --dir"
+    "dist": "node scripts/clean-dist.mjs && npm run build && npm run build:native && electron-builder",
+    "dist:dir": "node scripts/clean-dist.mjs && npm run build && npm run build:native && electron-builder --dir"
   },
   "devDependencies": {
     "@textlint/kernel": "15.8.0",

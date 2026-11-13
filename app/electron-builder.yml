@@ -21,6 +21,9 @@ extraResources:
     to: assets
     filter:
       - icon.ico
+  # 常駐の補助プログラム（npm run build:native。docs/design/native-helper.md）。asar の中からは起動できないので外に置く
+  - from: native/build/bantus-helper.exe
+    to: bantus-helper.exe
 
 # MIT と ISC は「すべての複製に表記を入れる」ことが条件なので、Bantus.exe の隣に置く
 # （NSIS、zip、win-unpacked のどれにも入る）。どちらも app/ の外（リポジトリの一番上）にある
