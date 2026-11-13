@@ -7,6 +7,7 @@
 import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { ja } from '../shared/strings/ja.js';
+import { renderGit, resetGitFoot, scrollGitFoot } from './flyout-git.js';
 import { createIcon } from './icon.js';
 import { canToggleArchive, hasBackground, statusIconName, waitingLabel, type StatusIcon } from './model.js';
 import { setStatus } from './status-icon.js';
@@ -17,6 +18,7 @@ document.title = ja.window.flyout(ja.app.name);
 const flap = document.getElementById('flap')!;
 const flapCount = flap.querySelector<HTMLElement>('.flap-count')!;
 const list = document.getElementById('list')!;
+const head = list.querySelector<HTMLElement>('.list-head')!;
 const body = list.querySelector<HTMLElement>('.list-body')!;
 const foot = list.querySelector<HTMLElement>('.list-foot')!;
 flap.querySelector('.flap-arrow')!.append(createIcon('chevron-right'));
@@ -202,10 +204,20 @@ function cardBlock(card: FlyCard): HTMLElement {
 
 /** 下の段に出している行（まとめのない行に乗せたときも、その行を覚えておく） */
 let summaryId: string | undefined;
+/** git の詳細を出している（下の段は flyout-git.ts が描く） */
+let gitMode = false;
 
 /** 中身を作り直す。新しい中身を知らせてきたとき（onContent）は、乗せている行のまとめを出したままにする */
 function renderContent(content: FlyContent, keepSummary = false) {
   items = new Map();
+  gitMode = content.kind === 'git';
+  list.classList.toggle('git', gitMode);
+  if (content.kind === 'git') {
+    // git の詳細（flyout-git.ts）。下の段はいつも出し、乗せたコミットの本文を出す
+    renderGit(content.detail, { head, body, foot, onResize: () => { placeList(); reportSolid(); } }, !keepSummary);
+    return;
+  }
+  head.hidden = true;
   if (content.kind === 'cards') {
     for (const c of content.cards) for (const i of c.items) items.set(i.id, i);
     body.replaceChildren(...content.cards.map(cardBlock));
@@ -235,6 +247,7 @@ function renderContent(content: FlyContent, keepSummary = false) {
 
 /** 行に乗せたら、一覧の下の段に最後のターンのまとめを出す。下の段の大きさは変えず、中の文字だけを入れ替える */
 function showSummary(id: string | undefined, force = false) {
+  if (gitMode) return;
   if (!force && id === summaryId) return;
   summaryId = id;
   if (foot.hidden) return;
@@ -368,6 +381,9 @@ flap.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') window.flyoutApi.close();
 });
-list.addEventListener('pointerleave', () => showSummary(undefined));
+list.addEventListener('pointerleave', () => (gitMode ? resetGitFoot(foot) : showSummary(undefined)));
 // 下の段はスクロールしないので、その上で回したホイールは一覧のスクロールに回す
-foot.addEventListener('wheel', (e) => body.scrollBy({ top: e.deltaY }), { passive: true });
+// git の詳細では、本文が収まらないときだけ本文を送る
+foot.addEventListener('wheel', (e) => {
+  if (!(gitMode && scrollGitFoot(foot, e.deltaY))) body.scrollBy({ top: e.deltaY });
+}, { passive: true });

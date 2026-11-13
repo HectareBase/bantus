@@ -23,6 +23,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [data-usage.md](design/data-usage.md) | ウィジェットが読むもの、動かすもの、書くもの、しないこと |
 | [io-schedule.md](design/io-schedule.md) | 動かすコマンドと読むファイルの周期ときっかけ（タイマー、見張り、git、常駐の補助プログラム） |
 | [git-changes.md](design/git-changes.md) | コミットされていない変更の調べ方（`git status`）と表示 |
+| [git-detail.md](design/git-detail.md) | カードの見出しの git の印を押したときの詳細（コミットの枝の図。増減は出さない） |
 | [git-fetch.md](design/git-fetch.md) | リモートの定期的な取得（`git fetch`）と、設定の git のカテゴリ |
 | [worktree-cards.md](design/worktree-cards.md) | ワークツリー単位のカードと Bantus のアーカイブ（実現性の確認と仕様） |
 | [packaging-plan.md](design/packaging-plan.md) | exe 化とインストーラーの計画（electron-builder、NSIS）と、確かめた結果 |

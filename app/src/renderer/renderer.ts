@@ -5,7 +5,7 @@
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
 import { initSystemUsage } from './system-usage.js';
-import type { FlyAction, FlyContent, FlyItem, GitChanges, PlanStep, SessionView, WidgetLayout } from '../shared/types';
+import type { FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, PlanStep, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
@@ -791,6 +791,41 @@ function updateFlyout() {
   if (card) window.widget.updateFlyout(flyKey, cardContent(card), card.stackCount);
 }
 
+// ---- git の詳細（見出しの印を押したとき。docs/design/git-detail.md） ----
+
+/** git の詳細のめくれの目印。カードのタイムラインのめくれ（カードの目印そのまま）と区別する */
+function gitFlyKey(key: string): string {
+  return `git:${key}`;
+}
+
+/** 詳細を待つ長さ。これより早く読めたら読み終えてから開き、読み込み中の表示をちらつかせない */
+const GIT_WAIT_MS = 150;
+/** 押した順の番号。前に押したものの結果が後から届いても使わない */
+let gitSeq = 0;
+
+/** 印を押したら、git の詳細を一覧のウィンドウに開く。git はこのときだけ動かす（メインプロセスが結果を使い回す） */
+async function showGitFlyout(key: string) {
+  const refs = cards.get(key);
+  if (!refs || refs.changes.hidden) return;
+  const fk = gitFlyKey(key);
+  const seq = ++gitSeq;
+  const request = window.widget.gitDetail(key).catch(() => undefined);
+  const early = await Promise.race([request, new Promise<null>((r) => setTimeout(() => r(null), GIT_WAIT_MS))]);
+  if (seq !== gitSeq || !refs.el.isConnected) return;
+  const show = (detail: GitDetail | undefined) =>
+    window.widget.showFlyout({ key: fk, count: 0, anchor: rectOf(refs.card), hit: rectOf(refs.changes), content: { kind: 'git', ...(detail && { detail }) }, open: true });
+  if (early !== null) {
+    if (early) show(early);
+    return;
+  }
+  // 読むのに時間がかかっている：先に「読み込んでいます」で開き、読めたら差し替える
+  show(undefined);
+  const detail = await request;
+  if (seq !== gitSeq) return;
+  if (detail) window.widget.updateFlyout(fk, { kind: 'git', detail }, 0);
+  else window.widget.leaveFlyout(fk);
+}
+
 function onFlyAction(action: FlyAction) {
   if (action.type === 'open') openRow(action.id);
   else if (action.type === 'toggle') toggleArchive(action.id);
@@ -863,9 +898,26 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
     // めくれが出る前に押したときは、すぐ一覧を開く
     refs.stackHit.addEventListener('click', () => showCardFlyout(key, true));
     // カードの見出し（タイトルバー）に乗せている間も、めくれを出しておく。消すのは重なりの的と同じくメインプロセス
-    refs.header.addEventListener('pointerenter', () => showCardFlyout(key, false));
+    // そのカードの git の詳細を開いている間は出さない（見出しの上にいるだけで、詳細がタイムラインのめくれに切り替わるため）
+    refs.header.addEventListener('pointerenter', () => {
+      if (!(flyOpen && flyKey === gitFlyKey(key))) showCardFlyout(key, false);
+    });
     refs.header.addEventListener('pointermove', () => {
-      if (flyKey !== key) showCardFlyout(key, false);
+      if (flyKey !== key && !(flyOpen && flyKey === gitFlyKey(key))) showCardFlyout(key, false);
+    });
+    // git の印を押すと、詳細を開く。見出しのほかの操作には渡さない
+    const changes = el.querySelector<HTMLElement>('.changes')!;
+    changes.setAttribute('role', 'button');
+    changes.setAttribute('aria-label', ja.gitDetail.openAria);
+    changes.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void showGitFlyout(key);
+    });
+    changes.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      void showGitFlyout(key);
     });
     refs.act.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1122,5 +1174,6 @@ window.widget.onFlyState((key, open) => {
   for (const [k, refs] of cards) {
     refs.el.toggleAttribute('data-fly', k === key);
     refs.el.toggleAttribute('data-fly-open', k === key && open);
+    refs.changes.toggleAttribute('data-open', key === gitFlyKey(k) && open);
   }
 });

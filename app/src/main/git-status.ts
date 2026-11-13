@@ -70,7 +70,8 @@ export interface BranchInfo {
  */
 export type ReadBranch = (dir: string, base: string, remoteRef?: string, main?: string) => Promise<BranchInfo>;
 
-function git(dir: string, args: string[]): Promise<string> {
+/** git を 1 回動かす。読むだけの操作に使う（ロックを取らない、タイムアウトあり、窓を出さない） */
+export function git(dir: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       'git',

@@ -268,6 +268,51 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .base-root .ln.out { top: calc(50% + 7.5px); }
 .node.base-root .title { color: var(--text-secondary); font-weight: 400; }
 
+/* ---- git の詳細（flyout-git.ts、docs/design/git-detail.md）。丸と線はタイムラインと同じ大きさで、色は灰色だけ（色は状態を表すため） ---- */
+.list-head { flex: none; display: flex; align-items: center; gap: 4px; margin: 0 6px 4px; padding: 2px 6px 6px 8px; border-bottom: 1px solid var(--divider); font-size: 12px; color: var(--text-secondary); }
+.list-head svg { width: 13px; height: 13px; }
+.list-head .name { flex: 0 1 auto; min-width: 0; margin-left: 2px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-head .to { width: 12px; height: 12px; color: var(--text-tertiary); }
+.list-head .base { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-head .gap { flex: 1 1 0; min-width: 4px; }
+.list-head .pill, .list-head .tag { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 0 5px; border: 1px solid var(--divider); border-radius: 4px; font-size: 11px; line-height: 16px; }
+.list-head .pill svg { width: 11px; height: 11px; }
+.node.git-node .title, .node.git-node:not([data-archived]) .title { font-weight: 400; color: var(--text); }
+/* 押せるのはコミットの行だけ（ID を写す）。ほかの行は乗せても塗らない */
+.node.git-node:not(.git-commit):hover { background: none; }
+.git-commit { cursor: pointer; }
+.git-commit:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
+.git-node .dot { border-color: var(--text-tertiary); background: var(--text-tertiary); }
+/* HEAD：中が空の丸 */
+.git-node[data-dot="head"] .dot { border-color: var(--text-secondary); background: var(--pop); }
+/* コミットしていない変更：点線の中が空の丸 */
+.git-node[data-dot="wip"] .dot { border-style: dashed; border-color: var(--text-tertiary); background: var(--pop); }
+/* 分岐元とマージした先：起点と同じ ◇。図の端の印なので、題名はコミットより控えめにする */
+.git-node[data-dot="base"] .dot { border-radius: 2px; transform: rotate(45deg); width: 11px; height: 11px; left: 13px; top: calc(50% - 5.5px); border-color: var(--stopped); background: var(--pop); }
+.node.git-node[data-dot="base"] .title { font-size: 11.5px; color: var(--text-secondary); }
+/* 上限より先：丸を出さず、線を途切れさせない */
+.git-node[data-dot="none"] .dot { display: none; }
+.git-node[data-dot="none"] .ln.in, .git-fold .ln.in { height: 50%; }
+.git-node[data-dot="none"] .ln.out, .git-fold .ln.out { top: 50%; }
+.node.git-node[data-dot="none"] .title { font-size: 11px; color: var(--text-tertiary); }
+/* マージ済みのブランチのコミットは薄く */
+.git-node[data-faded] { opacity: 0.55; }
+/* 種別（feat、fix など）と範囲の札。2 行目の頭に置く */
+.ctype { flex: none; padding: 0 4px; border-radius: 3px; background: var(--selected); color: var(--text-secondary); font-size: 10px; line-height: 14px; }
+.ctext { display: block; overflow: hidden; text-overflow: ellipsis; }
+.cscope { color: var(--text-tertiary); }
+.cscope::before { content: "·"; margin: 0 3px; }
+.sub.copied { color: var(--text-secondary); }
+/* 下の段：1 行目は ID と日時、残りの 4 行は本文（一覧より 1 行高い）。収まらない本文はホイールで送る */
+.list.git .list-foot { height: calc(5 * 1.4em + 2px + 12px); }
+.list.git .list-foot b.meta { font-weight: 400; color: var(--text-tertiary); }
+.list.git .list-foot .summary { display: block; -webkit-line-clamp: unset; max-height: calc(4 * 1.4em); overflow-y: auto; scrollbar-width: none; }
+.list.git .list-foot .summary::-webkit-scrollbar { display: none; }
+/* たたんだコミット。押すと全部出す */
+.git-fold { width: 100%; min-height: 24px; border: 0; background: none; text-align: left; font-size: 11px; color: var(--text-tertiary); cursor: pointer; }
+.git-fold:hover { background: var(--row-hover); color: var(--text); }
+.git-fold:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
+
 /* ---- アイランド型（設定 island、html.island）：質感だけをウィジェットに合わせる。色の変数は変えない ----
    ウィジェットでは、帯や盆の縁を黒の線で切り、持ち上がった面（カード）には上の辺の細い光と、ぼかしの小さな影を付ける。
    めくれと一覧も同じにする。めくれは重なりを引き出したつまみ、一覧はその上に重なる面なので、どちらも持ち上がった面として描く。

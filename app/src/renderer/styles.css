@@ -367,6 +367,9 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
   border-radius: 0 0 7px 7px;
 }
 .changes[hidden] { display: none; }
+/* 押すと git の詳細を開く（docs/design/git-detail.md）。乗せたときと開いている間は、文字を濃くして押せることを見せる */
+.card-header .changes { cursor: pointer; }
+.card-header .changes:hover, .card-header .changes[data-open] { color: var(--text); }
 .changes:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
 .changes-item { display: inline-flex; align-items: center; gap: 2px; }
 .changes-item svg { width: 11px; height: 11px; flex: none; }

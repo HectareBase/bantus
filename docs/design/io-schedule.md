@@ -61,6 +61,9 @@
 ## git
 git はどれも作業フォルダに書き込みません（取得だけは `refs/remotes` と取ってきたオブジェクトを書きます。[git-fetch.md](git-fetch.md)）。`git status` などは一度に 1 つずつ、待ち行列で動かします。1 回起動するのに 40〜50ms ほどかかります。
 
+### git の詳細（`src/main/git-detail.ts`）
+カードの見出しの git の印を押したときだけ、`log --format=... <分岐元>..HEAD -n 51` を 1 回動かします（ときどき `merge-base` などを足す）。周期はなく、HEAD と分岐元の先頭が変わらなければ使い回します（[git-detail.md](git-detail.md)）。
+
 ### 作業フォルダの確認（`src/main/git-status.ts`）
 一覧の読み直しのたびに、次のフォルダだけを待ち行列に入れます（[git-changes.md](git-changes.md) の「いつ調べるか」）。
 

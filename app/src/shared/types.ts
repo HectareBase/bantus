@@ -173,6 +173,8 @@ export interface WidgetApi {
   setFetchCards(keys: string[]): void;
   /** カードの見出しの右クリックメニュー（作業フォルダをエクスプローラーやターミナルで開く）。フォルダはメインプロセスがセッションから探す */
   showCardMenu(key: string): void;
+  /** カードの git の詳細（見出しの印を押したとき）。フォルダはメインプロセスがセッションから探す。カードがわからなければ undefined */
+  gitDetail(key: string): Promise<GitDetail | undefined>;
   /** セッションの行の右クリックメニュー（ID をコピー）。ID はメインプロセスが自分の一覧にあるか確かめてからコピーする */
   showSessionMenu(id: string): void;
   /** ウィジェットのタイトルの右クリックメニュー（アプリの終了） */
@@ -309,11 +311,66 @@ export interface FlyCard {
   items: FlyItem[];
 }
 
+/** git の詳細のコミット 1 件（src/main/git-detail.ts）。文字はリポジトリから来たものなので、画面では textContent だけで出す */
+export interface GitCommit {
+  /** 短い ID */
+  short: string;
+  /** コミットした時刻（ms） */
+  at: number;
+  /** 件名をそのまま */
+  subject: string;
+  /** 件名が `<種別>(<範囲>): <要約>` の形なら種別。違えば undefined */
+  type?: string;
+  /** 同じく範囲。なければ undefined */
+  scope?: string;
+  /** 本文に出す文。形が合えば要約、違えば件名 */
+  text: string;
+  /** 本文（末尾のトレーラーを除き、長いものは切る）。なければ空 */
+  body: string;
+}
+
+/** カードの git の詳細（docs/design/git-detail.md）。カードの見出しの印を押したときだけ調べる */
+export interface GitDetail {
+  /** worktree：分岐元にないコミットを並べる。main：push していないコミット（なければ最近のコミットを数件） */
+  mode: 'worktree' | 'main';
+  /** 今のブランチ。わからなければ undefined */
+  branch?: string;
+  /** 見出しに出す短い名前（カードの見出しと同じ）。わからなければ branch を出す */
+  label?: string;
+  /** ワークツリーの分岐元 */
+  base?: string;
+  changed: number;
+  untracked: number;
+  /** 見出しの札。push していない（または分岐元にない）コミット */
+  ahead: number;
+  /** 見出しの札。メインのカードで、取得がオンのときだけの追跡するブランチからの遅れ */
+  behind: number;
+  /** behind を比べたブランチ（`origin/main` など） */
+  upstream?: string;
+  merged: boolean;
+  /** マージした先（分岐元ではなく main に入ったとき） */
+  mergedInto?: string;
+  /** 新しい順 */
+  commits: GitCommit[];
+  /** 分岐元にないコミットの数（上限で切った分も含む） */
+  total: number;
+  /** 分岐点の短い ID。メインのカードでは、追跡するブランチと分かれた所 */
+  fork?: string;
+  /** メインのカードで push していないコミットを並べたとき、追跡するブランチ（`origin/main` など）。一番下の ◇ に出す */
+  tracking?: string;
+  /** 分岐点から分岐元が先に進んだ件数 */
+  baseAhead: number;
+  /** git を読めなかった */
+  failed?: boolean;
+}
+
 export type FlyContent =
   /** base：ワークツリーの分岐元。起点のすぐ上（起点がなければ一番下）に分岐元の行を出す */
   | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string; mergedInto?: string } }
   | { kind: 'plain'; items: FlyItem[] }
-  | { kind: 'cards'; cards: FlyCard[] };
+  | { kind: 'cards'; cards: FlyCard[] }
+  /** カードの見出しの git の印を押したとき。detail がなければ読んでいる途中 */
+  | { kind: 'git'; detail?: GitDetail };
 
 export interface FlyRequest {
   /** カードの目印（リポジトリの見出しから開くときは `repo:<目印>`） */
@@ -361,6 +418,8 @@ export interface FlyoutApi {
   onColors(listener: (colors: StatusColors, highlight: number, motion: Motion, island: boolean) => void): void;
   /** めくれが押された */
   requestOpen(): void;
+  /** git の詳細で、コミットの短い ID をクリップボードへ写す（メインプロセスが ID の形を確かめる） */
+  copyCommitId(id: string): void;
   action(action: FlyAction): void;
   /** 行の右クリックメニュー（ID をコピー）。ウィジェットの showSessionMenu と同じ */
   showSessionMenu(id: string): void;

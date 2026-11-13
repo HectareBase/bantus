@@ -92,6 +92,7 @@ export function isFlyRequest(v: unknown): v is FlyRequest {
 export function isContent(v: unknown): v is FlyContent {
   if (!v || typeof v !== 'object') return false;
   const c = v as Record<string, unknown>;
+  if (c.kind === 'git') return c.detail === undefined || (!!c.detail && typeof c.detail === 'object');
   return (c.kind === 'timeline' || c.kind === 'plain') ? Array.isArray(c.items) : c.kind === 'cards' && Array.isArray(c.cards);
 }
 

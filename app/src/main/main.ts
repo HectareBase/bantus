@@ -11,6 +11,7 @@ import { bezelArea, bezelParts } from './bezel-place';
 import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
 import { askWindowList, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, toggleWindow, windowIcon } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
+import { createGitDetailReader, fixtureGitDetail } from './git-detail';
 import { createGitStatus } from './git-status';
 import { cardFolder, isFolder, openTerminal } from './open-folder';
 import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
@@ -800,6 +801,18 @@ function createTray(): Tray {
   return t;
 }
 
+/** カードの git の詳細を読む（git-detail.ts）。見本データで動かしているときは、見本の隣の git-detail/details.json から作る */
+const gitDetail = createGitDetailReader();
+async function readCardGitDetail(key: string) {
+  // 見本データには作業フォルダのないカードもある（git は起動しないので、なくてよい）
+  const fixture = process.env.WIDGET_FIXTURE;
+  const s = lastSessions.find((v) => (v.workDir || fixture) && cardKeyOf(v) === key);
+  if (!s || (!s.workDir && !fixture)) return undefined;
+  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch, changes: s.changes };
+  if (fixture) return fixtureGitDetail(fixture, key, src);
+  return gitDetail(src);
+}
+
 /**
  * カードの見出しの右クリックメニュー。作業フォルダは画面から受け取らず、セッションから探す（画面が任意のパスを開けないように）。
  * フォルダがわからない、またはもうないときは、項目を押せなくする
@@ -1176,6 +1189,15 @@ app.whenReady().then(() => {
     if (e.sender === win?.webContents && typeof key === 'string') flyout?.leave(key);
   });
 
+  // カードの git の詳細。画面からはカードの目印だけを受け取り、作業フォルダと分岐元はメインプロセスがセッションから決める
+  ipcMain.handle('git-detail', (e, key: unknown) => {
+    if (e.sender !== win?.webContents || typeof key !== 'string') return undefined;
+    return readCardGitDetail(key);
+  });
+  // git の詳細でコミットの行を押した。写すのは短い ID の形のものだけ（画面が任意の文字をクリップボードに入れないように）
+  ipcMain.on('fly:copy-commit', (e, id: unknown) => {
+    if (e.sender === flyout?.window().webContents && typeof id === 'string' && /^[0-9a-f]{4,64}$/.test(id)) clipboard.writeText(id);
+  });
   ipcMain.on('card-menu', (e, key: unknown) => {
     if (e.sender === win?.webContents && typeof key === 'string') showCardMenu(key);
   });
