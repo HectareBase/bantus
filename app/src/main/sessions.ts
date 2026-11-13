@@ -517,6 +517,18 @@ interface SessionCaches {
   indexes: Map<string, { stamp: string; ids: Set<string> | undefined }>;
   /** すべての local_*.json を最後に stat した時刻 */
   lastFullScan?: number;
+  /** フォルダごとの、前回調べたときのフォルダの時刻と local_*.json の一覧 */
+  dirs: Map<string, { stamp: string; files: string[] }>;
+}
+
+/** 更新時刻、変更時刻、大きさ、番号をまとめた目印。stat できなければ undefined */
+function stampOf(path: string): string | undefined {
+  try {
+    const st = statSync(path);
+    return `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -532,11 +544,8 @@ export const FULL_SCAN_MS = 30_000;
  */
 function readArchivedIndex(dir: string, indexes: SessionCaches['indexes']): Set<string> | undefined {
   const path = join(dir, 'archived-sessions.idx');
-  let stamp: string;
-  try {
-    const st = statSync(path);
-    stamp = `${st.mtimeMs}|${st.ctimeMs}|${st.size}|${st.ino}`;
-  } catch {
+  const stamp = stampOf(path);
+  if (!stamp) {
     indexes.delete(dir);
     return undefined;
   }
@@ -558,7 +567,7 @@ const sessionCaches = new Map<string, SessionCaches>();
 function sessionCachesFor(dataBase: string): SessionCaches {
   let c = sessionCaches.get(dataBase);
   if (!c) {
-    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0, indexes: new Map() };
+    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0, indexes: new Map(), dirs: new Map() };
     sessionCaches.set(dataBase, c);
   }
   return c;
@@ -615,13 +624,33 @@ export function readSessions(paths = defaultPaths(), now = Date.now()): SessionV
   if (fullScan) caches.lastFullScan = now;
   const dirs = sessionDirs(paths.dataBase);
   for (const key of caches.indexes.keys()) if (!dirs.includes(key)) caches.indexes.delete(key);
+  for (const key of caches.dirs.keys()) if (!dirs.includes(key)) caches.dirs.delete(key);
   for (const dir of dirs) {
-    const index = fullScan ? undefined : readArchivedIndex(dir, caches.indexes);
-    for (const file of listFiles(dir, /^local_.*\.json$/)) {
-      // .idx とファイルのどちらが先に書かれるか分からないので、両方がアーカイブ済みと言うときだけ stat を省く。
-      // .idx に載ったばかり（覚えている中身がまだアーカイブ済みでない）、覚えていない、.idx から外れたものは stat する
-      let d = index?.has(basename(file, '.json')) ? files.peek(file) : undefined;
-      if (d?.isArchived !== true) d = files.read(file);
+    // Claude は local_*.json を一時ファイルに書いてから名前を変えて差し替えるので、書き込むたびにフォルダの更新時刻が変わる
+    // （docs/research/data-sources.md）。フォルダの時刻が前回と同じなら、一覧も中のファイルの stat も省き、前回の結果を使う。
+    // 上書きで書かれたとき（フォルダの時刻が変わらない）に備え、全件の見直しではフォルダの時刻にかかわらず調べる。
+    // フォルダの時刻は中を調べる前に取る（調べている間の書き込みは、次の読み直しで時刻の違いとして見つかる）
+    const dirStamp = stampOf(dir);
+    const prev = caches.dirs.get(dir);
+    const same = !fullScan && dirStamp !== undefined && prev?.stamp === dirStamp;
+    const list = same ? prev!.files : listFiles(dir, /^local_.*\.json$/);
+    if (!same) {
+      if (dirStamp) caches.dirs.set(dir, { stamp: dirStamp, files: list });
+      else caches.dirs.delete(dir);
+    }
+    const index = fullScan || same ? undefined : readArchivedIndex(dir, caches.indexes);
+    for (const file of list) {
+      let d: any;
+      if (same) {
+        // 前回読めなかったもの（覚えていない）だけ stat し直す
+        d = files.peek(file);
+        if (d === undefined) d = files.read(file);
+      } else {
+        // .idx とファイルのどちらが先に書かれるか分からないので、両方がアーカイブ済みと言うときだけ stat を省く。
+        // .idx に載ったばかり（覚えている中身がまだアーカイブ済みでない）、覚えていない、.idx から外れたものは stat する
+        d = index?.has(basename(file, '.json')) ? files.peek(file) : undefined;
+        if (d?.isArchived !== true) d = files.read(file);
+      }
       if (!d?.sessionId) continue;
       const archived = Boolean(d.isArchived);
       const at = Number(d.lastFocusedAt) || 0;

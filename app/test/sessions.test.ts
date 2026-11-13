@@ -3,10 +3,19 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
-import { renameSync, rmSync, utimesSync } from 'node:fs';
+import { renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { createJsonCache, FULL_SCAN_MS, InterruptTracker, jsonCacheFor, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
-import { tempDir, writeJson } from './helpers';
+import { tempDir, writeJson as writeInPlace } from './helpers';
+
+/**
+ * Claude と同じく、一時ファイル（`<名前>.tmp`）に書いてから名前を変えて差し替える（docs/research/data-sources.md）。
+ * フォルダの更新時刻が変わるので、readSessions がフォルダの時刻を見て省く仕組みでも変化を拾う
+ */
+function writeJson(path: string, data: unknown) {
+  writeInPlace(`${path}.tmp`, data);
+  renameSync(`${path}.tmp`, path);
+}
 
 /** Windows の PID は 4 の倍数なので、奇数の PID のプロセスはない */
 const DEAD_PID = 2_147_483_645;
@@ -577,11 +586,14 @@ describe('readSessions（archived-sessions.idx でアーカイブ済みの stat 
     const first = run(0);
     assert.equal(first.stats, 3);
     assert.deepEqual(first.list, ['c#3']);
+    // フォルダの時刻を変えて（c を差し替えて）、.idx を使う道を通す
+    write('c', false);
     const second = run(1_000);
     assert.equal(second.stats, 1);
     assert.deepEqual(second.list, first.list);
     // stat を省いたものも表から外さない
     assert.equal(files.stats().size, 3);
+    write('c', false);
     assert.equal(run(2_000).stats, 1);
   });
 
@@ -597,6 +609,8 @@ describe('readSessions（archived-sessions.idx でアーカイブ済みの stat 
       write('c', false);
       if (data !== undefined) index(data);
       const first = run(0);
+      // フォルダの時刻を変えて、.idx を使う道を通す
+      write('c', false);
       const second = run(1_000);
       assert.equal(second.stats, 2);
       assert.deepEqual(second.list, first.list);
@@ -658,5 +672,75 @@ describe('readSessions（archived-sessions.idx でアーカイブ済みの stat 
     assert.deepEqual(after.list.sort(), ['back#1', 'c#2']);
     // 時計が戻ったときも、すべてを見直す
     assert.equal(run(0).stats, 2);
+  });
+});
+
+describe('readSessions（フォルダの更新時刻で stat を省く）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  let n = 0;
+  function setup() {
+    const paths: DataPaths = { runningDir: join(tmp.path, `run${++n}`), dataBase: join(tmp.path, `data${n}`) };
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    const file = (id: string) => join(dir, `local_${id}.json`);
+    const data = (id: string, title = id) => ({ sessionId: `local_${id}`, title, createdAt: id.charCodeAt(0) });
+    const files = jsonCacheFor(paths.dataBase);
+    const run = (now: number) => {
+      const before = files.stats().stats;
+      const list = readSessions(paths, now).map((v) => v.title).sort();
+      return { stats: files.stats().stats - before, list };
+    };
+    return { dir, file, data, run, files };
+  }
+
+  it('フォルダの時刻が同じなら、中のファイルを stat しない。省いたものも表から外さない', () => {
+    const { file, data, run, files } = setup();
+    writeJson(file('a'), data('a'));
+    writeJson(file('b'), data('b'));
+    assert.equal(run(0).stats, 2);
+    const again = run(1_000);
+    assert.equal(again.stats, 0);
+    assert.deepEqual(again.list, ['a', 'b']);
+    assert.equal(files.stats().size, 2);
+    assert.deepEqual(run(2_000).list, ['a', 'b']);
+  });
+
+  it('名前を変えての差し替え、足したファイル、消したファイルを拾う', () => {
+    const { dir, file, data, run } = setup();
+    writeJson(file('a'), data('a'));
+    writeJson(file('b'), data('b'));
+    run(0);
+    const before = statSync(dir).mtimeMs;
+    writeJson(file('a'), data('a', 'renamed'));
+    // 名前を変えるとフォルダの更新時刻が変わる（この仕組みの前提）
+    assert.notEqual(statSync(dir).mtimeMs, before);
+    const changed = run(1_000);
+    assert.deepEqual(changed.list, ['b', 'renamed']);
+    writeJson(file('c'), data('c'));
+    rmSync(file('b'));
+    assert.deepEqual(run(2_000).list, ['c', 'renamed']);
+  });
+
+  it('上書き（フォルダの時刻が変わらない変化）は、全件の見直しの周期で拾う', () => {
+    const { dir, file, data, run } = setup();
+    writeJson(file('a'), data('a'));
+    run(0);
+    const before = statSync(dir).mtimeMs;
+    writeFileSync(file('a'), JSON.stringify(data('a', 'overwritten')));
+    assert.equal(statSync(dir).mtimeMs, before);
+    const early = run(FULL_SCAN_MS - 1);
+    assert.equal(early.stats, 0);
+    assert.deepEqual(early.list, ['a']);
+    const full = run(FULL_SCAN_MS);
+    assert.equal(full.stats, 1);
+    assert.deepEqual(full.list, ['overwritten']);
+  });
+
+  it('前回読めなかったファイルは、フォルダの時刻が同じでも読み直す', () => {
+    const { file, run } = setup();
+    writeJson(file('a'), '{"sessionId":');
+    assert.deepEqual(run(0).list, []);
+    const again = run(1_000);
+    assert.equal(again.stats, 1);
   });
 });

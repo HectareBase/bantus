@@ -37,6 +37,8 @@
 | `spawnedFrom` | 別のセッションから作られたときだけ。`sessionId`（元のセッション）、`sideSession`、`btw` など |
 | `forkedFromSessionId` | フォークしたときの元のセッション（サイドチャットにも付く） |
 
+- 書き込みは、`local_<ID>.json.tmp` に書いてから `local_<ID>.json` に名前を変えて差し替えます（fs.watch で見た書き込みがすべてこの形でした）。そのため、書き込むたびにフォルダの更新時刻が変わります。
+
 ### サイドチャット（btw）
 - サイドチャットも `local_*.json` を 1 つ持ちます。目印は `spawnedFrom.btw: true` で、親は `spawnedFrom.sessionId` です。タイトルは多くが `btw: ` で始まりますが、目印には使いません。
 - デスクトップのサイドバーには出ません。
