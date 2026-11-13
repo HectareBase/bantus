@@ -162,7 +162,7 @@ function mergeToggle(c: GitCommit, m: GitMerge, parts: Parts): HTMLElement {
   btn.className = 'git-toggle';
   btn.setAttribute('aria-expanded', String(open));
   btn.title = open ? ja.gitDetail.hideMerged : ja.gitDetail.showMerged;
-  btn.append(createIcon('chevron-right'), mergeCountLabel(m));
+  btn.append(createIcon(open ? 'chevron-up' : 'chevron-down'), mergeCountLabel(m));
   // 行を押すと ID を写すので、トグルの押下は行へ伝えない
   btn.addEventListener('click', (e) => {
     e.stopPropagation();

@@ -295,14 +295,13 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .git-node[data-dot="none"] .ln.in, .git-fold .ln.in { height: 50%; }
 .git-node[data-dot="none"] .ln.out, .git-fold .ln.out { top: 50%; }
 .node.git-node[data-dot="none"] .title { font-size: 11px; color: var(--text-tertiary); }
-/* マージコミット：二重の丸（外側にもう 1 本の細い輪）。HEAD なら中が空の丸と組み合わせる */
-.git-node[data-merge] .dot { box-shadow: 0 0 0 2px var(--pop), 0 0 0 3px var(--text-tertiary); }
-.git-node[data-merge][data-dot="head"] .dot { box-shadow: 0 0 0 2px var(--pop), 0 0 0 3px var(--text-secondary); }
+/* マージコミット：二重の丸。ふつうの丸（13px）の中に、外の輪、すき間、中の丸で描く（外へ広げると線と文字に詰まって見えた）。HEAD なら中を空ける */
+.git-node[data-merge] .dot { border-width: 1.5px; box-shadow: inset 0 0 0 2px var(--pop); }
+.git-node[data-merge][data-dot="head"] .dot { box-shadow: inset 0 0 0 1.5px var(--pop), inset 0 0 0 3px var(--text-secondary); }
 .ctype.mtag { background: none; box-shadow: inset 0 0 0 1px var(--divider); }
-/* 取り込んだコミットを開け閉めするトグル（›N）。行の右端に、2 行にまたがる高さの枠付きのボタンで置く */
+/* 取り込んだコミットを開け閉めするトグル。矢印は開く向き（閉じていれば下、開いていれば上。めくれの矢印と同じ考え）。行の右端に、2 行にまたがる高さの枠付きのボタンで置く */
 .git-toggle { flex: none; align-self: center; min-width: 38px; height: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 7px 0 5px; border: 1px solid var(--divider); border-radius: 5px; background: none; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
-.git-toggle svg { width: 12px; height: 12px; transition: transform 0.12s; }
-.git-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.git-toggle svg { width: 12px; height: 12px; }
 .git-commit:hover .git-toggle { border-color: var(--text-tertiary); }
 .git-toggle:hover, .git-toggle[aria-expanded="true"] { background: var(--selected); color: var(--text); border-color: var(--text-tertiary); }
 .git-toggle:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
