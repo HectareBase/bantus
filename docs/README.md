@@ -21,7 +21,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 |---|---|
 | [widget-app-plan.md](design/widget-app-plan.md) | ウィジェットアプリの計画（Electron、サイドバー型）、表示ルール、これから決めること |
 | [data-usage.md](design/data-usage.md) | ウィジェットが読むもの、動かすもの、書くもの、しないこと |
-| [io-schedule.md](design/io-schedule.md) | 動かすコマンドと読むファイルの周期ときっかけ（タイマー、見張り、git、常駐の PowerShell） |
+| [io-schedule.md](design/io-schedule.md) | 動かすコマンドと読むファイルの周期ときっかけ（タイマー、見張り、git、常駐の補助プログラム） |
 | [git-changes.md](design/git-changes.md) | コミットされていない変更の調べ方（`git status`）と表示 |
 | [git-fetch.md](design/git-fetch.md) | リモートの定期的な取得（`git fetch`）と、設定の git のカテゴリ |
 | [worktree-cards.md](design/worktree-cards.md) | ワークツリー単位のカードと Bantus のアーカイブ（実現性の確認と仕様） |
@@ -30,7 +30,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [html-viewer.md](design/html-viewer.md) | HTML ビューア（今開いているセッションの作業フォルダの HTML を、カードの一覧の下に出す） |
 | [gpu.md](design/gpu.md) | GPU（ハードウェア アクセラレーション）を使わない設定と、使うときとの比べ（メモリ、CPU、見た目） |
 | [window-switcher.md](design/window-switcher.md) | ウィンドウの切り替え（同じモニターにある Claude 以外のウィンドウのアイコンを一番下に並べ、押すと前に出す） |
-| [native-helper.md](design/native-helper.md) | 常駐の PowerShell を C の小さなプログラムに置き換える試作（作り、ビルド、測った値） |
+| [native-helper.md](design/native-helper.md) | 常駐の補助プログラム（C の exe と、使えないときの PowerShell）の作り、ビルド、同梱、測った値 |
 | [motion.md](design/motion.md) | アニメーション効果（ひかえめ）：動き続ける表示を止めて色と枠で示す設定と、CPU の比べ |
 
 ## 開発の決まり
