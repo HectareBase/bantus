@@ -51,6 +51,7 @@ const widget: WidgetApi = {
   hideTip: () => ipcRenderer.send('tip-hide'),
   setFetchCards: (keys) => ipcRenderer.send('fetch-cards', keys),
   showCardMenu: (key) => ipcRenderer.send('card-menu', key),
+  gitDetail: (key) => ipcRenderer.invoke('git-detail', key),
   showSessionMenu: (id) => ipcRenderer.send('session-menu', id),
   showTitleMenu: () => ipcRenderer.send('title-menu'),
   setViewerTarget: (id) => ipcRenderer.send('viewer-target', id ?? null),

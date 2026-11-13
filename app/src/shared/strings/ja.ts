@@ -210,6 +210,43 @@ export const ja = {
     summaryHint: 'マウスを乗せると、最後のターンのまとめを表示します',
   },
 
+  /** カードの見出しの git の印を押したときに開く詳細（renderer/flyout-git.ts、docs/design/git-detail.md） */
+  gitDetail: {
+    /** 印の読み上げ名 */
+    openAria: 'git の詳細を開く',
+    loading: '読み込んでいます…',
+    failed: 'git の情報を読めませんでした',
+    /** ブランチ名がわからないとき（HEAD がブランチを指していない） */
+    detached: 'ブランチなし',
+    merged: 'マージ済み',
+    /** 見出しの札のツールチップ */
+    aheadOfBase: (base: string, n: number) => `${base} にないコミット：${n}`,
+    unpushed: (n: number) => `push していないコミット：${n}`,
+    behind: (upstream: string, n: number) => `${upstream} からの遅れ：${n}`,
+    uncommitted: 'コミットしていない変更',
+    /** コミットしていない変更の 2 行目 */
+    uncommittedParts: (changed: number, untracked: number) => `変更 ${changed}・未追跡 ${untracked}`,
+    /** HEAD の行のツールチップの印 */
+    head: '今のコミット（HEAD）',
+    /** たたんだコミット。押すと全部出す */
+    more: (n: number) => `ほか ${n} 件`,
+    expand: 'すべて表示',
+    /** 上限で切ったとき、並べていない分 */
+    beyondLimit: (n: number, limit: number) => `ほかに ${n} 件（表示は ${limit} 件まで）`,
+    forkHere: 'ここから分岐',
+    /** 分岐点から分岐元が先に進んだ件数 */
+    baseAhead: (n: number) => `その後 ${n} 件進んでいる`,
+    /** マージ済みのとき、一番上の ◇ の 2 行目 */
+    mergedHere: 'ここにマージ済み',
+    /** 下の段（乗せていないとき） */
+    totalAhead: (base: string, n: number) => `${base} にないコミット：${n} 件`,
+    totalMerged: (n: number) => `マージしたコミット：${n} 件`,
+    totalRecent: (n: number) => `最近のコミット：${n} 件`,
+    noCommits: (base: string) => `${base} にないコミットはありません`,
+    hint: 'マウスを乗せると、コミットの本文を表示します',
+    noBody: '本文はありません',
+  },
+
   /** 設定の画面 */
   settings: {
     navAria: '設定のカテゴリ',

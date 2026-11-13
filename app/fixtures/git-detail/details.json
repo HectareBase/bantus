@@ -1,0 +1,104 @@
+{
+  "my-app|": {
+    "commits": [
+      {
+        "short": "a1b2c3d",
+        "minutesAgo": 20,
+        "subject": "feat(app): ツールチップを自前で描く"
+      },
+      {
+        "short": "b2c3d4e",
+        "minutesAgo": 90,
+        "subject": "fix(main): 起動の順を直す"
+      },
+      {
+        "short": "c3d4e5f",
+        "minutesAgo": 300,
+        "subject": "docs: README を整える"
+      },
+      {
+        "short": "d4e5f6a",
+        "minutesAgo": 1500,
+        "subject": "chore(deps): electron を上げる"
+      },
+      {
+        "short": "e5f6a7b",
+        "minutesAgo": 3000,
+        "subject": "Initial commit"
+      }
+    ]
+  },
+  "handoff|notify": {
+    "commits": [
+      {
+        "short": "9e1f0a2",
+        "minutesAgo": 30,
+        "subject": "feat(app): 下の段に本文を出す",
+        "body": "乗せた行のコミットの件名と本文を、高さを変えずに入れ替える。"
+      },
+      {
+        "short": "8d0e9b1",
+        "minutesAgo": 45,
+        "subject": "fix(app): たたんだ行の線をつなぐ"
+      },
+      {
+        "short": "7c9d8a0",
+        "minutesAgo": 60,
+        "subject": "refactor(app): 行を作る関数をまとめる"
+      },
+      {
+        "short": "6b8c7f9",
+        "minutesAgo": 80,
+        "subject": "test(app): 件名の分け方を確かめる"
+      },
+      {
+        "short": "5a7b6e8",
+        "minutesAgo": 95,
+        "subject": "feat(app): コミットを新しい順に並べる"
+      },
+      {
+        "short": "4f6a5d7",
+        "minutesAgo": 120,
+        "subject": "docs: 枝の図の設計を書く"
+      },
+      {
+        "short": "3e5f4c6",
+        "minutesAgo": 150,
+        "subject": "feat(app): 見出しにブランチ名を出す"
+      },
+      {
+        "short": "2d4e3b5",
+        "minutesAgo": 200,
+        "subject": "chore: 見本データを足す"
+      },
+      {
+        "short": "1c3d2a4",
+        "minutesAgo": 260,
+        "subject": "Merge branch 'main' into spike"
+      },
+      {
+        "short": "0b2c1f3",
+        "minutesAgo": 300,
+        "subject": "feat(app): git の印を押せるようにする",
+        "body": "カードの見出しの印を押すと、めくれのウィンドウに詳細を開く。\n\nほかの行と同じく、Esc と外のクリックで閉じる。"
+      }
+    ],
+    "fork": "c3d4e5f"
+  },
+  "handoff|readme": {
+    "commits": [
+      {
+        "short": "7a8b9c0",
+        "minutesAgo": 700,
+        "subject": "docs: README を英語にする",
+        "body": "見出しと手順を英語にする。"
+      },
+      {
+        "short": "6f7a8b9",
+        "minutesAgo": 800,
+        "subject": "docs: 用語をそろえる"
+      }
+    ],
+    "fork": "d4e5f6a"
+  }
+}
