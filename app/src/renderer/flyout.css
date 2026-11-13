@@ -299,11 +299,12 @@ html[data-motion="subtle"] .progress-still { display: block; }
 .git-node[data-merge] .dot { box-shadow: 0 0 0 2px var(--pop), 0 0 0 3px var(--text-tertiary); }
 .git-node[data-merge][data-dot="head"] .dot { box-shadow: 0 0 0 2px var(--pop), 0 0 0 3px var(--text-secondary); }
 .ctype.mtag { background: none; box-shadow: inset 0 0 0 1px var(--divider); }
-/* 取り込んだコミットを開け閉めするトグル（›N）。2 行目の右端 */
-.git-toggle { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 1px; padding: 0 4px 0 2px; border: 0; border-radius: 3px; background: none; color: var(--text-tertiary); font: inherit; font-size: 10.5px; line-height: 15px; cursor: pointer; }
-.git-toggle svg { width: 10px; height: 10px; transition: transform 0.12s; }
+/* 取り込んだコミットを開け閉めするトグル（›N）。行の右端に、2 行にまたがる高さの枠付きのボタンで置く */
+.git-toggle { flex: none; align-self: center; min-width: 38px; height: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 7px 0 5px; border: 1px solid var(--divider); border-radius: 5px; background: none; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.git-toggle svg { width: 12px; height: 12px; transition: transform 0.12s; }
 .git-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
-.git-toggle:hover { background: var(--selected); color: var(--text); }
+.git-commit:hover .git-toggle { border-color: var(--text-tertiary); }
+.git-toggle:hover, .git-toggle[aria-expanded="true"] { background: var(--selected); color: var(--text); border-color: var(--text-tertiary); }
 .git-toggle:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
 /* マージの子：1 段下げた小さい点（9px）と細い 2 本目の線。本線は行を貫く。種別の札と件名だけを 1 行で */
 .node.git-child { padding-left: 46px; min-height: 22px; padding-top: 2px; padding-bottom: 2px; }

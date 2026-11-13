@@ -192,8 +192,9 @@ function commitRow(c: GitCommit, isHead: boolean, faded: boolean, link: { in?: L
   if (tag) subParts.push(tag);
   if (m?.fromBase && (m.children.length || m.more)) subParts.push(ja.gitDetail.baseCommits(m.name ?? current?.base ?? '', mergeCountLabel(m)));
   subParts.push(c.short, formatAgo(c.at));
-  if (m && !m.fromBase && m.children.length) subParts.push(mergeToggle(c, m, parts));
   const el = row(isHead ? 'head' : 'commit', [span('ctext', commitText(c))], subParts, link);
+  // トグルは 2 行にまたがる高さで行の右端に置く（2 行目の中の小さな印では、押せることが分かりにくかった）
+  if (m && !m.fromBase && m.children.length) el.append(mergeToggle(c, m, parts));
   el.toggleAttribute('data-merge', !!m);
   el.toggleAttribute('data-faded', faded || !!m?.fromBase);
   makeCopyable(el, c, isHead, el.querySelector<HTMLElement>('.sub')!, parts);
