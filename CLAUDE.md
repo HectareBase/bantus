@@ -22,6 +22,7 @@ Claude デスクトップ（Code タブ）を外から補うツール。セッ�
 | `docs/` | 資料。`research/` に調査結果、`design/` に設計、直下に開発の決まり |
 | `tools/` | 検証用と作業用のスクリプト（ワークツリーの片付けはスキル `clean-worktrees` から使う） |
 | `app/` | Electron 版のウィジェット。`npm start` で起動、`npm test` でテスト（`npm run lint:ja` も含む）、`npm run lint:ja` で画面の文言の検査、`npm run debug` で見本データの表示、`npm run typecheck` で型の確認（一番上でも `app/` でも動く。一番上の `package.json` は `app/` に渡すだけ） |
+| `app/native/` | 常駐の PowerShell の代わりの C の小さなプログラム（試作）。`npm run build:native` でビルド |
 | `app/src/shared/strings/` | 画面の文言（`ja.ts`） |
 | `app/text/` | 用語の辞書（`terms.yml`、prh の形式） |
 | `.claude/skills/` | スキル（`clean-worktrees`、文言の見直しの `review-ja`） |

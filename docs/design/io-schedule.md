@@ -101,6 +101,7 @@ git はどれも作業フォルダに書き込みません（取得だけは `re
 
 ## 常駐の PowerShell
 Node から Windows の API を直接呼べないので、`powershell.exe` を動かし続け、1 行の命令に 1 行で答えさせます。起動に 1〜2 秒かかるため、使い捨てにはしません。
+環境変数 `BANTUS_HELPER=native` で、同じ命令に答える C の小さなプログラムに切り替えられます（試作。[native-helper.md](native-helper.md)）。
 
 | PowerShell | 起動 | 命令と、送るとき | コード |
 |---|---|---|---|

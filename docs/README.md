@@ -30,6 +30,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [html-viewer.md](design/html-viewer.md) | HTML ビューア（今開いているセッションの作業フォルダの HTML を、カードの一覧の下に出す） |
 | [gpu.md](design/gpu.md) | GPU（ハードウェア アクセラレーション）を使わない設定と、使うときとの比べ（メモリ、CPU、見た目） |
 | [window-switcher.md](design/window-switcher.md) | ウィンドウの切り替え（同じモニターにある Claude 以外のウィンドウのアイコンを一番下に並べ、押すと前に出す） |
+| [native-helper.md](design/native-helper.md) | 常駐の PowerShell を C の小さなプログラムに置き換える試作（作り、ビルド、測った値） |
 | [motion.md](design/motion.md) | アニメーション効果（ひかえめ）：動き続ける表示を止めて色と枠で示す設定と、CPU の比べ |
 
 ## 開発の決まり
