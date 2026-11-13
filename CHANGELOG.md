@@ -4,6 +4,19 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.8.0]
+
+### 追加
+- **ウィンドウの切り替え**：ウィジェットの一番下に、同じモニターにある Claude 以外のウィンドウのアイコンを、アプリごと・起動した順に並べる。押すと前に出し、最小化していれば元に戻し、前面にあるものを押すと最小化する（タスクバーのボタンと同じ）。前面のものは塗りと長い下線、後ろにあるものは短い下線、最小化しているものは薄く出す。入りきらない分は「+N」にまとめ、押すと残りの一覧を開く。アイコンはウィジェットの内側から並べる。設定で出す・出さないを選べる（既定は出す）
+- **ワークツリーの本当の分岐元**：別のブランチから切ったワークツリーでも、コミットのつながりから分岐元を割り出し、遅れ・未マージ・マージ済みをその分岐元と比べる
+
+### 変更
+- **Windows の API を呼ぶ補助プログラム**：常駐させていた 2 つの PowerShell を、C で書いた小さな exe（`bantus-helper.exe`）に置き換えた。メモリが合わせて 140 MB ほど減り、起動してすぐ使える。exe を使えないときは PowerShell に戻る
+- **軽さ**：待機中と停止中だけの作業フォルダは、git の確認を 5 分ごとにした。セッション一覧の読み直しも軽くした
+
+### 修正
+- タスクバーに出ないウィンドウ（常駐のウィジェットなど）が、ウィンドウの切り替えに並んでいた
+
 ## [0.7.0]
 
 ### 追加
@@ -134,7 +147,8 @@ Bantus の版ごとの変更です。書き方は [Keep a Changelog](https://kee
 - Claude デスクトップのデータを読むだけで、書き換えはしない。読むものは [docs/design/data-usage.md](docs/design/data-usage.md) にある
 - 読み取っているファイルの形式は公式には公開されていないので、Claude デスクトップの更新で動かなくなることがある。調べた版は、デスクトップアプリ 4.4212.0、CLI 2.1.309
 
-[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/HectareBase/bantus/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/HectareBase/bantus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/HectareBase/bantus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HectareBase/bantus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/HectareBase/bantus/releases/tag/v0.5.0
