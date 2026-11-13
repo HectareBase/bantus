@@ -454,7 +454,19 @@ export interface PendingFocus {
   at: number;
   /** 安全のための期限（Unix ミリ秒）。本体で開けなかったときに残り続けないよう、これを過ぎたらファイルの値に戻す */
   until: number;
+  /**
+   * クリックしたときに開いていたセッション（ファイルの値と、前のクリックの仮の値）。
+   * 本体が前に出たとき、切り替わる前にこれらの `lastFocusedAt` が書かれることがある。
+   * クリックから FOCUS_FROM_GRACE_MS までの書き込みは、本体で開いたものとみなさない
+   */
+  from?: readonly string[];
 }
+
+/**
+ * クリックの直後に、前に開いていたセッションの `lastFocusedAt` を本体で開いたものとみなさない長さ。
+ * 本体は前に出たときに、新しいセッションへ切り替わる前の（前の）セッションの時刻を書くことがある
+ */
+export const FOCUS_FROM_GRACE_MS = 5_000;
 
 /**
  * クリックしてからファイルに反映されるのを待つ最長の長さ。
@@ -466,8 +478,9 @@ export const PENDING_FOCUS_MS = 30_000;
 /**
  * 今開いているセッションの ID を決める。
  * クリックしたセッションがあれば、次のどれかが起きるまではそちらを優先する。
- * ファイルが追いついた（クリックしたセッションが今開いているものになった）。
+ * ファイルが追いついた（クリックしたセッションが、クリックより新しい時刻で今開いているものになった）。
  * クリックより新しい `lastFocusedAt` を持つ別のセッションが出た（本体で別のセッションを開いた）。
+ * ただし、クリックしたときに開いていたセッションの、クリックの直後の書き込みは数えない（本体が前に出たときに書くことがある）。
  * クリックしたセッションが一覧から消えた。安全のための期限が過ぎた。
  * 返す pending は、まだ待つなら同じもの、もう要らなければ undefined。
  */
@@ -476,17 +489,33 @@ export function resolveFocus(
   pending: PendingFocus | undefined,
   now = Date.now(),
 ): { id: string | undefined; pending: PendingFocus | undefined } {
-  const fromData = sessions.find((s) => s.focused)?.id;
+  const fromData = sessions.find((s) => s.focused);
   if (
     pending &&
     now < pending.until &&
-    fromData !== pending.id &&
+    !caughtUp(fromData, pending) &&
     sessions.some((s) => s.id === pending.id) &&
-    !sessions.some((s) => s.id !== pending.id && (s.focusedAt ?? 0) > pending.at)
+    !sessions.some((s) => s.id !== pending.id && openedAfter(s, pending))
   ) {
     return { id: pending.id, pending };
   }
-  return { id: fromData, pending: undefined };
+  return { id: fromData?.id, pending: undefined };
+}
+
+/**
+ * ファイルがクリックに追いついたか。クリックしたセッションが今開いているものになり、その時刻がクリックより新しいとき。
+ * クリックより前の値で同じセッションになっているだけ（すばやく続けてクリックし、前のクリックがまだ書かれていない）なら、
+ * まだ追いついていない。ここで外すと、遅れて届く前のクリックの書き込みで前の行に戻る
+ */
+function caughtUp(fromData: SessionView | undefined, pending: PendingFocus): boolean {
+  return fromData?.id === pending.id && (fromData.focusedAt ?? 0) > pending.at;
+}
+
+/** クリックのあとで、本体でそのセッションを開いたか。前に開いていたセッションのクリック直後の書き込みは数えない */
+function openedAfter(s: SessionView, pending: PendingFocus): boolean {
+  const at = s.focusedAt ?? 0;
+  if (at <= pending.at) return false;
+  return !(pending.from?.includes(s.id) && at <= pending.at + FOCUS_FROM_GRACE_MS);
 }
 
 // ---- カード（ワークツリーごと）と Bantus のアーカイブ（docs/design/worktree-cards.md） ----

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
-  nextAttention, nextCycleTarget, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
+  nextAttention, nextCycleTarget, FOCUS_FROM_GRACE_MS, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
   HELD_RANK, compareSessions, heldFor, holdTooltip, isHeld, rankOf, releasedHolds, startupConfirmedAt,
@@ -663,6 +663,40 @@ describe('resolveFocus', () => {
     assert.deepEqual(resolveFocus(sessions, pending, pending.until), { id: 'a', pending: undefined }));
   it('クリックしたセッションがなくなったら、ファイルの値', () =>
     assert.deepEqual(resolveFocus([view({ id: 'a', focused: true, focusedAt: 500 })], pending, 1500), { id: 'a', pending: undefined }));
+
+  it('ファイルがクリックより前の値で同じセッションを指しているだけなら、まだ待つ', () => {
+    // a → b → a とすばやくクリックし、b のクリックがまだ書かれていない。ファイルは古いまま a を指している
+    const backToA = { id: 'a', at: 2000, until: 2000 + PENDING_FOCUS_MS, from: ['b'] };
+    const stale = [view({ id: 'a', focused: true, focusedAt: 500 }), view({ id: 'b' })];
+    assert.deepEqual(resolveFocus(stale, backToA, 2100), { id: 'a', pending: backToA });
+    // 遅れて b のクリックの書き込み（クリックより前の時刻）が届いても、a のまま
+    const lateB = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b', focused: true, focusedAt: 1100 })];
+    assert.deepEqual(resolveFocus(lateB, backToA, 2300), { id: 'a', pending: backToA });
+    // a の書き込みが届いたら、待つのをやめる
+    const caught = [view({ id: 'a', focused: true, focusedAt: 2100 }), view({ id: 'b', focusedAt: 1100 })];
+    assert.deepEqual(resolveFocus(caught, backToA, 3300), { id: 'a', pending: undefined });
+  });
+
+  describe('クリックしたときに開いていたセッション', () => {
+    const fromA = { ...pending, from: ['a'] };
+    it('本体が前に出たときに前のセッションの時刻が書かれても、クリックしたセッションを保つ', () => {
+      const raised = [view({ id: 'a', focused: true, focusedAt: 1200 }), view({ id: 'b' })];
+      assert.deepEqual(resolveFocus(raised, fromA, 1500), { id: 'b', pending: fromA });
+    });
+    it('前のクリックの仮の値のセッションも同じ', () => {
+      const fromBoth = { ...pending, id: 'c', from: ['a', 'b'] };
+      const raised = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b', focused: true, focusedAt: 1100 }), view({ id: 'c' })];
+      assert.deepEqual(resolveFocus(raised, fromBoth, 1500), { id: 'c', pending: fromBoth });
+    });
+    it('しばらくたってから前のセッションを開き直したら、そちらに従う', () => {
+      const back = [view({ id: 'a', focused: true, focusedAt: 1000 + FOCUS_FROM_GRACE_MS + 1 }), view({ id: 'b' })];
+      assert.deepEqual(resolveFocus(back, fromA, 1000 + FOCUS_FROM_GRACE_MS + 500), { id: 'a', pending: undefined });
+    });
+    it('前に開いていなかったセッションは、クリックの直後でもそちらに従う', () => {
+      const other = [view({ id: 'a', focusedAt: 500 }), view({ id: 'b' }), view({ id: 'c', focused: true, focusedAt: 1200 })];
+      assert.deepEqual(resolveFocus(other, fromA, 1500), { id: 'c', pending: undefined });
+    });
+  });
 });
 
 describe('statusIconName', () => {
