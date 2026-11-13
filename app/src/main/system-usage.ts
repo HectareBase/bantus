@@ -6,6 +6,8 @@ import type { SystemUsage } from '../shared/types';
 
 /** 取得の間隔（ms）。負荷をかけないよう、数秒おきにする */
 export const SYSTEM_USAGE_MS = 3000;
+/** 実際に使う間隔（ms）。測定用に環境変数 BANTUS_SYSTEM_USAGE_MS で変えられる（docs/design/opaque-bezel.md） */
+const INTERVAL_MS = Number(process.env.BANTUS_SYSTEM_USAGE_MS) || SYSTEM_USAGE_MS;
 /** 動き出してから最初に送るまで（ms）。CPU は 2 回の差なので、少しだけ間を空ける */
 const FIRST_MS = 300;
 
@@ -54,7 +56,7 @@ export function createSystemUsage(send: (usage: SystemUsage) => void): SystemUsa
       memTotal: total,
     };
     prev = next;
-    timer = setTimeout(tick, SYSTEM_USAGE_MS);
+    timer = setTimeout(tick, INTERVAL_MS);
     // 画面は割合を整数で出すので、変わらなければ送らない
     if (last && sameOnScreen(last, usage)) return;
     last = usage;
