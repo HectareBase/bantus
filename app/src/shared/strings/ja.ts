@@ -88,8 +88,7 @@ export const ja = {
     heldMinutes: (n: number) => `保留 ${n} 分`,
     heldHours: (n: number) => `保留 ${n} 時間`,
     heldDays: (n: number) => `保留 ${n} 日`,
-    /** 処理中の行の 2 行目。今のターンが始まってからの経過 */
-    busyJustNow: '始めたばかり',
+    /** 処理中の行の 2 行目。今のターンが始まってからの経過（1 分たつまでは「◯分前」のまま） */
     busyMinutes: (n: number) => `${n} 分経過`,
     /** 1 時間を超えたら。m が 0 なら分を省く */
     busyHours: (h: number, m: number) => (m ? `${h} 時間 ${m} 分` : `${h} 時間`),

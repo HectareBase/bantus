@@ -640,7 +640,7 @@ describe('formatAgo', () => {
 describe('busyFor・whenLabel（処理中の経過）', () => {
   const now = 100 * 24 * 3_600_000;
   it('境目。1 時間を超えたら時間と分、分が 0 なら時間だけ', () => {
-    assert.equal(busyFor(now - 59_999, now), '始めたばかり');
+    assert.equal(busyFor(now - 59_999, now), undefined);
     assert.equal(busyFor(now - MIN, now), '1 分経過');
     assert.equal(busyFor(now - 59 * MIN, now), '59 分経過');
     assert.equal(busyFor(now - 60 * MIN, now), '1 時間');
@@ -651,6 +651,8 @@ describe('busyFor・whenLabel（処理中の経過）', () => {
     const at = { lastActivityAt: now - 3 * MIN };
     assert.equal(whenLabel({ ...at, state: 'busy', busySince: now - 12 * MIN }, now), '12 分経過');
     assert.equal(whenLabel({ ...at, state: 'busy' }, now), '3 分前');
+    // 1 分たつまでは「◯分前」のまま
+    assert.equal(whenLabel({ state: 'busy', busySince: now - 59_999, lastActivityAt: now }, now), 'たった今');
     assert.equal(whenLabel({ ...at, state: 'idle', busySince: now - 12 * MIN }, now), '3 分前');
   });
   it('1 分たつと文字が進む（保留も）', () => {
