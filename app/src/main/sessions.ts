@@ -370,14 +370,19 @@ export class InterruptTracker {
 /**
  * 開発用：環境変数 WIDGET_FIXTURE に見本データ（app/fixtures/*.json）を指定すると、実データの代わりに表示する。
  * 見本データの minutesAgo は「何分前に動きがあったか」。workDir は見本データのファイルから見た相対パスで書ける。ファイルに書いた順を作った順とする（createdAt と通し番号）。
+ * busyMinutes は処理中のターンが始まってからの分（busySince になる）。起動した時刻から数えるので、表示が 1 分ごとに進む。
  * WIDGET_FIXTURE_CYCLE（秒）を付けると、その間隔ですべてのセッションの状態を 1 つずつ進める（状態の変化と並べ替えを確かめる）。
  */
+let fixtureStart: number | undefined;
+
 export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): SessionView[] {
   const items = readJson(path);
+  const start = (fixtureStart ??= now);
   if (!Array.isArray(items)) return [];
   const step = cycle ? Math.floor(now / cycle) : 0;
-  const views: SessionView[] = items.map(({ minutesAgo, hold: _hold, holdCard: _holdCard, ...s }, i) => ({
+  const views: SessionView[] = items.map(({ minutesAgo, busyMinutes, hold: _hold, holdCard: _holdCard, ...s }, i) => ({
     ...s,
+    ...(typeof busyMinutes === 'number' && { busySince: start - busyMinutes * 60_000 }),
     // 前の形の見本データ（遅れとマージ済みがない）も読めるようにする
     ...(s.changes && { changes: { behind: 0, merged: false, ...s.changes } }),
     // 作業フォルダ（HTML ビューアの見本）は、見本データのファイルから見た相対パスで書ける
@@ -391,9 +396,9 @@ export function readFixture(path: string, now = Date.now(), cycle = cycleMs()): 
     const state = STATES[(STATES.indexOf(view.state) + step) % STATES.length]!;
     // 実データと同じく、waitingFor は対応待ちのときだけ
     const waitingFor = state === 'waiting' ? view.waitingFor ?? 'input needed' : undefined;
-    // タスクリストは処理中のときだけ
-    const { plan, ...rest } = view;
-    return { ...rest, state, waitingFor, ...(state === 'busy' && plan && { plan }) };
+    // タスクリストとターンの始まりは処理中のときだけ
+    const { plan, busySince, ...rest } = view;
+    return { ...rest, state, waitingFor, ...(state === 'busy' && plan && { plan }), ...(state === 'busy' && busySince && { busySince }) };
   }));
 }
 
@@ -778,11 +783,13 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
           if (state === 'idle') background = backgroundReader.read(d.cliSessionId, folders, r.startedAt) ?? 0;
           else backgroundReader.pause(d.cliSessionId);
         }
-        // タスクリストの進み具合。記録を読むのは処理中のときだけ（docs/research/work-progress.md）
+        // タスクリストの進み具合と、今のターンが始まった時刻。記録を読むのは処理中のときだけ（docs/research/work-progress.md）
         if (planReader) {
           if (state === 'busy') {
             const plan = planReader.read(d.cliSessionId, folders);
             if (plan) view.plan = plan;
+            const since = planReader.since(d.cliSessionId);
+            if (since !== undefined) view.busySince = since;
           } else planReader.pause(d.cliSessionId);
         }
         if (state === 'idle' && hasShellWork(r)) background = Math.max(background, 1);

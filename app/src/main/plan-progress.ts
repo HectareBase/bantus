@@ -1,6 +1,7 @@
 // 処理中のセッションのタスクリスト（デスクトップの mcp__ccd_turn__update_plan）の進み具合を、
 // 会話の記録（`~/.claude/projects/<フォルダ>/<cliSessionId>.jsonl`）から作り直す。読むだけで、書き込まない。
 // 作り直し方と読み方の注意は docs/research/work-progress.md。使うのは手順の数と状態だけで、手順の名前は持たない。
+// あわせて、今のターンが始まった時刻（最後の本当のユーザーの発言の timestamp）を覚え、処理中の行の「◯分経過」に使う。
 
 import { watch, type FSWatcher } from 'node:fs';
 import type { PlanStep } from '../shared/types';
@@ -15,6 +16,8 @@ const MAX_STEPS = 20;
 /** 今のターンのタスクリスト。steps がなければ、このターンにはまだリストがない */
 export interface PlanState {
   steps?: PlanStep[];
+  /** 今のターンが始まった時刻（最後の本当のユーザーの発言の timestamp、Unix ミリ秒）。まだ発言がない、読めないときは undefined */
+  since?: number;
   /** 数えた tool_use の ID（1 つの発言が複数の行に分かれて記録されるため）。ターンが変わったら空にする */
   seen: Set<string>;
 }
@@ -81,6 +84,8 @@ export function applyPlanLines(state: PlanState, lines: Iterable<string>): void 
       continue;
     }
     if (isUserTurn(d)) {
+      const at = typeof d.timestamp === 'string' ? Date.parse(d.timestamp) : NaN;
+      state.since = Number.isFinite(at) ? at : undefined;
       state.steps = undefined;
       state.seen.clear();
       continue;
@@ -102,6 +107,13 @@ export function applyPlanLines(state: PlanState, lines: Iterable<string>): void 
 /** 画面に出すリスト。手順が 2 つ以上のときだけ（1 つでは進み具合にならない） */
 export function shownPlan(state: PlanState): PlanStep[] | undefined {
   return state.steps && state.steps.length >= 2 ? [...state.steps] : undefined;
+}
+
+/** 記録の行の並びから、今のターンが始まった時刻を取る（テスト用） */
+export function turnStart(lines: Iterable<string>): number | undefined {
+  const state = newPlanState();
+  applyPlanLines(state, lines);
+  return state.since;
 }
 
 /** 記録の行の並びから、今のターンのリストを作り直す */
@@ -132,13 +144,13 @@ interface Entry {
   key: string;
 }
 
-const keyOf = (state: PlanState) => shownPlan(state)?.join(',') ?? '';
+const keyOf = (state: PlanState) => `${shownPlan(state)?.join(',') ?? ''}|${state.since ?? ''}`;
 
 /**
  * セッションごとに、今のターンのタスクリストを差分で読む。
  * - read は処理中（busy）のセッションだけに呼ぶ。ほかのセッションには pause を呼ぶ（読んだ位置とリストは覚えたまま）
  * - 増えた分が大きいとき（最初の 1 回など）は、メインプロセスを長く止めないよう、1 ファイルずつ少しずつ読み、読み終えたら onUpdate を呼ぶ
- * - 処理中の間は記録のファイルを見張り、リストが変わったときだけ onUpdate を呼ぶ
+ * - 処理中の間は記録のファイルを見張り、リストかターンの始まりが変わったときだけ onUpdate を呼ぶ
  */
 export function createPlanReader(projectsDir: string, onUpdate: () => void) {
   const entries = new Map<string, Entry>();
@@ -246,6 +258,12 @@ export function createPlanReader(projectsDir: string, onUpdate: () => void) {
     return shownPlan(entry.state);
   }
 
+  /** read のあとに呼ぶ。今のターンが始まった時刻。読み終えていない、わからないときは undefined */
+  function since(cliSessionId: string): number | undefined {
+    const entry = entries.get(cliSessionId);
+    return entry?.ready ? entry.state.since : undefined;
+  }
+
   /** 処理中でないセッション。記録は読まず、見張りもやめる（読んだ位置とリストは覚えたまま） */
   function pause(cliSessionId: string) {
     const entry = entries.get(cliSessionId);
@@ -271,5 +289,5 @@ export function createPlanReader(projectsDir: string, onUpdate: () => void) {
     timer = undefined;
   }
 
-  return { read, pause, prune, dispose };
+  return { read, since, pause, prune, dispose };
 }

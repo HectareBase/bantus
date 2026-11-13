@@ -24,6 +24,8 @@ const SAMPLES = {
   'time.hoursAgo': [[3]],
   'time.daysAgo': [[2]],
   'time.heldMinutes': [[5]],
+  'time.busyMinutes': [[12]],
+  'time.busyHours': [[1, 5], [2, 0]],
   'time.heldHours': [[3]],
   'time.heldDays': [[2]],
   'tooltip.worktree': [['feature-x']],

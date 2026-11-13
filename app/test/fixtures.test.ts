@@ -73,6 +73,14 @@ describe('all-states はすべての表示を含む', () => {
     for (const n of [3, 8, 0]) assert.ok(lengths.includes(n), `${n} 本`);
   });
 
+  it('処理中の経過（1 時間未満、1 時間超え、始めたばかり）と、経過のない処理中', () => {
+    const busy = sessions.filter((s) => s.state === 'busy');
+    for (const min of [12, 65, 0]) assert.ok(busy.some((s) => s.busySince !== undefined && Math.round((now - s.busySince) / 60_000) === min), `${min} 分`);
+    assert.ok(busy.some((s) => s.busySince === undefined), '経過なし');
+  });
+
+  it('保留したばかりのセッション（メモあり）', () => assert.ok(Object.values(holds).some((h) => h.since === now && h.note)));
+
   it('対応が必要とまとめ', () => {
     assert.ok(sessions.some((s) => s.needsAction));
     assert.ok(sessions.some((s) => s.detail));

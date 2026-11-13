@@ -83,9 +83,16 @@ export const ja = {
     hoursAgo: (n: number) => `${n} 時間前`,
     daysAgo: (n: number) => `${n} 日前`,
     heldJustNow: '保留したばかり',
+    /** 保留の札（行とカードの 2 段目）で、1 分たつまで。「保留したばかり」は長く、狭い幅でメモの枠を押し出すため短くする */
+    heldJustNowShort: '保留',
     heldMinutes: (n: number) => `保留 ${n} 分`,
     heldHours: (n: number) => `保留 ${n} 時間`,
     heldDays: (n: number) => `保留 ${n} 日`,
+    /** 処理中の行の 2 行目。今のターンが始まってからの経過 */
+    busyJustNow: '始めたばかり',
+    busyMinutes: (n: number) => `${n} 分経過`,
+    /** 1 時間を超えたら。m が 0 なら分を省く */
+    busyHours: (h: number, m: number) => (m ? `${h} 時間 ${m} 分` : `${h} 時間`),
   },
 
   /** ツールチップの行 */
@@ -339,7 +346,7 @@ export const ja = {
       worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。名前順では、メインの作業フォルダを先頭にする' },
       sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。作成順では、新しく作ったものが上' },
       rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
-      showUpdated: { label: '更新日時', description: '2 行目の「◯分前」' },
+      showUpdated: { label: '更新日時', description: '2 行目の「◯分前」（処理中は「◯分経過」）' },
       showState: { label: '状態の文字', description: '2 行目の「処理中」「許可待ち」など' },
       showSystemUsage: { label: 'CPU とメモリ', description: 'PC 全体の使用率を表示する' },
       showWindowSwitcher: {

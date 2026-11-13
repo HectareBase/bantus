@@ -6,7 +6,7 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { projectDirName } from '../src/main/context-usage';
-import { applyPlanLines, createPlanReader, newPlanState, rebuildPlan } from '../src/main/plan-progress';
+import { applyPlanLines, createPlanReader, newPlanState, rebuildPlan, turnStart } from '../src/main/plan-progress';
 import { planLabel, planSteps, tooltip } from '../src/renderer/model';
 import { ja } from '../src/shared/strings/ja';
 import type { SessionView } from '../src/shared/types';
@@ -21,7 +21,10 @@ const plan = (input: Record<string, unknown>, id?: string) => call('mcp__ccd_tur
 const items = (...statuses: string[]) => plan({ items: statuses.map((status, i) => ({ content: `手順 ${i + 1}`, status })), scope: 'first_task' });
 const wrapUp = () => call('mcp__ccd_turn__wrap_up', { recap: 'おわり' });
 /** 本当のユーザーの発言 */
-const userSays = (text = 'お願い') => JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: text } });
+/** 記録の timestamp の形（ISO 8601 の文字列）。分から作る */
+const at = (min: number) => new Date(min * 60_000).toISOString();
+const userSays = (text = 'お願い', timestamp?: string) =>
+  JSON.stringify({ type: 'user', isSidechain: false, message: { role: 'user', content: text }, ...(timestamp && { timestamp }) });
 /** ツールの結果（ターンの区切りではない） */
 const toolResult = (text = 'Plan updated: step 2 of 3 is in progress.') =>
   JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_x', content: [{ type: 'text', text }] }] }, toolUseResult: [{ type: 'text', text }] });
@@ -88,6 +91,23 @@ describe('rebuildPlan（記録からタスクリストを作り直す）', () =>
   });
 });
 
+describe('turnStart（今のターンが始まった時刻）', () => {
+  const t1 = at(0);
+  const t2 = at(90);
+
+  it('最後の本当のユーザーの発言の timestamp。ツールの結果、CLI が入れた発言、アシスタントの発言では変えない', () => {
+    const tagged = (line: string, timestamp: string) => JSON.stringify({ ...JSON.parse(line), timestamp });
+    const lines = [userSays('前', t1), items('in_progress', 'pending'), userSays('今', t2), tagged(toolResult(), at(120)), tagged(meta(), at(130)), plan({ advance: true })];
+    assert.equal(turnStart(lines), 90 * 60_000);
+  });
+
+  it('発言がない、時刻がない、時刻が読めないときは undefined', () => {
+    assert.equal(turnStart([items('in_progress', 'pending')]), undefined);
+    assert.equal(turnStart([userSays('前', t1), userSays('今')]), undefined);
+    assert.equal(turnStart([userSays('今', 'あいう')]), undefined);
+  });
+});
+
 describe('createPlanReader（増えた分だけ読む）', () => {
   const tmp = tempDir();
   after(tmp.cleanup);
@@ -110,6 +130,34 @@ describe('createPlanReader（増えた分だけ読む）', () => {
       reader.pause('cli-1');
       appendFileSync(path, `${userSays()}\n`);
       assert.equal(reader.read('cli-1', [folder]), undefined);
+    } finally {
+      reader.dispose();
+    }
+  });
+
+  it('ターンの途中から読み始めても、ターンが始まった時刻を返す。次のターンで進める', () => {
+    const projects = join(tmp.path, 'p4');
+    const path = jsonl(projects, 'cli-4');
+    const t1 = at(0);
+    const t2 = at(45);
+    writeJson(path, `${userSays('前', t1)}
+${wrapUp()}
+${userSays('今', t2)}
+${items('in_progress', 'pending')}
+${toolResult()}
+`);
+    const reader = createPlanReader(projects, () => {});
+    try {
+      assert.equal(reader.since('cli-4'), undefined, 'read の前');
+      reader.read('cli-4', [folder]);
+      assert.equal(reader.since('cli-4'), 45 * 60_000);
+      reader.pause('cli-4');
+      const t3 = at(180);
+      appendFileSync(path, `${wrapUp()}
+${userSays('次', t3)}
+`);
+      reader.read('cli-4', [folder]);
+      assert.equal(reader.since('cli-4'), 180 * 60_000);
     } finally {
       reader.dispose();
     }
