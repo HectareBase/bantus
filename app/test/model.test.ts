@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
+  NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, markItems, markTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, FOCUS_FROM_GRACE_MS, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
@@ -66,13 +66,29 @@ describe('buildRepos：カードの分け方', () => {
       view({ mainBranch: 'main', worktree: wt('c') }),
     ]);
     const by = (label: string) => repo!.cards.find((c) => c.label === label)!;
-    assert.equal(by('main').base, undefined, '元のフォルダのカードには持たせない');
+    assert.equal(by('main').base, undefined, '既定のブランチにいる元のフォルダのカードには持たせない');
     assert.equal(by('a').base?.branch, 'main', 'main から切ったいつものワークツリーも、一覧には分岐元を出す');
     assert.equal(by('a').base?.offMain, false);
     assert.equal(by('c').base, undefined, '分岐元がわからなければ持たせない');
     assert.equal(by('b').base?.branch, 'integration/new_feature');
     assert.equal(by('b').base?.offMain, true);
     assert.match(by('b').base!.tip, /^分岐元：integration\/new_feature\n.*main/);
+  });
+
+  it('元のフォルダが既定以外のブランチにいれば分岐元を持たせる（offMain にはしない）。マージ済みでも隠さない', () => {
+    const merged: GitChanges = { ...clean, merged: true };
+    const [repo] = buildRepos([view({ mainBranch: 'feature', baseBranch: 'main', workDir: 'C:/Repo', changes: merged })]);
+    const card = repo!.cards[0]!;
+    assert.equal(card.base?.branch, 'main');
+    assert.equal(card.base?.offMain, false);
+    assert.equal(card.hidden, false);
+    assert.equal(card.tooltip, 'メインの作業フォルダ：feature\n分岐元：main\nC:/Repo');
+  });
+
+  it('元のフォルダがブランチにいなければ、カードの名前は短いコミット ID', () => {
+    const [repo] = buildRepos([view({ mainHead: 'abc1234', baseBranch: 'main' })]);
+    assert.equal(repo!.cards[0]!.label, 'abc1234');
+    assert.match(repo!.cards[0]!.tooltip, /^メインの作業フォルダ：ブランチなし（abc1234）\n分岐元：main/);
   });
 
   it('リポジトリの並びは設定に従う（固定は名前順）', () => {
@@ -822,6 +838,20 @@ describe('コミットされていない変更と、元のブランチとの差'
     assert.deepEqual(changeItems({ ...clean, ahead: 4 }), [{ icon: 'arrow-up', count: 4 }]);
     assert.deepEqual(changeItems(clean), []);
     assert.deepEqual(changeItems(undefined), []);
+  });
+  it('見出しの印：数がすべて 0 でも薄いブランチのアイコン、失敗なら注意のアイコン、まだ調べていなければなし', () => {
+    assert.deepEqual(markItems(clean), [{ icon: 'git-branch', count: 0, kind: 'clean' }]);
+    assert.deepEqual(markItems(some), changeItems(some));
+    assert.deepEqual(markItems(undefined, 'unsafe'), [{ icon: 'circle-alert', count: 0, kind: 'error' }]);
+    assert.deepEqual(markItems(undefined), []);
+    assert.equal(markTooltip(clean), '変更はありません');
+    assert.equal(markTooltip(undefined, undefined, 'missing'), 'git が見つかりません（PATH）');
+    assert.equal(markTooltip({ ...clean, ahead: 2, aheadOfBase: true }, 'main'), 'main に未マージのコミット：2');
+  });
+  it('カードには、結果がないときだけ失敗の理由を持たせる', () => {
+    const [repo] = buildRepos([view({ gitError: 'timeout' }), view({ worktree: wt('x'), gitError: 'timeout', changes: clean })]);
+    assert.equal(repo!.cards.find((c) => c.isMain)?.gitError, 'timeout');
+    assert.equal(repo!.cards.find((c) => !c.isMain)?.gitError, undefined);
   });
   it('内訳はあるものだけ', () => {
     assert.equal(changesTooltip(some), '未コミットの変更：変更 3・未追跡 2\npush していないコミット：1\n元のブランチからの遅れ：4');

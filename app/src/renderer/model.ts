@@ -2,7 +2,7 @@
 
 import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
-import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, PlanStep, SessionState, SessionView } from '../shared/types';
+import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, GitFailure, PlanStep, SessionState, SessionView } from '../shared/types';
 import { ja } from '../shared/strings/ja.js';
 import type { IconName } from './icons.js';
 
@@ -290,6 +290,27 @@ export function changeItems(c: GitChanges | undefined): ChangeItem[] {
     { icon: 'arrow-down', count: c.behind },
   ];
   return items.filter((i) => i.count > 0);
+}
+
+/** カードの見出しの印の 1 つ。kind は、数が 0 の薄いブランチのアイコン（clean）か、失敗の注意のアイコン（error） */
+export interface MarkItem extends ChangeItem {
+  kind?: 'clean' | 'error';
+}
+
+/**
+ * カードの見出しの印に並べるもの。調べ終えていれば、数がすべて 0 でも薄いブランチのアイコンを 1 つ出す（押して詳細を開けるように）。
+ * 調べられなかった（error）ときは注意のアイコン。まだ調べていなければ空（印を出さない）。docs/design/git-changes.md
+ */
+export function markItems(c: GitChanges | undefined, error?: GitFailure): MarkItem[] {
+  if (!c) return error ? [{ icon: 'circle-alert', count: 0, kind: 'error' }] : [];
+  const items = changeItems(c);
+  return items.length ? items : [{ icon: 'git-branch', count: 0, kind: 'clean' }];
+}
+
+/** カードの見出しの印のツールチップ。数がすべて 0 なら「変更はありません」、失敗ならその理由 */
+export function markTooltip(c: GitChanges | undefined, base?: string, error?: GitFailure): string {
+  if (!c) return error ? ja.changes.failed[error] : '';
+  return changesTooltip(c, base) || ja.changes.clean;
 }
 
 /**
@@ -623,6 +644,8 @@ export interface WorktreeCard {
    */
   base?: { branch: string; tip: string; offMain: boolean };
   changes?: GitChanges;
+  /** 作業フォルダの git が失敗した理由（changes がないときだけ使う） */
+  gitError?: GitFailure;
   /** カードに出す行（並び順の設定に従う） */
   sessions: SessionView[];
   /** アーカイブしたセッション（新しく作ったものが上）。重なりの件数 */
@@ -870,6 +893,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       const first = own[0]!;
       const isMain = !first.worktree;
       const changes = own.find((s) => s.changes)?.changes;
+      const gitError = changes ? undefined : own.find((s) => s.gitError)?.gitError;
       const { rank, latest } = rankOfList(own, opts);
       let shown: SessionView[];
       let archived: SessionView[];
@@ -905,10 +929,12 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       cards.push({
         key,
         isMain,
-        label: isMain ? first.mainBranch ?? ja.widget.originFolder : first.worktree!.label,
+        // 元のフォルダがブランチにいない（detached HEAD）ときは、短いコミット ID
+        label: isMain ? first.mainBranch ?? first.mainHead ?? ja.widget.originFolder : first.worktree!.label,
         tooltip: cardTooltip(first),
         ...baseOf(first),
         changes,
+        ...(gitError && { gitError }),
         sessions: shown.sort(order),
         archived,
         timeline,
@@ -939,21 +965,23 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
 
 /** カードの見出しのツールチップ。ブランチ名の全体、分岐元と作業フォルダ */
 function cardTooltip(s: SessionView): string {
-  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(s.mainBranch ?? ja.tooltip.unknownBranch)];
-  if (s.worktree && s.baseBranch) lines.push(ja.tooltip.base(s.baseBranch));
+  const main = s.mainBranch ?? (s.mainHead ? ja.tooltip.detached(s.mainHead) : ja.tooltip.unknownBranch);
+  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(main)];
+  if (s.baseBranch) lines.push(ja.tooltip.base(s.baseBranch));
   if (s.workDir) lines.push(s.workDir);
   return lines.join('\n');
 }
 
 /**
  * ワークツリーの分岐元。一覧ではいつも分岐元の行を出す（どのカードでも同じ形にそろえる）。
- * 段階的に分岐したとき（main → develop → feature）は offMain にし、以前のセッションがなくても一覧を開けるようにする
+ * 段階的に分岐したとき（main → develop → feature）は offMain にし、以前のセッションがなくても一覧を開けるようにする。
+ * 元のフォルダも、既定以外のブランチにいれば分岐元（既定のブランチ）を渡す（印のツールチップに使う）。一覧の形は変えないので offMain にしない
  */
 function baseOf(s: SessionView): Pick<WorktreeCard, 'base'> {
   const branch = s.baseBranch;
-  if (!s.worktree || !branch) return {};
-  const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? ja.tooltip.unknownBranch);
-  return { base: { branch, tip, offMain: branch !== s.mainBranch } };
+  if (!branch) return {};
+  const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? (s.mainHead ? ja.tooltip.detached(s.mainHead) : ja.tooltip.unknownBranch));
+  return { base: { branch, tip, offMain: !!s.worktree && branch !== s.mainBranch } };
 }
 
 /** 画面に並んでいる順（上から）の、アーカイブしていないセッション */

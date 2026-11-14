@@ -1,7 +1,7 @@
 // Claude デスクトップのセッション一覧と状態を読む。データは読むだけで、書き換えない。
 // 読み取り元と項目は docs/research/data-sources.md、状態の判定は docs/research/session-status.md。
 
-import { readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
@@ -205,21 +205,77 @@ function sessionDirs(dataBase: string): string[] {
 }
 
 /** `.git/HEAD`（ワークツリーなら `.git/worktrees/<名前>/HEAD`）から今のブランチ名を読む。読み終えた結果は heads に入れて使い回す */
-function readHeadBranch(gitDir: string, heads: Map<string, string | undefined>): string | undefined {
-  if (heads.has(gitDir)) return heads.get(gitDir);
-  let branch: string | undefined;
+function readHeadBranch(gitDir: string, heads: Heads): string | undefined {
+  return readHead(gitDir, heads).branch;
+}
+
+/** HEAD の指すもの。ブランチにいれば branch、ブランチにいない（detached HEAD）ならコミットの ID（commit） */
+interface HeadState {
+  branch?: string;
+  commit?: string;
+}
+
+/** 一覧を 1 回作る間の、gitDir → HEAD の指すもの */
+type Heads = Map<string, HeadState>;
+
+/** `.git/HEAD` を読む。読み終えた結果は heads に入れて使い回す */
+function readHead(gitDir: string, heads: Heads): HeadState {
+  const hit = heads.get(gitDir);
+  if (hit) return hit;
+  let head: HeadState = {};
   try {
-    const m = /^ref: refs\/heads\/(.+)$/m.exec(readFileSync(join(gitDir, 'HEAD'), 'utf8'));
-    branch = m?.[1]?.trim();
+    const text = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+    const branch = /^ref: refs\/heads\/(.+)$/m.exec(text)?.[1]?.trim();
+    if (branch) head = { branch };
+    else if (/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(text)) head = { commit: text };
   } catch {
-    branch = undefined;
+    head = {};
   }
-  heads.set(gitDir, branch);
-  return branch;
+  heads.set(gitDir, head);
+  return head;
+}
+
+/** detached HEAD のとき、カードの名前に使う短いコミット ID の長さ */
+const SHORT_HEAD = 7;
+
+/**
+ * 元のリポジトリの既定のブランチを、共有の場所（refDir、ふつうは commonDir）の `.git` のファイルだけから読む（git は起動しない）。
+ * `refs/remotes/<リモート>/HEAD`（origin を先に）の指すブランチ、`main`、`master` の順に、手元に `refs/heads/<名前>` があるものを返す。
+ * どれもなければ undefined（呼び出し側が記録の分岐元を使う）。docs/design/git-changes.md の「元のフォルダが既定以外のブランチにいるとき」
+ */
+export function readDefaultBranch(refDir: string): string | undefined {
+  let packed: Set<string> | undefined;
+  const has = (name: string): boolean => {
+    if (existsSync(join(refDir, 'refs', 'heads', name))) return true;
+    if (!packed) {
+      packed = new Set();
+      try {
+        for (const line of readFileSync(join(refDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
+          const m = /^[0-9a-f]+ refs\/heads\/(\S+)$/.exec(line);
+          if (m) packed.add(m[1]!);
+        }
+      } catch {
+        // packed-refs がないのは普通
+      }
+    }
+    return packed.has(name);
+  };
+  const byName = (a: string, b: string) => (a === 'origin' ? -1 : b === 'origin' ? 1 : a < b ? -1 : a > b ? 1 : 0);
+  const names: string[] = [];
+  for (const remote of listDirs(join(refDir, 'refs', 'remotes')).sort(byName)) {
+    try {
+      const m = /^ref: refs\/remotes\/[^/]+\/(\S+)$/.exec(readFileSync(join(refDir, 'refs', 'remotes', remote, 'HEAD'), 'utf8').trim());
+      if (m) names.push(m[1]!);
+    } catch {
+      // HEAD のないリモートは飛ばす
+    }
+  }
+  names.push('main', 'master');
+  return names.find(has);
 }
 
 /** ワークツリーのフォルダにある `.git` ファイル（`gitdir: <場所>`）から、そのワークツリーのブランチ名を読む */
-function readWorktreeBranch(worktreeDir: string, heads: Map<string, string | undefined>): string | undefined {
+function readWorktreeBranch(worktreeDir: string, heads: Heads): string | undefined {
   try {
     const m = /^gitdir: (.+)$/m.exec(readFileSync(join(worktreeDir, '.git'), 'utf8'));
     return m?.[1] ? readHeadBranch(resolve(worktreeDir, m[1].trim()), heads) : undefined;
@@ -476,8 +532,11 @@ export function disposeBackgroundReaders(): void {
 /** `.git` の探索の結果を覚えておく長さ。ワークツリーを作ったり消したりしても、これが過ぎれば反映される */
 const GIT_SEARCH_TTL_MS = 60_000;
 
-/** `.git` を実際に探した回数（テスト用）。worktreeReads は findWorktreeRoot が `.git` を読もうとした回数 */
-const gitSearchCount = { worktreeReads: 0, anchorSearches: 0 };
+/**
+ * `.git` を実際に探した回数（テスト用）。worktreeReads は findWorktreeRoot が `.git` を読もうとした回数、
+ * defaultReads は既定のブランチ（readDefaultBranch）を読んだ回数
+ */
+const gitSearchCount = { worktreeReads: 0, anchorSearches: 0, defaultReads: 0 };
 
 /** 期限付きで、探した結果を使い回す表。期限の過ぎたものは sweep でまとめて捨てる */
 function createTtlCache<T>() {
@@ -511,6 +570,8 @@ interface SessionCaches {
   roots: TtlCache<string | undefined>;
   /** gitAnchors のないセッションの作業フォルダから探した git の情報 */
   anchors: TtlCache<GitAnchor | undefined>;
+  /** リポジトリ（commonDir）の既定のブランチ（readDefaultBranch） */
+  defaults: TtlCache<string | undefined>;
   /**
    * 解釈した local_*.json の中身 → アーカイブ済みのセッションから作ったもの。createJsonCache はファイルの stamp
    * （更新時刻、変更時刻、大きさ、番号）が変わるまで同じ中身を返し、変われば読み直した別の中身を返すので、stamp が変われば作り直しになる
@@ -584,7 +645,7 @@ const sessionCaches = new Map<string, SessionCaches>();
 function sessionCachesFor(dataBase: string): SessionCaches {
   let c = sessionCaches.get(dataBase);
   if (!c) {
-    c = { roots: createTtlCache(), anchors: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0, indexes: new Map(), dirs: new Map() };
+    c = { roots: createTtlCache(), anchors: createTtlCache(), defaults: createTtlCache(), archived: new WeakMap(), archivedBuilds: 0, indexes: new Map(), dirs: new Map() };
     sessionCaches.set(dataBase, c);
   }
   return c;
@@ -614,7 +675,7 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
   const cliIds = new Set<string>();
   /** バックグラウンドの作業を見ている、動いている CLI のセッション ID */
   const liveCliIds = new Set<string>();
-  const heads = new Map<string, string | undefined>();
+  const heads: Heads = new Map();
   const views: SessionView[] = [];
   // 通し番号を数えるためのもの。アーカイブ済みも入れる
   const numbered: SessionView[] = [];
@@ -626,6 +687,7 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
   const caches = sessionCachesFor(paths.dataBase);
   caches.roots.sweep(now);
   caches.anchors.sweep(now);
+  caches.defaults.sweep(now);
   /** 作業フォルダから探したワークツリーのフォルダ */
   const worktreeRootOf = (folder: string, commonDir: string, mainRoot: string | undefined) =>
     caches.roots.get(`${folderKey(folder)}|${folderKey(commonDir)}|${mainRoot ? folderKey(mainRoot) : ''}`, now, () =>
@@ -633,6 +695,12 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
     );
   /** gitAnchors のないセッションの作業フォルダから探した git の情報 */
   const gitAnchorOf = (folder: string) => caches.anchors.get(folderKey(folder), now, () => findGitAnchor(folder));
+  /** リポジトリの既定のブランチ。`.git` の探索と同じ期限で使い回す */
+  const defaultBranchOf = (commonDir: string) =>
+    caches.defaults.get(folderKey(commonDir), now, () => {
+      gitSearchCount.defaultReads++;
+      return readDefaultBranch(commonDir);
+    });
   /** アプリが作ったワークツリーのフォルダ → そのセッションのワークツリー（同じフォルダで始めたセッションを同じカードにまとめる） */
   const named = new Map<string, Pick<SessionView, 'worktree' | 'baseBranch'>>();
   /** ワークツリーの名前を持たず、フォルダから見つけたセッション → そのフォルダ */
@@ -698,7 +766,8 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       const summary = d.postTurnSummary ?? {};
       // リポジトリの外のワークツリー（git worktree add）で始めたセッションには gitAnchors がないことがあるので、作業フォルダから探す
       const startDir: string = d.originCwd || d.cwd || '';
-      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors)
+      // 空の配列も、ないものとして作業フォルダから探す（git 管理でなければ、探しても見つからない）
+      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors) && d.gitAnchors.length
         ? d.gitAnchors[0]
         : startDir
           ? gitAnchorOf(startDir)
@@ -708,27 +777,44 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       const commonDir: string | undefined = anchor?.commonDir;
       const repoRoot = commonDir && basename(commonDir).toLowerCase() === '.git' ? dirname(commonDir) : anchor?.gitRoot;
       const root: string = repoRoot || d.originCwd || d.cwd || '';
+      const cliId: string | undefined = typeof d.cliSessionId === 'string' && d.cliSessionId ? d.cliSessionId : undefined;
+      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない。記録の末尾は、止まったセッションの最後にいた場所にも使うので先に読む
+      const context =
+        !archived && contextReader && cliId
+          ? contextReader.read(cliId, [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f), typeof d.model === 'string' ? d.model : undefined)
+          : undefined;
+      // 止まったセッションが最後にいた場所（会話の記録の worktree-state か cwd）。ExitWorktree したなら null で、元のフォルダのまま
+      const lastPlace = !r && !archived && contextReader && cliId ? contextReader.placeOf(cliId) : undefined;
       // 動いている CLI が途中でワークツリーに入ったとき（EnterWorktree）は local_*.json が元のままなので、CLI の今の作業フォルダから探す。
+      // CLI が止まったあとは、会話の記録の最後にいた場所から探す（止まると元のフォルダのカードに戻らないように）。
       // ワークツリーのセッションが作業フォルダを分けずに始めたセッション（use_worktree: false）は、名前を持たず、
       // gitRoot も元のリポジトリを指すので、セッションの作業フォルダ（cwd）から探す
+      const here: string | undefined = r?.cwd || (typeof lastPlace === 'string' ? lastPlace : undefined) || d.cwd;
       const outside: string | undefined = d.worktreeName
         ? undefined
         : anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root)
           ? anchor.gitRoot
-          : commonDir && (r?.cwd || d.cwd)
-            ? worktreeRootOf(r?.cwd || d.cwd, commonDir, anchor?.gitRoot)
+          : commonDir && here
+            ? worktreeRootOf(here, commonDir, anchor?.gitRoot)
             : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
+      const mainHead = commonDir ? readHead(commonDir, heads) : undefined;
+      // アプリが作ったワークツリーのブランチは、記録（branch）ではなく実際の HEAD から読む。ワークツリーの中でブランチを切り替えると、
+      // 記録と食い違うため。読めなければ記録のまま。カードをまとめる目印は worktreeName のまま
+      const namedBranch: string | undefined = d.worktreeName
+        ? (typeof d.worktreePath === 'string' && d.worktreePath ? readWorktreeBranch(d.worktreePath, heads) : undefined) || d.branch || d.worktreeName
+        : undefined;
       const view: SessionView = {
         id: d.sessionId,
         title: d.title || ja.session.untitled,
         // git の情報がないセッションとも同じ目印になるよう、フォルダで比べる
         repoKey: folderKey(root),
         repoName: root ? basename(root) : ja.session.noFolder,
-        mainBranch: commonDir ? readHeadBranch(commonDir, heads) : undefined,
+        mainBranch: mainHead?.branch,
+        ...(mainHead?.commit && { mainHead: mainHead.commit.slice(0, SHORT_HEAD) }),
         ...(commonDir && { commonDir }),
-        worktree: d.worktreeName
-          ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
+        worktree: d.worktreeName && namedBranch
+          ? { key: d.worktreeName, label: shortBranch(namedBranch), branch: namedBranch }
           : outside && outsideBranch
             ? { key: folderKey(outside), label: shortBranch(outsideBranch), branch: outsideBranch }
             : undefined,
@@ -742,10 +828,18 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
         lastActivityAt: Number(d.lastActivityAt) || 0,
       };
       const mainBranch = view.mainBranch;
-      // 遅れとマージ済みを調べる元のブランチ。アプリが作ったワークツリーは sourceBranch、自分で作ったものは元のフォルダのブランチ
+      const recorded: string | undefined = typeof d.sourceBranch === 'string' && d.sourceBranch ? d.sourceBranch : undefined;
+      // 遅れとマージ済みを調べる元のブランチ。アプリが作ったワークツリーは sourceBranch、自分で作ったものは元のフォルダのブランチ。
+      // それがワークツリーのブランチそのもの（sourceBranch のブランチをそのままワークツリーにした）なら、既定のブランチにする
       if (view.worktree) {
-        const base = typeof d.sourceBranch === 'string' && d.sourceBranch ? d.sourceBranch : mainBranch;
+        let base = recorded ?? mainBranch;
+        if (base === view.worktree.branch && commonDir) base = defaultBranchOf(commonDir);
         if (base && base !== view.worktree.branch) view.baseBranch = base;
+      } else if (commonDir && view.workDir) {
+        // 元のフォルダが既定以外のブランチにいる、またはブランチにいないときは、既定のブランチを分岐元にする（割り出しはしない。
+        // git-status.ts は、ワークツリーでないセッションの分岐元を findBase に通さない）
+        const base = defaultBranchOf(commonDir) ?? recorded;
+        if (base && base !== mainBranch) view.baseBranch = base;
       }
       let namedKey: string | undefined;
       let folderEntry: string | undefined;
@@ -767,11 +861,9 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       }
       numbered.push(view);
       if (archived) continue;
-      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない
-      if (contextReader && typeof d.cliSessionId === 'string' && d.cliSessionId) {
-        cliIds.add(d.cliSessionId);
-        const folders = [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
-        const context = contextReader.read(d.cliSessionId, folders, typeof d.model === 'string' ? d.model : undefined);
+      // コンテキストの使用量（上で読んだもの）
+      if (contextReader && cliId) {
+        cliIds.add(cliId);
         if (context) view.context = context;
       }
       // バックグラウンドの作業。記録を読むのは待機中のときだけ（docs/research/session-status.md の「バックグラウンドの作業」）

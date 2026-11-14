@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { createBranchReader, createGitStatus, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, readRefs, withUpstream, type GitOptions } from '../src/main/git-status';
+import { classifyGitError, createBranchReader, createGitStatus, git as realGit, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, readRefs, withUpstream, type GitOptions, type ReadBranch } from '../src/main/git-status';
 import { tempDir, view, writeJson } from './helpers';
 
 describe('parseStatus', () => {
@@ -237,6 +237,23 @@ describe('元のブランチとの差', () => {
     ]);
   });
 
+  it('追跡するブランチがあっても、push していないコミットが 0 なら元のブランチとの差を ahead にする（push した PR の後）', async () => {
+    const branch = async () => ({ behind: 1, ahead: 4, merged: false });
+    const pushed = '# branch.oid 1\n# branch.head w\n# branch.upstream origin/w\n# branch.ab +0 -0\n';
+    const unpushed = '# branch.oid 1\n# branch.head w\n# branch.upstream origin/w\n# branch.ab +2 -0\n';
+    const outputs: Record<string, string> = { 'C:/P': pushed, 'C:/U': unpushed };
+    const status = createGitStatus(() => {}, async (dir) => outputs[dir]!, () => 0, branch, () => true);
+    const list = () => [view({ workDir: 'C:/P', baseBranch: 'main' }), view({ workDir: 'C:/U', baseBranch: 'main' })];
+    status.apply(list());
+    await tick();
+    await tick();
+    assert.deepEqual(status.apply(list()).map((s) => s.changes), [
+      { changed: 0, untracked: 0, ahead: 4, behind: 1, merged: false, aheadOfBase: true },
+      // push していないコミットがあれば、そちらを出す
+      { changed: 0, untracked: 0, ahead: 2, behind: 1, merged: false },
+    ]);
+  });
+
   it('元のフォルダのブランチを渡し、main に入っていたらマージした先を changes に入れる', async () => {
     const mains: (string | undefined)[] = [];
     const branch = async (_dir: string, _base: string, _remote?: string, main?: string) => {
@@ -244,12 +261,35 @@ describe('元のブランチとの差', () => {
       return { behind: 0, ahead: 1, merged: true, mergedInto: 'main' };
     };
     const status = createGitStatus(() => {}, async () => '', () => 0, branch, () => true);
-    const list = () => [view({ workDir: 'C:/W', baseBranch: 'develop', mainBranch: 'main' })];
+    const wt = { key: 'w', label: 'w', branch: 'w' };
+    const list = () => [view({ workDir: 'C:/W', baseBranch: 'develop', mainBranch: 'main', worktree: wt })];
     status.apply(list());
     await tick();
     await tick();
     assert.deepEqual(mains, ['main']);
     assert.deepEqual(status.apply(list())[0]!.changes, { changed: 0, untracked: 0, ahead: 1, behind: 0, merged: true, mergedInto: 'main', aheadOfBase: true });
+  });
+
+  it('元のフォルダ（ワークツリーでない）の分岐元は割り出さず、main も渡さない。追跡するブランチがあっても遅れは分岐元と比べる', async () => {
+    const found: string[] = [];
+    const findBase = async (dir: string, recorded: string) => (found.push(dir), `${recorded}-found`);
+    const seen: [string, string | undefined][] = [];
+    const branch = async (_dir: string, base: string, _remote?: string, main?: string) => (seen.push([base, main]), { behind: 2, ahead: 1, merged: false });
+    const out = '# branch.oid 1\n# branch.head feature\n# branch.upstream origin/feature\n# branch.ab +0 -3\n';
+    const fetchOn: GitOptions = { fetchEnabled: true, countUntracked: true, remoteOf: () => undefined };
+    const status = createGitStatus(() => {}, async () => out, () => 0, branch, () => true, () => fetchOn, findBase);
+    const wt = { key: 'w', label: 'w', branch: 'w' };
+    const list = () => [
+      view({ workDir: 'C:/Main', baseBranch: 'main', mainBranch: 'feature' }),
+      view({ workDir: 'C:/W', baseBranch: 'main', mainBranch: 'feature', worktree: wt }),
+    ];
+    status.apply(list());
+    for (let i = 0; i < 4; i++) await tick();
+    assert.deepEqual(found, ['C:/W']);
+    assert.deepEqual(seen, [['main', undefined], ['main-found', 'feature']]);
+    const [main] = status.apply(list());
+    assert.deepEqual(main!.changes, { changed: 0, untracked: 0, ahead: 1, behind: 2, merged: false, aheadOfBase: true });
+    assert.equal(main!.baseBranch, 'main');
   });
 
   it('フォルダがもうなければ、ないことを印にする', async () => {
@@ -582,5 +622,129 @@ describe('readRefs（共有の場所の決め方とたどり方）', () => {
     assert.deepEqual(readRefs(repo, ['refs/heads/x']), { head: a, refs: [b] });
     writeJson(join(repo, '.git', 'refs', 'heads', 'z'), 'ref: refs/heads/x\n');
     assert.equal(readRefs(repo, ['refs/heads/x']), undefined);
+  });
+});
+
+describe('本物の git で、ふだんの読み直しで git を増やさない', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', '-C', cwd, ...args], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim();
+
+  it('元のフォルダが既定以外のブランチ（push 済みと未 push）でも、ref が変わらなければ分岐元との比べに git を起動しない', async () => {
+    const repo = join(tmp.path, 'repo');
+    const remote = join(tmp.path, 'remote.git');
+    try {
+      g(tmp.path, 'init', '-q', '-b', 'main', repo);
+    } catch {
+      return; // git がなければ確かめない
+    }
+    g(repo, 'commit', '-q', '--allow-empty', '-m', 'one');
+    g(repo, 'switch', '-q', '-c', 'feature');
+    g(repo, 'commit', '-q', '--allow-empty', '-m', 'two');
+    g(repo, 'commit', '-q', '--allow-empty', '-m', 'three');
+
+    const reader = createBranchReader();
+    /** 分岐元との比べが終わるたびに解ける約束 */
+    let done = () => {};
+    let compared = new Promise<void>((r) => (done = r));
+    const branch: ReadBranch = async (...args) => {
+      try {
+        return await reader(...args);
+      } finally {
+        done();
+      }
+    };
+    let statusRuns = 0;
+    const run = async (dir: string, untracked?: boolean) => {
+      statusRuns++;
+      return realGit(dir, ['status', '--porcelain=v2', '--branch', ...(untracked === false ? ['--untracked-files=no'] : [])]);
+    };
+    const status = createGitStatus(() => {}, run, () => 0, branch, () => true);
+    const list = () => [view({ workDir: repo, baseBranch: 'main', mainBranch: 'feature' })];
+    const round = async () => {
+      compared = new Promise<void>((r) => (done = r));
+      status.invalidate();
+      status.apply(list());
+      await compared;
+      await tick();
+      return status.apply(list())[0]!.changes;
+    };
+
+    // 1a：push していない。追跡するブランチがないので、分岐元に未マージの数を出す
+    assert.deepEqual(await round(), { changed: 0, untracked: 0, ahead: 2, behind: 0, merged: false, aheadOfBase: true });
+    const calls = reader.stats().calls;
+    assert.ok(calls > 0);
+    for (let i = 0; i < 3; i++) await round();
+    assert.equal(reader.stats().calls, calls, 'ref が同じなら分岐元との比べに git を起動しない');
+    assert.equal(statusRuns, 4, 'git status は読み直しのたびに 1 回だけ');
+
+    // 1b：push 済み（追跡するブランチがあり、push していないコミットは 0）でも、分岐元に未マージの数を出す
+    g(tmp.path, 'init', '-q', '--bare', remote);
+    g(repo, 'remote', 'add', 'origin', remote);
+    g(repo, 'push', '-q', '-u', 'origin', 'feature');
+    assert.deepEqual(await round(), { changed: 0, untracked: 0, ahead: 2, behind: 0, merged: false, aheadOfBase: true });
+    const after = reader.stats().calls;
+    await round();
+    assert.equal(reader.stats().calls, after);
+  });
+});
+
+describe('git の失敗', () => {
+  it('理由を見分ける：git がない、タイムアウト、safe.directory、そのほか', () => {
+    assert.equal(classifyGitError(Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })), 'missing');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { killed: true, signal: 'SIGTERM' })), 'timeout');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { code: 128, stderr: "fatal: detected dubious ownership in repository at 'C:/R'" })), 'unsafe');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { code: 128, stderr: 'fatal: not a git repository' })), 'other');
+    assert.equal(classifyGitError(undefined), 'other');
+  });
+
+  it('フォルダがあるのに失敗したら、理由をセッションに付ける。成功したら外す', async () => {
+    let fail = true;
+    const run = async () => {
+      if (fail) throw Object.assign(new Error('x'), { killed: true });
+      return '';
+    };
+    let now = 0;
+    const status = createGitStatus(() => {}, run, () => now, noBranch, () => true);
+    status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    await tick();
+    const [s] = status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    assert.equal(s!.changes, undefined);
+    assert.equal(s!.gitError, 'timeout');
+    fail = false;
+    now = 30_000;
+    status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    await tick();
+    const [ok] = status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    assert.equal(ok!.gitError, undefined);
+    assert.ok(ok!.changes);
+  });
+
+  it('2 回続けて失敗したフォルダは、5 分まで（ターンの終わりでも）調べ直さない', async () => {
+    let calls = 0;
+    const run = async () => {
+      calls++;
+      throw Object.assign(new Error('x'), { code: 'ENOENT' });
+    };
+    let now = 0;
+    const status = createGitStatus(() => {}, run, () => now, noBranch, () => true);
+    const round = async (t: number, state: 'busy' | 'idle' = 'busy') => {
+      now = t;
+      status.apply([view({ workDir: 'C:/NoGit', state })]);
+      await tick();
+    };
+    await round(0);
+    await round(30_000);
+    assert.equal(calls, 2);
+    await round(60_000);
+    await round(90_000, 'idle');
+    await round(30_000 + 5 * 60_000 - 1);
+    assert.equal(calls, 2, '続けて失敗している間は延ばす');
+    await round(30_000 + 5 * 60_000);
+    assert.equal(calls, 3);
   });
 });

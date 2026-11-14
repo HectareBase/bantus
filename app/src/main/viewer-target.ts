@@ -26,7 +26,7 @@ export interface ViewerFs {
 
 /** カードの名前と同じく、ワークツリーならその名前、元のフォルダならブランチ名 */
 export function viewerPlace(s: SessionView): string {
-  return s.worktree?.label ?? s.mainBranch ?? ja.widget.originFolder;
+  return s.worktree?.label ?? s.mainBranch ?? s.mainHead ?? ja.widget.originFolder;
 }
 
 /**

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { NO_ARCHIVE, buildRepos, changeItems, contextLevel, WAITING_LABELS, type WorktreeCard } from '../src/renderer/model';
+import { NO_ARCHIVE, buildRepos, changeItems, contextLevel, markItems, WAITING_LABELS, type WorktreeCard } from '../src/renderer/model';
 import { readFixture, readFixtureHolds } from '../src/main/sessions';
 import type { SessionState } from '../src/shared/types';
 import { FIXTURES } from './helpers';
@@ -130,4 +130,25 @@ describe('all-states はすべての表示を含む', () => {
     assert.ok(mins.some((m) => m >= 60 && m < 1440));
     assert.ok(mins.some((m) => m >= 1440));
   });
+});
+
+describe('git-gaps は git の印の抜けを埋めた場面を含む（npm run debug git-gaps）', () => {
+  const now = Date.now();
+  const sessions = readFixture(join(FIXTURES, 'git-gaps.json'), now, 0);
+  const cards = buildRepos(sessions, { ...NO_ARCHIVE, now, mainMinutes: 10 }).flatMap((r) => r.cards);
+  const card = (repo: string, main = true) => cards.find((c) => c.key.startsWith(`${repo}|`) && c.isMain === main)!;
+
+  it('1a・1b：元のフォルダが既定以外のブランチにいて、分岐元に未マージの数を出す', () => {
+    for (const repo of ['gaps-local-branch', 'gaps-pushed-branch']) {
+      const c = card(repo);
+      assert.equal(c.base?.branch, 'main');
+      assert.ok(c.changes?.aheadOfBase && c.changes.ahead > 0, repo);
+    }
+  });
+  it('1c：push したワークツリーでも、分岐元に未マージの数を出す', () => assert.ok(card('gaps-pushed-worktree', false).changes?.aheadOfBase));
+  it('1d：数がすべて 0 でも、薄いブランチのアイコンを出す', () =>
+    assert.deepEqual(markItems(card('gaps-clean').changes), [{ icon: 'git-branch', count: 0, kind: 'clean' }]));
+  it('3：ブランチにいない元のフォルダは、短いコミット ID の名前', () => assert.equal(card('gaps-detached').label, '3f9c2e1'));
+  it('4：失敗の理由 3 種類', () =>
+    assert.deepEqual(cards.filter((c) => c.gitError).map((c) => c.gitError).sort(), ['missing', 'timeout', 'unsafe']));
 });

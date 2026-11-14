@@ -107,6 +107,8 @@ export const ja = {
     plan: (n: number, total: number) => `タスクリスト：手順 ${n}/${total}`,
     needsAction: (what: string) => `次にすること：${what}`,
     unknownBranch: '（ブランチ不明）',
+    /** メインの作業フォルダがブランチにいない（detached HEAD）とき。id は短いコミット ID */
+    detached: (id: string) => `ブランチなし（${id}）`,
     contextPercent: (pct: number, tokens: string, window: string) => `コンテキスト：${pct}%（${tokens} / ${window}）`,
     contextUnknownWindow: (tokens: string, model?: string) => `コンテキスト：${tokens}（上限不明${model ? `：${model}` : ''}）`,
   },
@@ -128,6 +130,15 @@ export const ja = {
     behind: (n: number) => `元のブランチからの遅れ：${n}`,
     /** 比べている分岐元がわかるとき。メインの作業フォルダの追跡するブランチ（`origin/main` など）にも使う */
     behindNamed: (base: string, n: number) => `${base} からの遅れ：${n}`,
+    /** 調べ終えて、数がすべて 0 のとき */
+    clean: '変更はありません',
+    /** git が失敗したときの理由（GitFailure） */
+    failed: {
+      timeout: 'git が 5 秒で終わりませんでした',
+      unsafe: 'git がこのフォルダを信頼していません（safe.directory）',
+      missing: 'git が見つかりません（PATH）',
+      other: 'git の実行に失敗しました',
+    },
   },
 
   /** 通知バナー（Windows のトースト通知）の本文 */

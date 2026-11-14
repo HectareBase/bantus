@@ -1,0 +1,22 @@
+[
+  { "id": "local_gaps-01", "title": "1a：元のフォルダで切ったブランチ（push していない）", "repoKey": "gaps-local-branch", "repoName": "gaps-local-branch",
+    "mainBranch": "feature/search", "baseBranch": "main",
+    "changes": { "changed": 0, "untracked": 0, "ahead": 2, "behind": 1, "merged": false, "aheadOfBase": true }, "state": "idle", "minutesAgo": 5 },
+  { "id": "local_gaps-02", "title": "1b：元のフォルダで切ったブランチ（push 済み）", "repoKey": "gaps-pushed-branch", "repoName": "gaps-pushed-branch",
+    "mainBranch": "feature/pushed", "baseBranch": "main",
+    "changes": { "changed": 0, "untracked": 0, "ahead": 3, "behind": 0, "merged": false, "aheadOfBase": true }, "state": "idle", "minutesAgo": 20 },
+  { "id": "local_gaps-03", "title": "1c：push して PR を出したワークツリー", "repoKey": "gaps-pushed-worktree", "repoName": "gaps-pushed-worktree", "mainBranch": "main",
+    "worktree": { "key": "pr-open", "label": "pr-open", "branch": "claude/pr-open-5a6b7c" }, "baseBranch": "main",
+    "changes": { "changed": 0, "untracked": 0, "ahead": 4, "behind": 0, "merged": false, "aheadOfBase": true }, "state": "idle", "minutesAgo": 30 },
+  { "id": "local_gaps-04", "title": "1d：既定のブランチで変更なし", "repoKey": "gaps-clean", "repoName": "gaps-clean", "mainBranch": "main",
+    "changes": { "changed": 0, "untracked": 0, "ahead": 0, "behind": 0, "merged": false }, "state": "idle", "minutesAgo": 8 },
+  { "id": "local_gaps-05", "title": "3：元のフォルダがブランチにいない（detached HEAD）", "repoKey": "gaps-detached", "repoName": "gaps-detached",
+    "mainHead": "3f9c2e1", "baseBranch": "main",
+    "changes": { "changed": 1, "untracked": 0, "ahead": 0, "behind": 2, "merged": false }, "state": "idle", "minutesAgo": 50 },
+  { "id": "local_gaps-06", "title": "4：safe.directory で拒まれた", "repoKey": "gaps-failed", "repoName": "gaps-failed", "mainBranch": "main",
+    "gitError": "unsafe", "state": "idle", "minutesAgo": 2 },
+  { "id": "local_gaps-07", "title": "4：git が 5 秒で終わらない", "repoKey": "gaps-failed", "repoName": "gaps-failed", "mainBranch": "main",
+    "worktree": { "key": "slow", "label": "slow", "branch": "claude/slow-8d9e0f" }, "gitError": "timeout", "state": "busy", "minutesAgo": 0, "busyMinutes": 3 },
+  { "id": "local_gaps-08", "title": "4：git が見つからない", "repoKey": "gaps-failed", "repoName": "gaps-failed", "mainBranch": "main",
+    "worktree": { "key": "nogit", "label": "nogit", "branch": "claude/nogit-1f2a3b" }, "gitError": "missing", "state": "idle", "minutesAgo": 15 }
+]

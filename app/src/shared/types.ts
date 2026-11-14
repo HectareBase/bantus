@@ -18,6 +18,8 @@ export interface SessionView {
   repoName: string;
   /** メインの作業場所のブランチ名（`.git/HEAD` から。わからなければ undefined） */
   mainBranch?: string;
+  /** メインの作業場所がブランチにいない（detached HEAD）ときの、短いコミット ID。カードの名前に使う */
+  mainHead?: string;
   /** ワークツリーのときだけ。小見出しの目印と表示名 */
   worktree?: {
     key: string;
@@ -26,7 +28,10 @@ export interface SessionView {
     /** 元のブランチ名（ツールチップ用） */
     branch: string;
   };
-  /** ワークツリーを作った元のブランチ（`sourceBranch`。なければ元のフォルダのブランチ）。遅れとマージ済みを調べるのに使う */
+  /**
+   * 遅れとマージ済みを調べる分岐元。ワークツリーは作った元のブランチ（`sourceBranch`。なければ元のフォルダのブランチ）で、
+   * git-status.ts が割り出した名前に置き換える。元のフォルダは、既定以外のブランチにいるかブランチにいないときだけ既定のブランチ
+   */
   baseBranch?: string;
   /** 別のセッションから作られたときの、元のセッションの ID（`spawnedFrom.sessionId`。サイドチャットは除く） */
   spawnedFrom?: string;
@@ -34,6 +39,8 @@ export interface SessionView {
   summary?: string;
   /** 元のリポジトリの .git（ワークツリーでも共通のもの）。リモートの取得の単位（src/main/git-fetch.ts）。git 管理でなければ undefined */
   commonDir?: string;
+  /** 作業フォルダの git が失敗した理由（src/main/git-status.ts）。調べられたら、または調べていなければ undefined */
+  gitError?: GitFailure;
   /** git status を調べる作業フォルダ（git 管理でなければ undefined） */
   workDir?: string;
   /** コンテキストの使用量（会話の記録の末尾から。src/main/context-usage.ts）。読めなければ undefined */
@@ -93,12 +100,15 @@ export interface ContextUsage {
 }
 
 /** `git status` から数えた件数（src/main/git-status.ts） */
+/** git が失敗した理由。timeout：5 秒で打ち切った、unsafe：safe.directory で拒まれた、missing：git が見つからない、other：そのほか */
+export type GitFailure = 'timeout' | 'unsafe' | 'missing' | 'other';
+
 export interface GitChanges {
   /** 変更したファイル（ステージしたものも含む） */
   changed: number;
   /** 未追跡のファイル（.gitignore に入っているものは除く） */
   untracked: number;
-  /** まだ push していないコミット。追跡するブランチがないワークツリーでは、元のブランチにまだ入っていないコミット（aheadOfBase） */
+  /** まだ push していないコミット。分岐元があり、追跡するブランチがないか push していないコミットが 0 なら、分岐元にまだ入っていないコミット（aheadOfBase） */
   ahead: number;
   /** ahead を元のブランチと比べて数えた（追跡するブランチがない） */
   aheadOfBase?: boolean;

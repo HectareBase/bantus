@@ -78,6 +78,14 @@
 | `status` / `waitingFor` | 状態と、待ちの理由 |
 | `updatedAt` / `statusUpdatedAt` | 最後にファイルが更新された時刻と、状態が変わった時刻（Unix ミリ秒） |
 
+### 会話の記録の worktree-state（CLI が止まったあとの居場所）
+CLI が止まると上のファイルが消えるので、途中で EnterWorktree したセッションは `local_*.json` からは元のフォルダにしか見えません。会話の記録（`~/.claude/projects/<フォルダ>/<cliSessionId>.jsonl`）からは分かります。手元の EnterWorktree を使った 8 件の記録で確かめました。
+
+- `{"type":"worktree-state","worktreeSession":{...}}` の行を、入ったあと何度も書きます（末尾の近くにもあります）。`worktreeSession` には `worktreePath`、`worktreeName`、`worktreeBranch`、`originalCwd` などが入ります。ExitWorktree すると `worktreeSession` が `null` になります
+- 古い CLI の記録（1 件）には `worktree-state` がありませんでした。その場合も、各行の `cwd` は EnterWorktree の次の行からワークツリー（そのサブフォルダのこともある）を指します
+- 記録の置き場所は 2 通りありました。元のフォルダのプロジェクトのフォルダのまま（5 件）か、ワークツリーのプロジェクトのフォルダ（3 件。ExitWorktree していないもの）です。名前から探して見つからなければ、`projects` の下を探します（`context-usage.ts` の `createTranscriptLocator`）
+- ウィジェットは、コンテキストの使用量で読む末尾から最後の `worktree-state`（なければ最後の `cwd`）を拾い、止まったセッションの居場所にします（`parseLastPlace`）。アーカイブ済みのセッションは記録を読まないので、元のフォルダの扱いのままです
+
 ## 触ってはいけないもの
 次のファイルには、ログイン用のトークンやアカウント情報が入っています。ウィジェットから読み込まないでください。ログに出したり、どこかへ共有したりもしないでください。
 

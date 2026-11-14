@@ -6,7 +6,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { GitChanges, SessionState, SessionView } from '../shared/types';
+import type { GitChanges, GitFailure, SessionState, SessionView } from '../shared/types';
 import { createBaseFinder, type FindBase } from './base-branch';
 import { findGitDirs, folderKey } from './sessions';
 
@@ -18,6 +18,10 @@ const TIMEOUT_MS = 5_000;
  */
 const MAX_AGE_ACTIVE_MS = 30_000;
 const MAX_AGE_QUIET_MS = 5 * 60_000;
+/** 続けて失敗したフォルダを調べ直す間。git が見つからない PC や、毎回タイムアウトするリポジトリで、30 秒ごとに git を待たないため */
+const MAX_AGE_FAILING_MS = 5 * 60_000;
+/** この回数続けて失敗したら、MAX_AGE_FAILING_MS まで調べ直さない */
+const FAILING_AFTER = 2;
 
 /** `git status --porcelain=v2 --branch` の出力を数える */
 export function parseStatus(output: string): GitChanges {
@@ -77,9 +81,19 @@ export function git(dir: string, args: string[]): Promise<string> {
       'git',
       ['--no-optional-locks', '-C', dir, ...args],
       { timeout: TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } },
-      (err, stdout) => (err ? reject(err) : resolve(stdout)),
+      // 失敗の理由（safe.directory など）を見分けられるよう、標準エラーを付けて返す
+      (err, stdout, stderr) => (err ? reject(Object.assign(err, { stderr })) : resolve(stdout)),
     );
   });
+}
+
+/** git の失敗の理由を見分ける（docs/design/git-changes.md の「失敗の表示」） */
+export function classifyGitError(e: unknown): GitFailure {
+  const err = (e ?? {}) as { code?: unknown; killed?: boolean; stderr?: unknown; message?: unknown };
+  if (err.code === 'ENOENT') return 'missing';
+  if (err.killed || err.code === 'ETIMEDOUT') return 'timeout';
+  if (/safe\.directory|dubious ownership/i.test(`${String(err.stderr ?? '')}\n${String(err.message ?? '')}`)) return 'unsafe';
+  return 'other';
 }
 
 function runGit(dir: string, untracked = true): Promise<string> {
@@ -261,6 +275,10 @@ interface Entry {
   upstream?: Upstream;
   /** 割り出した分岐元（base-branch.ts）。ワークツリーだけ。セッションの baseBranch をこれに置き換える */
   base?: string;
+  /** git が失敗した理由（フォルダはあるのに調べられなかった） */
+  error?: GitFailure;
+  /** 続けて失敗した回数。成功したら 0 */
+  failures: number;
   at: number;
 }
 
@@ -291,6 +309,8 @@ interface Folder {
   /** 元のフォルダの今のブランチ。元のブランチと違えば、マージした先として調べる */
   main?: string;
   commonDir?: string;
+  /** base を割り出さず（findBase を通さず）にそのまま使う。元のフォルダの既定のブランチ */
+  fixed?: boolean;
   states: SessionState[];
 }
 
@@ -312,7 +332,7 @@ export function createGitStatus(
   const lastStates = new Map<string, SessionState[]>();
   /** 作業フォルダの目印 → リポジトリの目印（取得のあとで、そのリポジトリの作業フォルダを調べ直すため） */
   const repoOf = new Map<string, string>();
-  const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string }[] = [];
+  const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string; fixed?: boolean }[] = [];
   let running = false;
 
   async function drain() {
@@ -320,36 +340,45 @@ export function createGitStatus(
     running = true;
     let changed = false;
     while (queue.length) {
-      const { key, dir, base, main, commonDir } = queue.shift()!;
+      const { key, dir, base, main, commonDir, fixed } = queue.shift()!;
       const opts = options();
       let changes: GitChanges | undefined;
       let upstream: Upstream | undefined;
       let found: string | undefined;
+      let error: GitFailure | undefined;
       try {
         const output = await run(dir, opts.countUntracked);
         changes = parseStatus(output);
         if (base) {
-          // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる
-          found = await findBase(dir, base, main);
+          // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる。
+          // 元のフォルダ（fixed）は既定のブランチをそのまま使い、main（自分のブランチ）にマージしたかも調べない
+          found = fixed ? base : await findBase(dir, base, main);
           const remote = commonDir ? opts.remoteOf(commonDir) : undefined;
-          const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, main);
+          const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, fixed ? undefined : main);
           changes.behind = info.behind;
           changes.merged = info.merged;
           if (info.mergedInto) changes.mergedInto = info.mergedInto;
           // Claude が作るワークツリーのブランチには、ふつう追跡するブランチがない。そのときは push していないコミットの代わりに、
-          // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）
-          if (!hasUpstream(output)) {
+          // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）。
+          // 追跡するブランチがあっても push していないコミットが 0 なら同じにする（push して PR を出したあと、マージされるまで残りを見せる）。
+          // どちらも上の branch の結果を使うだけで、git は増やさない
+          if (!hasUpstream(output) || changes.ahead === 0) {
             changes.ahead = info.ahead;
             changes.aheadOfBase = true;
           }
         } else upstream = parseUpstream(output);
-      } catch {
-        // ワークツリーのフォルダを消したときは、カードごとアーカイブできるよう印を付ける
-        changes = exists(dir) ? undefined : { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false, gone: true };
+      } catch (e) {
+        // ワークツリーのフォルダを消したときは、カードごとアーカイブできるよう印を付ける。
+        // フォルダがあるのに調べられなかったときは、理由を覚えて知らせる
+        if (exists(dir)) {
+          changes = undefined;
+          error = classifyGitError(e);
+        } else changes = { changed: 0, untracked: 0, ahead: 0, behind: 0, merged: false, gone: true };
       }
       const prev = cache.get(key);
-      if (JSON.stringify([prev?.changes, prev?.upstream, prev?.base]) !== JSON.stringify([changes, upstream, found])) changed = true;
-      cache.set(key, { changes, ...(upstream && { upstream }), ...(found && { base: found }), at: now() });
+      if (JSON.stringify([prev?.changes, prev?.upstream, prev?.base, prev?.error]) !== JSON.stringify([changes, upstream, found, error])) changed = true;
+      const failures = error ? (prev?.failures ?? 0) + 1 : 0;
+      cache.set(key, { changes, ...(upstream && { upstream }), ...(found && { base: found }), ...(error && { error }), failures, at: now() });
     }
     running = false;
     if (changed) onUpdate();
@@ -357,7 +386,7 @@ export function createGitStatus(
 
   /** 作業フォルダの目印 → そのフォルダを使うセッションの状態。調べ直しが要るものを並べる */
   function update(folders: Map<string, Folder>) {
-    for (const [key, { dir, base, main, commonDir, states }] of folders) {
+    for (const [key, { dir, base, main, commonDir, fixed, states }] of folders) {
       if (commonDir) repoOf.set(key, folderKey(commonDir));
       const prev = lastStates.get(key);
       lastStates.set(key, states);
@@ -365,10 +394,12 @@ export function createGitStatus(
       const entry = cache.get(key);
       // 対応待ちも入れる：許可を待つ間などもターンの途中で、それまでの処理で変更が増えていることが多い
       const active = states.some((s) => s === 'busy' || s === 'waiting');
-      const maxAge = active ? MAX_AGE_ACTIVE_MS : MAX_AGE_QUIET_MS;
+      // 続けて失敗しているフォルダは、間を延ばし、ターンの終わりでも調べ直さない（invalidate では調べ直す）
+      const failing = (entry?.failures ?? 0) >= FAILING_AFTER;
+      const maxAge = failing ? MAX_AGE_FAILING_MS : active ? MAX_AGE_ACTIVE_MS : MAX_AGE_QUIET_MS;
       // 処理中だったセッションが処理中でなくなった：ターンが終わり、変更が増えたかもしれない
-      const turnEnded = prev !== undefined && prev.filter((s) => s === 'busy').length > states.filter((s) => s === 'busy').length;
-      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir) });
+      const turnEnded = !failing && prev !== undefined && prev.filter((s) => s === 'busy').length > states.filter((s) => s === 'busy').length;
+      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir), fixed });
     }
     for (const key of cache.keys()) if (!folders.has(key)) cache.delete(key);
     for (const key of lastStates.keys()) if (!folders.has(key)) lastStates.delete(key);
@@ -382,7 +413,8 @@ export function createGitStatus(
     for (const s of sessions) {
       if (!s.workDir) continue;
       const key = folderKey(s.workDir);
-      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, main: s.mainBranch, commonDir: s.commonDir, states: [] };
+      // ワークツリーでないセッション（元のフォルダ）の分岐元は既定のブランチ（sessions.ts）。割り出さずにそのまま使う
+      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, main: s.mainBranch, commonDir: s.commonDir, fixed: !s.worktree, states: [] };
       f.base ??= s.baseBranch;
       f.main ??= s.mainBranch;
       f.commonDir ??= s.commonDir;
@@ -395,6 +427,7 @@ export function createGitStatus(
       const entry = s.workDir ? cache.get(folderKey(s.workDir)) : undefined;
       if (entry?.changes) s.changes = withUpstream(entry.changes, entry.upstream, fetchEnabled);
       if (entry?.base && s.baseBranch) s.baseBranch = entry.base;
+      if (entry?.error) s.gitError = entry.error;
     }
     return sessions;
   }

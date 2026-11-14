@@ -30,6 +30,7 @@ const SAMPLES = {
   'time.heldDays': [[2]],
   'tooltip.worktree': [['feature-x']],
   'tooltip.origin': [['main']],
+  'tooltip.detached': [['abc1234']],
   'tooltip.waiting': [['許可待ち']],
   'tooltip.background': [[1], [3]],
   'tooltip.plan': [[2, 3], [8, 8]],
