@@ -260,6 +260,170 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .repo-archived-icon svg { width: 11px; height: 11px; }
 .repo-archived .n { min-width: 1ch; line-height: 1; text-align: center; }
 
+/* ---- プロジェクトの ToDo（docs/design/todos.md） ----
+   見出しの名前のすぐ右に「ToDo を足す」ボタン。ふだんは薄く、見出しに乗せると濃くする。
+   リストは見出しとカードの間に置き、行は低く（22px）、枠の余白も 2px だけにする。1 件もなければ出さない（hidden）。
+   チェックした行は済みの見た目にして、下の細い線を --leave-ms かけて縮める。縮みきったら薄くして高さを詰めて消える（todo.ts）。
+   動きは transform と opacity が中心で、高さを詰めるのだけは消える一度きり */
+:root { --leave-ms: 2500ms; }
+.todo-add {
+  flex: none;
+  width: 20px;
+  height: 18px;
+  margin-left: -2px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  opacity: 0.55;
+}
+.todo-add svg { width: 14px; height: 14px; }
+.repo-header:hover .todo-add, .todo-add:focus-visible { opacity: 1; }
+.todo-add:hover { background: var(--hover); color: var(--text); }
+
+.todos {
+  margin: 0 0 6px;
+  padding: 2px 0;
+  background: var(--hover);
+  border: 1px solid var(--divider);
+  border-radius: 7px;
+}
+.todos[hidden] { display: none; }
+.todo {
+  position: relative;
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+  margin: 0 2px;
+  padding: 0 2px 0 7px;
+  border-radius: 5px;
+  overflow: hidden;
+  transition: height 0.2s ease 0.25s, opacity 0.25s ease, margin 0.2s ease 0.25s;
+}
+.todo:hover { background: var(--row-hover); }
+.todo-check {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--text-tertiary);
+  border-radius: 3px;
+  background: transparent;
+  color: #1a1a1a;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+.todo-check svg { width: 9px; height: 9px; stroke-width: 4; opacity: 0; transform: scale(0.4); transition: opacity 0.12s, transform 0.15s; }
+.todo:hover .todo-check { border-color: var(--text-secondary); }
+.todo-text {
+  position: relative;
+  justify-self: start;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  cursor: text;
+  outline: none;
+  transition: color 0.2s;
+}
+.todo-text:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); border-radius: 3px; }
+/* 打ち消し線は左から引く */
+.todo-text::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 52%;
+  width: 100%;
+  height: 1px;
+  background: var(--text-tertiary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+}
+.todo-del {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  visibility: hidden;
+}
+.todo-del svg { width: 10px; height: 10px; stroke-width: 2.4; }
+.todo:hover .todo-del { visibility: visible; }
+.todo-del:hover { background: var(--hover); color: var(--text); }
+/* チェックした直後：済みの見た目にして、下に残り時間の細い線を縮める。この間にチェックを外すと取り消し */
+.todo.leaving .todo-check { background: var(--idle); border-color: var(--idle); }
+.todo.leaving .todo-check svg { opacity: 1; transform: none; }
+.todo.leaving .todo-text { color: var(--text-tertiary); }
+.todo.leaving .todo-text::after { transform: scaleX(1); }
+.todo.leaving .todo-del { display: none; }
+.todo::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--idle) 70%, transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.todo.leaving::before { animation: todo-countdown var(--leave-ms) linear forwards; animation-delay: var(--elapsed, 0ms); }
+@keyframes todo-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* 時間が来たら、薄くしてから高さを詰めて消える */
+.todo.gone { opacity: 0; height: 0; margin-top: 0; margin-bottom: 0; }
+/* 足す欄と書き直す欄 */
+.todo input {
+  width: 100%;
+  min-width: 0;
+  height: 18px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: rgb(var(--card-rgb));
+  border: 1px solid var(--text-tertiary);
+  border-radius: 4px;
+  outline: 0;
+}
+.todo input::placeholder { color: var(--text-tertiary); }
+.todo.new .todo-check { border-style: dashed; }
+/* 畳んだときの「ほか N 件」と、開いたときの「畳む」 */
+.todo-fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: calc(100% - 4px);
+  height: 20px;
+  margin: 0 2px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: left;
+}
+.todo-fold:hover { background: var(--hover); color: var(--text); }
+.todo-fold svg { width: 11px; height: 11px; stroke-width: 2.4; transition: transform 0.15s; }
+.todo-fold[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* ひかえめ（と動きを減らす設定）：線を引く・縮める・詰める動きをやめ、チェックしたらすぐ済みの見た目にする。消えるのは同じ時間のあと */
+html[data-motion="subtle"] :is(.todo, .todo-check, .todo-check svg, .todo-text, .todo-fold svg),
+html[data-motion="subtle"] .todo-text::after { transition: none; }
+html[data-motion="subtle"] .todo.leaving::before { animation: none; }
+
 .badge {
   flex: none;
   font-size: 11px;
@@ -998,6 +1162,16 @@ html.island .repo {
   border: 1px solid #000;
   box-shadow: inset 0 3px 3px -2px rgba(0, 0, 0, 0.95), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
 }
+/* ToDo のリストは盆の底より一段沈める */
+html.island .todos {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+html.island .todo-check { border-color: #8a8a8a; }
+html.island .todo:hover .todo-check { border-color: #c8c8c8; }
+html.island .todo input { background: #1a1a1a; border-color: #6a6a6a; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25); }
+html.island .todo input::placeholder { color: #7a7a7a; }
 html.island .card {
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);

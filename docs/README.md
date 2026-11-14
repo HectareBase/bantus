@@ -27,6 +27,7 @@ Claude デスクトップと CLI について、調べて分かったことで�
 | [git-fetch.md](design/git-fetch.md) | リモートの定期的な取得（`git fetch`）と、設定の git のカテゴリ |
 | [worktree-cards.md](design/worktree-cards.md) | ワークツリー単位のカードと Bantus のアーカイブ（実現性の確認と仕様） |
 | [packaging-plan.md](design/packaging-plan.md) | exe 化とインストーラーの計画（electron-builder、NSIS）と、確かめた結果 |
+| [todos.md](design/todos.md) | プロジェクトの ToDo（見出しの右のボタンで足し、見出しとカードの間にチェックリストで出す）の作りと保存先 |
 | [hold.md](design/hold.md) | 保留（あとで再開するセッションとワークツリーに、ピンクの印と理由のメモを付ける）の実装イメージ |
 | [html-viewer.md](design/html-viewer.md) | HTML ビューア（今開いているセッションの作業フォルダの HTML を、カードの一覧の下に出す） |
 | [gpu.md](design/gpu.md) | GPU（ハードウェア アクセラレーション）を使わない設定と、使うときとの比べ（メモリ、CPU、見た目） |

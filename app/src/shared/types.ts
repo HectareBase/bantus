@@ -1,6 +1,7 @@
 // メインプロセスと画面の両方で使う型
 
 import type { ActionId, ArchiveMark, HoldMark, Motion, Settings, StatusColors } from './settings';
+import type { TodoItem, TodoStore } from './todos';
 
 /**
  * セッションの状態（docs/research/session-status.md）。stopped（CLI のプロセスが動いていない）は、画面では待機中と同じに見せる。
@@ -217,6 +218,10 @@ export interface WidgetApi {
   refreshWindows(): void;
   /** 一覧のウィンドウ（id）を前に出す。最小化されていれば元に戻す */
   focusWindow(id: string): void;
+  /** プロジェクトの ToDo（docs/design/todos.md）を全部読む */
+  getTodos(): Promise<TodoStore>;
+  /** 1 つのプロジェクト（RepoView.key）の ToDo の並びを丸ごと保存する */
+  setTodos(key: string, list: TodoItem[]): void;
 }
 
 /** ウィンドウの切り替えに並べるウィンドウ 1 つ */

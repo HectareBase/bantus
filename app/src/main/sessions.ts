@@ -482,6 +482,24 @@ export function readFixtureHolds(path: string, now = Date.now()): { holds: Recor
   return { holds, heldCards };
 }
 
+/**
+ * 見本データのプロジェクトの ToDo（docs/design/todos.md）。項目の todos に文字の並びを書くと、その項目のプロジェクト（repoKey）の ToDo にする。
+ * 同じプロジェクトに何度書いても、最初に書いたものだけを使う
+ */
+export function readFixtureTodos(path: string): Record<string, { id: string; text: string }[]> {
+  const out: Record<string, { id: string; text: string }[]> = {};
+  const items = readJson(path);
+  if (!Array.isArray(items)) return out;
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || typeof item.repoKey !== 'string' || !Array.isArray(item.todos)) continue;
+    if (out[item.repoKey]) continue;
+    out[item.repoKey] = item.todos
+      .filter((t: unknown): t is string => typeof t === 'string')
+      .map((text: string, i: number) => ({ id: `fixture-${i + 1}`, text }));
+  }
+  return out;
+}
+
 /** 会話の記録のフォルダごとの読み手（読んだ結果を呼び出しの間で使い回す） */
 const contextReaders = new Map<string, ReturnType<typeof createContextReader>>();
 

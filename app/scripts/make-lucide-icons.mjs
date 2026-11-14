@@ -26,7 +26,20 @@ const NAMES = [
   'circle-pause', 'circle-play', 'pencil',
   // HTML ビューア（docs/design/html-viewer.md）：設定のカテゴリ、見出しのボタン
   'panel-bottom', 'rotate-cw', 'external-link', 'chevron-down', 'chevron-up',
+  // プロジェクトの ToDo（docs/design/todos.md）：チェック、消す
+  'check', 'x',
 ];
+
+/** lucide にない、手で描いたアイコン（形は lucide にそろえる）。名前は lucide と重ならないようにする */
+const EXTRA = {
+  // プロジェクトの ToDo を足すボタン：lucide の list-todo（チェックの付いたリスト）の右下に＋を足した形
+  'todo-add': [
+    ['rect', { x: '3', y: '4', width: '6', height: '6', rx: '1' }],
+    ['path', { d: 'm3 17 2 2 4-4' }],
+    ['path', { d: 'M13 6h8M13 12h4M13 18h2' }],
+    ['path', { d: 'M19 15v6M16 18h6' }],
+  ],
+};
 
 const pascal = (name) => name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
 
@@ -35,6 +48,10 @@ const lines = NAMES.map((name) => {
   if (!node) throw new Error(`lucide にないアイコン：${name}`);
   return `  '${name}': ${JSON.stringify(node)},`;
 });
+for (const [name, node] of Object.entries(EXTRA)) {
+  if (icons[pascal(name)]) throw new Error(`lucide と同じ名前の手描きのアイコン：${name}`);
+  lines.push(`  '${name}': ${JSON.stringify(node)},`);
+}
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(readFileSync(join(root, 'node_modules', 'lucide', 'package.json'), 'utf8'));
@@ -53,4 +70,4 @@ ${lines.join('\n')}
 export type IconName = keyof typeof ICONS;
 `,
 );
-console.log(`src/renderer/icons.ts に ${NAMES.length} 個のアイコンを書き出した`);
+console.log(`src/renderer/icons.ts に ${lines.length} 個のアイコンを書き出した`);

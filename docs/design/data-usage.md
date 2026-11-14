@@ -47,6 +47,7 @@ Electron 版のウィジェット（`app/`）が、実際に何を読み、何�
 |---|---|
 | `%APPDATA%\Bantus\settings.json` | 設定。Bantus の中だけのアーカイブ（手で入れた・外したセッションとカード）もここに入れる。デスクトップの `isArchived` には書かない |
 | | 保留の印（`holds`、`heldCards`）。セッションの ID かカードの目印ごとに、理由のメモ（200 文字まで）と保留にした時刻を入れる（[hold.md](hold.md)）。メモはこのファイルにだけ入れ、ほかへ送らず、ログにも出さない。外したメモは保存せず、ウィジェットを閉じるまで中だけで覚える |
+| `%APPDATA%\Bantus\todos.json` | プロジェクトの ToDo。プロジェクトの目印（リポジトリのフォルダのパス）ごとに、文字（120 文字まで）の並びを入れる（[todos.md](todos.md)）。済みにしたものと消したものは残さない |
 | `%APPDATA%\Bantus\` のほかのファイル | Electron が自分で作るもの（キャッシュなど） |
 | Windows のスタートアップの登録 | 「Windows の起動時に開く」をオンにしたときだけ（`app.setLoginItemSettings`） |
 

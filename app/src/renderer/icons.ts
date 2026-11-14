@@ -39,6 +39,9 @@ export const ICONS = {
   'external-link': [["path",{"d":"M15 3h6v6"}],["path",{"d":"M10 14 21 3"}],["path",{"d":"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"}]],
   'chevron-down': [["path",{"d":"m6 9 6 6 6-6"}]],
   'chevron-up': [["path",{"d":"m18 15-6-6-6 6"}]],
+  'check': [["path",{"d":"M20 6 9 17l-5-5"}]],
+  'x': [["path",{"d":"M18 6 6 18"}],["path",{"d":"m6 6 12 12"}]],
+  'todo-add': [["rect",{"x":"3","y":"4","width":"6","height":"6","rx":"1"}],["path",{"d":"m3 17 2 2 4-4"}],["path",{"d":"M13 6h8M13 12h4M13 18h2"}],["path",{"d":"M19 15v6M16 18h6"}]],
 } satisfies Record<string, IconNode>;
 
 export type IconName = keyof typeof ICONS;

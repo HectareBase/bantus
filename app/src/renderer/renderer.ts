@@ -61,6 +61,8 @@ import { ja } from '../shared/strings/ja.js';
 import { enabled as motionEnabled, flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
 import { createMemo, type MemoBox } from './memo.js';
+import { createTodoList, type TodoList } from './todo.js';
+import type { TodoStore } from '../shared/todos';
 import { playSound } from './sound.js';
 import { setStatus } from './status-icon.js';
 import { applyHighlight, applyMotion, applyStatusColors } from './status-colors.js';
@@ -105,6 +107,8 @@ interface RepoRefs {
   archived: HTMLButtonElement;
   archivedCount: HTMLElement;
   badge: HTMLElement;
+  /** プロジェクトの ToDo（docs/design/todos.md） */
+  todos: TodoList;
   cards: HTMLElement;
   data?: RepoView;
 }
@@ -874,6 +878,18 @@ function onFlyAction(action: FlyAction) {
 
 // ---- リポジトリとカード ----
 
+/** プロジェクトの ToDo（docs/design/todos.md）。起動したときに読み、変えたら 1 つのプロジェクトの並びを丸ごと保存する */
+let todoStore: TodoStore = {};
+window.widget.getTodos().then((store) => {
+  todoStore = store;
+  for (const [key, refs] of repos) refs.todos.set(store[key] ?? []);
+});
+function saveTodos(key: string, items: TodoStore[string]) {
+  if (items.length) todoStore[key] = items;
+  else delete todoStore[key];
+  window.widget.setTodos(key, items);
+}
+
 function getRepo(repo: RepoView): RepoRefs {
   let refs = repos.get(repo.key);
   if (!refs) {
@@ -885,8 +901,13 @@ function getRepo(repo: RepoView): RepoRefs {
       archived: el.querySelector('.repo-archived')!,
       archivedCount: el.querySelector('.repo-archived .n')!,
       badge: el.querySelector('.badge')!,
+      todos: createTodoList(el.querySelector('.todos')!, el.querySelector('.todo-add')!, {
+        onSave: (items) => saveTodos(repo.key, items),
+        onEditing: onMemoEditing,
+      }),
       cards: el.querySelector('.repo-cards')!,
     };
+    refs.todos.set(todoStore[repo.key] ?? []);
     const key = repo.key;
     refs.archived.addEventListener('click', () => showRepoFlyout(key));
     repos.set(repo.key, refs);

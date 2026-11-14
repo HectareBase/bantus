@@ -18,9 +18,10 @@ import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
 import { createSystemUsage } from './system-usage';
 import { copyableId } from './session-id';
-import { desktopDataFolders, folderKey, InterruptTracker, readFixtureHolds, readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { desktopDataFolders, folderKey, InterruptTracker, readFixtureHolds, readFixtureTodos, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
+import { createTodoStore, todoFilePath, type TodoStoreFile } from './todo-store';
 import { createViewer, type Viewer } from './viewer';
 import { createWindowSwitcher } from './window-switcher';
 import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from './viewer-target';
@@ -1123,6 +1124,14 @@ function setHoldMark(marks: Record<string, HoldMark>, key: string, mark: unknown
   return next;
 }
 
+/** プロジェクトの ToDo の保存先（settings.json と同じフォルダの todos.json）。はじめて使うときに読む */
+let todos: TodoStoreFile | undefined;
+function todoStore(): TodoStoreFile {
+  const fixture = process.env.WIDGET_FIXTURE;
+  todos ??= createTodoStore(todoFilePath(app.getPath('userData')), fixture ? () => readFixtureTodos(fixture) : undefined);
+  return todos;
+}
+
 // ---- 起動 ----
 
 app.whenReady().then(() => {
@@ -1261,6 +1270,12 @@ app.whenReady().then(() => {
 
   ipcMain.on('flash-taskbar', () => flashTaskbar());
   ipcMain.handle('claude-in-front', () => claudeInFront());
+  // プロジェクトの ToDo（docs/design/todos.md）。画面は 1 つのプロジェクトの並びを丸ごと送り、メインプロセスがそろえて保存する
+  ipcMain.handle('todos:get', (e) => (e.sender === win?.webContents ? todoStore().all() : {}));
+  ipcMain.on('todos:set', (e, key: unknown, list: unknown) => {
+    if (e.sender !== win?.webContents || typeof key !== 'string' || !key || key.length > 1000) return;
+    todoStore().set(key, list);
+  });
   ipcMain.on('show-toast', (_e, toast: unknown) => {
     if (isToastRequest(toast)) showToast(toast);
   });

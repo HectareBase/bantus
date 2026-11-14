@@ -70,6 +70,8 @@ const widget: WidgetApi = {
   },
   refreshWindows: () => ipcRenderer.send('switcher-refresh'),
   focusWindow: (id) => ipcRenderer.send('switcher-focus', id),
+  getTodos: () => ipcRenderer.invoke('todos:get'),
+  setTodos: (key, list) => ipcRenderer.send('todos:set', key, list),
 };
 
 const tipApi: TipApi = {
