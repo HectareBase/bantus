@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { projectDirName } from '../src/main/context-usage';
 import { applyPlanLines, createPlanReader, newPlanState, rebuildPlan, turnStart } from '../src/main/plan-progress';
-import { planLabel, planSteps, tooltip } from '../src/renderer/model';
+import { nextPillFit, planLabel, planSteps, tooltip } from '../src/renderer/model';
 import { ja } from '../src/shared/strings/ja';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson } from './helpers';
@@ -211,5 +211,13 @@ describe('札の進み具合（model.ts）', () => {
     assert.equal(planLabel(['done', 'done']), ja.tooltip.plan(2, 2));
     assert.ok(tooltip(view('busy', ['done', 'active', 'todo'])).includes(ja.tooltip.plan(2, 3)));
     assert.ok(!tooltip(view('busy')).includes(ja.tooltip.plan(1, 2)));
+  });
+});
+
+describe('札の詰め方の段（nextPillFit）', () => {
+  it('棒を細くした札 → 文字を隠す → 棒を隠す、の順に進み、その先はない', () => {
+    assert.equal(nextPillFit('full'), 'text-hidden');
+    assert.equal(nextPillFit('text-hidden'), 'plan-hidden');
+    assert.equal(nextPillFit('plan-hidden'), undefined);
   });
 });

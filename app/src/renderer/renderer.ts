@@ -43,6 +43,7 @@ import {
   stateLabel,
   statusIconName,
   hasBackground,
+  nextPillFit,
   planLabel,
   planSteps,
   tooltip,
@@ -53,6 +54,7 @@ import {
   type SortOptions,
   type TimelineItem,
   type WorktreeCard,
+  type PillFit,
 } from './model.js';
 import { flapRect } from '../shared/flap.js';
 import { ja } from '../shared/strings/ja.js';
@@ -86,6 +88,8 @@ interface RowRefs {
   ctx: HTMLElement;
   ctxFill: HTMLElement;
   ctxNum: HTMLElement;
+  /** 2 行目。幅が変わったら札の詰め方を決め直す（fitPills） */
+  meta: HTMLElement;
   pill: HTMLElement;
   /** 札の文字と、その右に並べるタスクリストの棒（処理中でリストがあるときだけ） */
   pillText: HTMLElement;
@@ -519,6 +523,8 @@ function setPlan(el: HTMLElement, steps: readonly PlanStep[] | undefined) {
     return;
   }
   el.setAttribute('aria-label', planLabel(steps));
+  // 棒を細くしたときの最小の幅（1 本 3px と間 2px）を CSS で出すため
+  el.style.setProperty('--steps', String(steps.length));
   el.replaceChildren(...steps.map((step) => {
     const bar = document.createElement('span');
     bar.className = 'plan-step';
@@ -526,6 +532,29 @@ function setPlan(el: HTMLElement, steps: readonly PlanStep[] | undefined) {
     return bar;
   }));
 }
+
+/**
+ * 棒のある札が行に収まらないときの詰め方（docs/design/widget-app-plan.md の表示ルール）。棒を細くするのは CSS。
+ * それでもはみ出す札は「処理中」の文字を隠して棒だけにし（data-fit="text-hidden"）、まだはみ出せば棒を隠して文字を「…」で切る（"plan-hidden"）。
+ * どの段でも札の幅は中身に合うので、塗られた空きは残らない。
+ * 全部の行の印をいったん外してから、段ごとに「全部の行を測る → 印を付ける」をまとめて行う（レイアウトの計算を段の数だけに抑える）
+ */
+function fitPills() {
+  let left: RowRefs[] = [];
+  for (const refs of rows.values()) {
+    if (refs.pill.dataset.fit) delete refs.pill.dataset.fit;
+    if (!refs.plan.hidden) left.push(refs);
+  }
+  let fit: PillFit = 'full';
+  for (let next = nextPillFit(fit); next && left.length; next = nextPillFit(fit)) {
+    left = left.filter((r) => r.pill.scrollWidth > r.pill.clientWidth);
+    for (const r of left) r.pill.dataset.fit = next;
+    fit = next;
+  }
+}
+
+/** 2 行目の幅が変わった（ウィンドウの幅、隠れていたカードが出た、など） */
+const metaObserver = new ResizeObserver(() => fitPills());
 
 function getRow(s: SessionView): RowRefs {
   let refs = rows.get(s.id);
@@ -551,6 +580,7 @@ function getRow(s: SessionView): RowRefs {
       ctx: el.querySelector('.ctx')!,
       ctxFill: el.querySelector('.ctx-fill')!,
       ctxNum: el.querySelector('.ctx-num')!,
+      meta,
       pill: el.querySelector('.state-pill')!,
       pillText: el.querySelector('.pill-text')!,
       plan: el.querySelector('.plan')!,
@@ -590,6 +620,7 @@ function getRow(s: SessionView): RowRefs {
       e.stopPropagation();
       window.widget.showSessionMenu(id);
     });
+    metaObserver.observe(meta);
     rows.set(s.id, refs);
   }
   const prev = refs.data;
@@ -1013,7 +1044,13 @@ function render(sessions: SessionView[]) {
 
   // なくなったものは捨てる
   const ids = new Set(sessions.map((s) => s.id));
-  for (const [id, refs] of rows) if (!ids.has(id) || !refs.el.isConnected) rows.delete(id);
+  for (const [id, refs] of rows) {
+    if (ids.has(id) && refs.el.isConnected) continue;
+    metaObserver.unobserve(refs.meta);
+    rows.delete(id);
+  }
+  // 札の中身が変わったので、詰め方を決め直す（行を捨てたあとに）
+  fitPills();
   for (const id of attention) if (!ids.has(id)) attention.delete(id);
   for (const id of revived) if (!ids.has(id)) revived.delete(id);
   for (const map of [seenState, seenFocusedAt, confirmedAt] as Map<string, unknown>[]) {

@@ -448,7 +448,7 @@ html.hide-updated .when { display: none; }
 /* 2 行目の高さは、保留の「保留」とメモの枠（--hold-h）と同じに固定する。保留を切り替えても行の高さが変わらないように */
 .meta { display: flex; align-items: center; height: var(--hold-h); gap: 8px; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
 .when { flex: none; }
-/* 状態の文字の札（.badge と同じ作り）。幅が足りないときは日時を残し、札のほうを「…」で切る */
+/* 状態の文字の札（.badge と同じ作り）。幅が足りないときは日時を残し、札のほうを「…」で切る（行の札では中の .pill-text を切る） */
 .state-pill {
   min-width: 0;
   overflow: hidden;
@@ -459,6 +459,10 @@ html.hide-updated .when { display: none; }
   /* 札の塗りは --pill-bg で決める（状態ごとの規則は変数だけを変える。今開いている行では縞を消す塗りを重ねるため） */
   background: var(--pill-bg, transparent);
 }
+/* 行の札は、文字（.pill-text）とタスクリストの棒（.plan）を横に並べる。文字は札の中で「…」で切る。
+   position は、文字を見た目だけ隠すとき（data-fit="text-hidden"）の置き場 */
+.meta > .state-pill { display: flex; align-items: center; position: relative; }
+.pill-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .row[data-state="busy"] .state-pill { --pill-bg: var(--busy-bg); color: var(--busy); }
 .row[data-state="waiting"] .state-pill { --pill-bg: var(--waiting-bg); color: var(--waiting); }
 .row[data-state="idle"] .state-pill { --pill-bg: var(--idle-bg); color: var(--idle); }
@@ -471,12 +475,21 @@ html.hide-updated .when { display: none; }
 .row[data-focused] .state-pill { background: linear-gradient(var(--pill-bg, transparent), var(--pill-bg, transparent)), repeating-linear-gradient(135deg, transparent 0 5px, var(--stripe) 5px 10px) fixed; }
 /* 処理中のタスクリストの進み具合（docs/design/widget-app-plan.md の表示ルール）。「処理中」の右に手順の数だけ短い棒を並べる。
    未読に見える塗りつぶした点は使わず、角丸の長方形にする。終わった手順は処理中の色、今の手順は同じ色を薄く、これからの手順は札の背景より少し濃く。
-   札の中の行内の並びなので、幅が足りないときは札ごと「…」で切れる（日時と使用率は残る） */
+   幅が足りないときは、①棒を細くする（7px から 3px まで。間の 2px は保つ）②「処理中」の文字を隠して棒だけにする
+   ③棒も隠し、文字に戻して「…」で切る、の順に詰める（①は下の flex、②③は renderer.ts の fitPills が data-fit で切り替える）。
+   どの段でも札の幅は中身に合わせ、塗られた空きを残さない。棒を 1 本ずつ消すことはしない（本数が手順の数と合わなくなるため）。日時と使用率は残る */
 /* 行の高さ（札の line-height）と同じ高さの箱を行の上端にそろえ、その中で棒を中央に置く。
    vertical-align: middle は文字の x-height を基準にするので、日本語の札では少し下にずれる */
-.plan { display: inline-flex; align-items: center; height: 15px; gap: 2px; margin-left: 5px; vertical-align: top; }
+.plan { display: flex; flex: 0 1 auto; min-width: calc(var(--steps, 0) * 5px - 2px); align-items: center; height: 15px; gap: 2px; margin-left: 5px; }
 .plan[hidden] { display: none; }
-.plan-step { width: 7px; height: 4px; border-radius: 1px; background: color-mix(in srgb, var(--busy) 24%, transparent); }
+/* 棒を出している間は、先に棒を細くする（文字は縮めない） */
+.state-pill:not([data-fit="plan-hidden"]):has(> .plan:not([hidden])) > .pill-text { flex-shrink: 0; }
+/* ② 文字を見た目だけ隠す（読み上げには「処理中」を残す） */
+.state-pill[data-fit="text-hidden"] > .pill-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.state-pill[data-fit="text-hidden"] > .plan { margin-left: 0; }
+/* ③ 棒を隠す（手順はツールチップに出る） */
+.state-pill[data-fit="plan-hidden"] > .plan { display: none; }
+.plan-step { flex: 0 1 auto; width: 7px; min-width: 3px; height: 4px; border-radius: 1px; background: color-mix(in srgb, var(--busy) 24%, transparent); }
 .plan-step[data-step="active"] { background: color-mix(in srgb, var(--busy) 62%, transparent); }
 .plan-step[data-step="done"] { background: var(--busy); }
 html.hide-state .state-pill { display: none; }
