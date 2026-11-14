@@ -5,12 +5,13 @@ Windows の API（前面のウィンドウ、ウィンドウの一覧とアイ�
 以前は PowerShell だけでした。PowerShell は 2 つで約 140MB のメモリを使い、起動に 1〜2 秒かかります。また、`-EncodedCommand` と `Add-Type` は、監視の厳しいセキュリティソフトで警告の対象になりやすく、制限言語モード（AppLocker/WDAC）では `Add-Type` が使えません。
 
 ## 作り
-- ソースは `app/native/bantus-helper.c` の 1 ファイル。引数なしで起動すると `foreground.ts` の命令（`fg`、`raise`、`open`、`wins`、`front`、`icon`）、`appbar` を付けると `appbar.ts` の命令（`new`、`query`、`set`、`remove`）に答える
+- ソースは `app/native/bantus-helper.c` の 1 ファイル。引数なしで起動すると `foreground.ts` の命令（`fg`、`raise`、`open`、`wins`、`front`、`icon`、`sink`）、`appbar` を付けると `appbar.ts` の命令（`new`、`query`、`set`、`remove`）に答える
 - 命令と答えの形は、`foreground.ts` と `appbar.ts` にある PowerShell のスクリプトとまったく同じ。**命令を足したり変えたりするときは、C と PowerShell の両方を直す**
 - 起動と切り替えは `src/main/helper-line.ts`。exe は、インストール版では `resources/bantus-helper.exe`、開発中は `app/native/build/bantus-helper.exe` を探す
 - 次のときは PowerShell に切り替え、答えていない命令を送り直す。一度切り替えたら、そのあとは両方とも PowerShell を使う
   - exe がない（MSVC のない PC で開発しているとき）
   - 起動できない（`spawn` がその場で例外を投げることもある）、一度も答えずに落ちた（セキュリティソフトや AppLocker に止められたとき）
+- PowerShell には、スクリプトを `-EncodedCommand`（UTF-16LE の base64）で渡す。コマンドラインは 32767 文字までで、`foreground.ts` のスクリプトはその近くまで来ている。渡す前に行頭の空白を削って縮め、上限に収まることをテスト（`test/helper-line.test.ts`）で確かめている。命令を足して収まらなくなったら、スクリプトを短くするか渡し方を変える
 - 環境変数 `BANTUS_HELPER=powershell` を付けて起動すると、初めから PowerShell を使う（比べるとき用）
 - 標準入力が閉じたら（Bantus が終わった、落ちた）、アプリバーの登録を外してから終わる。強制終了でも帯が外れることを確かめた
 - コンソールのないプログラム（`/SUBSYSTEM:WINDOWS`）にした。コンソールのプログラムだと、隠していても `conhost.exe` が 1 つ付いてくる（PowerShell には付いている）。ウィンドウのあるプログラムとして起動すると「起動中」のマウスの形が出るので、起動してすぐメッセージを 1 回受け取って消す

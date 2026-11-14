@@ -33,6 +33,18 @@ export function helperExeCandidates(resourcesPath: string | undefined, dirname: 
   return resourcesPath ? [join(resourcesPath, 'bantus-helper.exe'), dev] : [dev];
 }
 
+/**
+ * PowerShell を起動する引数。-EncodedCommand（UTF-16LE の base64）なら、引数の引用符を気にしなくてよい。
+ * コマンドライン全体は 32767 文字までで、超えると起動できない（spawn が ENAMETOOLONG）。foreground.ts のスクリプトは上限に近いので、
+ * 行頭の空白を削って縮める（C# と PowerShell のどちらも、行頭の空白に意味はない。here-string の閉じの '@ も行頭のまま）
+ */
+export function powershellArgs(script: string): string[] {
+  return ['-NoProfile', '-NoLogo', '-NonInteractive', '-EncodedCommand', Buffer.from(script.replace(/^[ 	]+/gm, ''), 'utf16le').toString('base64')];
+}
+
+/** Windows のコマンドラインの長さの上限（文字） */
+export const COMMAND_LINE_LIMIT = 32767;
+
 /** exe を使えないと分かったか（一度分かったら、このあとはどちらの使い方でも PowerShell にする） */
 let nativeFailed = false;
 
@@ -73,8 +85,7 @@ export function createHelperLine(mode: HelperMode, script: string, findExe: () =
         exe = undefined;
       }
     }
-    // -EncodedCommand（UTF-16LE の base64）なら、引数の引用符を気にしなくてよい
-    p ??= spawn('powershell.exe', ['-NoProfile', '-NoLogo', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+    p ??= spawn('powershell.exe', powershellArgs(script), {
       windowsHide: true,
     });
     let answered = false;
