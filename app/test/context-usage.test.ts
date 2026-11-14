@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { appendFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { contextWindowOf, createContextReader, parseLastUsage, projectDirName, readLastUsage } from '../src/main/context-usage';
+import { contextWindowOf, createContextReader, parseLastPlace, parseLastUsage, projectDirName, readLastUsage } from '../src/main/context-usage';
 import { readSessions } from '../src/main/sessions';
 import { contextLabel, contextLevel, contextPercent, contextTooltip, formatTokens } from '../src/renderer/model';
 import { tempDir, writeJson } from './helpers';
@@ -147,5 +147,52 @@ describe('使用率の表示', () => {
     assert.equal(contextTooltip(c(120_000, 1_000_000)), 'コンテキスト：12%（120k / 1.0M）');
     assert.equal(contextTooltip({ tokens: 5000, model: 'claude-unknown-9' }), 'コンテキスト：5.0k（上限不明：claude-unknown-9）');
     assert.equal(contextTooltip({ tokens: 5000 }), 'コンテキスト：5.0k（上限不明）');
+  });
+});
+
+describe('parseLastPlace（止まったセッションが最後にいた場所）', () => {
+  const state = (path: string | null) =>
+    JSON.stringify({ type: 'worktree-state', worktreeSession: path && { originalCwd: 'C:/repo', worktreePath: path, worktreeName: 'w' }, sessionId: 's' });
+  const withCwd = (cwd: string) => JSON.stringify({ type: 'user', cwd, message: { role: 'user', content: 'x' } });
+  const wt = 'C:/repo/.claude/worktrees/w';
+
+  it('最後の worktree-state のワークツリーの場所。あとの行の cwd より優先する', () =>
+    assert.equal(parseLastPlace(lines(withCwd('C:/repo'), state(wt), withCwd('C:/repo/elsewhere'))), wt));
+  it('ExitWorktree した（worktreeSession が null）なら null', () =>
+    assert.equal(parseLastPlace(lines(state(wt), withCwd(wt), state(null))), null));
+  it('worktree-state がなければ（古い CLI）、最後の cwd。エスケープした文字も戻す', () => {
+    assert.equal(parseLastPlace(lines(withCwd('C:/repo'), withCwd(`${wt}/app`), assistant(usage(1, 0, 0)))), `${wt}/app`);
+    assert.equal(parseLastPlace(lines(withCwd(String.raw`C:\repo\x`))), String.raw`C:\repo\x`);
+  });
+  it('どちらもなければ undefined', () => assert.equal(parseLastPlace(lines(assistant(usage(1, 0, 0)), user())), undefined));
+
+  it('readSessions：途中で EnterWorktree して CLI が止まったセッションは、ワークツリーのカードのまま。ExitWorktree したら元のフォルダ', () => {
+    const tmp = tempDir();
+    try {
+      const repo = join(tmp.path, 'Repo');
+      const git = join(repo, '.git');
+      const tree = join(repo, '.claude', 'worktrees', 'moved');
+      writeJson(join(git, 'HEAD'), 'ref: refs/heads/main\n');
+      writeJson(join(tree, '.git'), `gitdir: ${join(git, 'worktrees', 'moved')}\n`);
+      writeJson(join(git, 'worktrees', 'moved', 'HEAD'), 'ref: refs/heads/worktree-moved\n');
+      const base = join(tmp.path, 'data');
+      const projects = join(tmp.path, 'projects');
+      const dir = join(base, 'claude_x', 'claude-code-sessions', 'a', 'b');
+      const anchors = [{ gitRoot: repo, commonDir: git }];
+      writeJson(join(dir, 'local_e1.json'), { sessionId: 'local_e1', title: 'entered', cliSessionId: 'cli-e1', cwd: repo, originCwd: repo, gitAnchors: anchors });
+      writeJson(join(dir, 'local_e2.json'), { sessionId: 'local_e2', title: 'exited', cliSessionId: 'cli-e2', cwd: repo, originCwd: repo, gitAnchors: anchors });
+      // 記録は、ワークツリーの側のフォルダに移っていることもある（locate が projects の下を探す）
+      writeJson(join(projects, projectDirName(tree), 'cli-e1.jsonl'), lines(state(tree), withCwd(join(tree, 'app')), assistant(usage(1, 0, 0))));
+      writeJson(join(projects, projectDirName(repo), 'cli-e2.jsonl'), lines(state(tree), assistant(usage(1, 0, 0)), state(null), withCwd(repo)));
+      const list = readSessions({ runningDir: join(tmp.path, 'running'), dataBase: base, projectsDir: projects }, 0);
+      const by = (t: string) => list.find((s) => s.title === t)!;
+      assert.equal(by('entered').worktree?.branch, 'worktree-moved');
+      assert.equal(by('entered').workDir, tree);
+      assert.equal(by('entered').context?.tokens, 1);
+      assert.equal(by('exited').worktree, undefined);
+      assert.equal(by('exited').workDir, repo);
+    } finally {
+      tmp.cleanup();
+    }
   });
 });

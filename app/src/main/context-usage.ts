@@ -64,6 +64,46 @@ export function parseLastUsage(text: string): LastUsage | undefined {
   return undefined;
 }
 
+/**
+ * 会話の記録の末尾から、CLI が最後にいた場所。途中で EnterWorktree したセッションは、CLI が止まると local_*.json からは
+ * 元のフォルダにしか見えないので、これでワークツリーを見つける（docs/research/data-sources.md の「会話の記録の worktree-state」）。
+ * - 最後の `worktree-state` の `worktreeSession.worktreePath`。`worktreeSession` が null（ExitWorktree した）なら null
+ * - `worktree-state` がなければ（古い CLI）、最後の行の `cwd`（ワークツリーの中のサブフォルダのこともある）
+ * どちらもなければ undefined
+ */
+export function parseLastPlace(text: string): string | null | undefined {
+  let cwd: string | undefined;
+  let end = text.length;
+  while (end > 0) {
+    const start = text.lastIndexOf('\n', end - 1) + 1;
+    const line = text.slice(start, end);
+    end = start - 1;
+    if (line.includes('"worktree-state"')) {
+      let d: any;
+      try {
+        d = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (d?.type !== 'worktree-state') continue;
+      const path = d.worktreeSession?.worktreePath;
+      return typeof path === 'string' && path ? path : null;
+    }
+    // JSON.parse は重いので、cwd は文字列のまま取り出す（いちばん新しいものだけ）
+    if (cwd === undefined) {
+      const m = /"cwd":("(?:[^"\\]|\\.)*")/.exec(line);
+      if (m) {
+        try {
+          cwd = JSON.parse(m[1]!) as string;
+        } catch {
+          // 書きかけの行
+        }
+      }
+    }
+  }
+  return cwd || undefined;
+}
+
 /** 末尾から読む大きさ。見つからなければ次の大きさで読み直す（ツールの結果が大きい行のあとにあるときのため） */
 const TAIL_STEPS = [64 * 1024, 512 * 1024, 4 * 1024 * 1024];
 
@@ -81,11 +121,20 @@ function readTail(path: string, size: number, bytes: number): string {
 
 /** ファイルの末尾から使用量を読む。読めなければ undefined */
 export function readLastUsage(path: string, size: number): LastUsage | undefined {
+  return readTailInfo(path, size).usage;
+}
+
+/** ファイルの末尾から、使用量と最後にいた場所（parseLastPlace）を読む。場所は使用量を探して読んだ末尾から取る（読む量は増やさない） */
+export function readTailInfo(path: string, size: number): { usage?: LastUsage; place?: string | null } {
+  let text = '';
+  let usage: LastUsage | undefined;
   for (const step of TAIL_STEPS) {
-    const found = parseLastUsage(readTail(path, size, step));
-    if (found || step >= size) return found;
+    text = readTail(path, size, step);
+    usage = parseLastUsage(text);
+    if (usage || step >= size) break;
   }
-  return undefined;
+  const place = parseLastPlace(text);
+  return { ...(usage && { usage }), ...(place !== undefined && { place }) };
 }
 
 /** 見つからなかったファイルを探し直すまでの間 */
@@ -96,6 +145,8 @@ interface Cached {
   size: number;
   mtimeMs: number;
   usage?: LastUsage;
+  /** 最後にいた場所（parseLastPlace） */
+  place?: string | null;
 }
 
 /**
@@ -173,13 +224,13 @@ export function createContextReader(projectsDir: string) {
     }
     if (!st) return undefined;
     if (!entry || entry.path !== path || entry.size !== st.size || entry.mtimeMs !== st.mtimeMs) {
-      let usage: LastUsage | undefined;
+      let info: ReturnType<typeof readTailInfo> = {};
       try {
-        usage = readLastUsage(path, st.size);
+        info = readTailInfo(path, st.size);
       } catch {
-        usage = undefined;
+        info = {};
       }
-      entry = { path, size: st.size, mtimeMs: st.mtimeMs, usage };
+      entry = { path, size: st.size, mtimeMs: st.mtimeMs, usage: info.usage, ...(info.place !== undefined && { place: info.place }) };
       cache.set(cliSessionId, entry);
     }
     if (!entry.usage) return undefined;
@@ -197,5 +248,13 @@ export function createContextReader(projectsDir: string) {
     locator.prune(keep);
   }
 
-  return { read, prune };
+  /**
+   * 最後に read したときの、記録の末尾から読んだ最後にいた場所（parseLastPlace）。read の後に呼ぶ（ファイルは読み直さない）。
+   * ワークツリーの場所か cwd、ExitWorktree したなら null、わからなければ undefined
+   */
+  function placeOf(cliSessionId: string): string | null | undefined {
+    return cache.get(cliSessionId)?.place;
+  }
+
+  return { read, prune, placeOf };
 }

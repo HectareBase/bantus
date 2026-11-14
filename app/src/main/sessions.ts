@@ -777,15 +777,25 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       const commonDir: string | undefined = anchor?.commonDir;
       const repoRoot = commonDir && basename(commonDir).toLowerCase() === '.git' ? dirname(commonDir) : anchor?.gitRoot;
       const root: string = repoRoot || d.originCwd || d.cwd || '';
+      const cliId: string | undefined = typeof d.cliSessionId === 'string' && d.cliSessionId ? d.cliSessionId : undefined;
+      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない。記録の末尾は、止まったセッションの最後にいた場所にも使うので先に読む
+      const context =
+        !archived && contextReader && cliId
+          ? contextReader.read(cliId, [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f), typeof d.model === 'string' ? d.model : undefined)
+          : undefined;
+      // 止まったセッションが最後にいた場所（会話の記録の worktree-state か cwd）。ExitWorktree したなら null で、元のフォルダのまま
+      const lastPlace = !r && !archived && contextReader && cliId ? contextReader.placeOf(cliId) : undefined;
       // 動いている CLI が途中でワークツリーに入ったとき（EnterWorktree）は local_*.json が元のままなので、CLI の今の作業フォルダから探す。
+      // CLI が止まったあとは、会話の記録の最後にいた場所から探す（止まると元のフォルダのカードに戻らないように）。
       // ワークツリーのセッションが作業フォルダを分けずに始めたセッション（use_worktree: false）は、名前を持たず、
       // gitRoot も元のリポジトリを指すので、セッションの作業フォルダ（cwd）から探す
+      const here: string | undefined = r?.cwd || (typeof lastPlace === 'string' ? lastPlace : undefined) || d.cwd;
       const outside: string | undefined = d.worktreeName
         ? undefined
         : anchor?.gitRoot && folderKey(anchor.gitRoot) !== folderKey(root)
           ? anchor.gitRoot
-          : commonDir && (r?.cwd || d.cwd)
-            ? worktreeRootOf(r?.cwd || d.cwd, commonDir, anchor?.gitRoot)
+          : commonDir && here
+            ? worktreeRootOf(here, commonDir, anchor?.gitRoot)
             : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const mainHead = commonDir ? readHead(commonDir, heads) : undefined;
@@ -851,11 +861,9 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       }
       numbered.push(view);
       if (archived) continue;
-      // コンテキストの使用量。アーカイブ済みは画面に出ないので読まない
-      if (contextReader && typeof d.cliSessionId === 'string' && d.cliSessionId) {
-        cliIds.add(d.cliSessionId);
-        const folders = [r?.cwd, d.cwd, d.originCwd, d.worktreePath].filter((f): f is string => typeof f === 'string' && !!f);
-        const context = contextReader.read(d.cliSessionId, folders, typeof d.model === 'string' ? d.model : undefined);
+      // コンテキストの使用量（上で読んだもの）
+      if (contextReader && cliId) {
+        cliIds.add(cliId);
         if (context) view.context = context;
       }
       // バックグラウンドの作業。記録を読むのは待機中のときだけ（docs/research/session-status.md の「バックグラウンドの作業」）
