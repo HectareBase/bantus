@@ -186,5 +186,104 @@
         "subject": "test(api): 一覧の取得を確かめる"
       }
     ]
+  },
+  "gaps-local-branch|": {
+    "commits": [
+      {
+        "short": "b2c3d4e",
+        "minutesAgo": 5,
+        "subject": "feat(search): 絞り込みを足す"
+      },
+      {
+        "short": "a1b2c3d",
+        "minutesAgo": 30,
+        "subject": "feat(search): 検索の欄を置く"
+      }
+    ],
+    "fork": "9f8e7d6"
+  },
+  "gaps-pushed-branch|": {
+    "commits": [
+      {
+        "short": "c3d4e5f",
+        "minutesAgo": 20,
+        "subject": "fix(app): 保存の失敗を知らせる"
+      },
+      {
+        "short": "b4c5d6e",
+        "minutesAgo": 60,
+        "subject": "refactor(app): 保存をまとめる"
+      },
+      {
+        "short": "a5b6c7d",
+        "minutesAgo": 90,
+        "subject": "test(app): 保存を確かめる"
+      }
+    ],
+    "fork": "8e7d6c5"
+  },
+  "gaps-pushed-worktree|pr-open": {
+    "commits": [
+      {
+        "short": "d4e5f6a",
+        "minutesAgo": 30,
+        "subject": "docs(app): 使い方を書く"
+      },
+      {
+        "short": "c5d6e7f",
+        "minutesAgo": 45,
+        "subject": "feat(app): 一覧を並べ替える"
+      },
+      {
+        "short": "b6c7d8e",
+        "minutesAgo": 70,
+        "subject": "feat(app): 一覧を出す"
+      },
+      {
+        "short": "a7b8c9d",
+        "minutesAgo": 95,
+        "subject": "chore(app): 設定を足す"
+      }
+    ],
+    "fork": "7d6c5b4"
+  },
+  "gaps-clean|": {
+    "commits": [
+      {
+        "short": "e5f6a7b",
+        "minutesAgo": 120,
+        "subject": "Merge branch 'refs/heads/claude/pr-open-5a6b7c'",
+        "parents": [
+          "d6e7f8a",
+          "f9a0b1c"
+        ]
+      },
+      {
+        "short": "f9a0b1c",
+        "minutesAgo": 150,
+        "subject": "feat(app): 一覧を出す",
+        "parents": [
+          "d6e7f8a"
+        ]
+      },
+      {
+        "short": "d6e7f8a",
+        "minutesAgo": 600,
+        "subject": "chore(app): 依存を上げる",
+        "parents": [
+          "c7d8e9f"
+        ]
+      },
+      {
+        "short": "c7d8e9f",
+        "minutesAgo": 1500,
+        "subject": "docs(app): README を直す",
+        "parents": []
+      }
+    ]
+  },
+  "gaps-detached|": {
+    "commits": [],
+    "fork": "3f9c2e1"
   }
 }
