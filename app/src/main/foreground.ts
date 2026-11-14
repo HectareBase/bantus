@@ -16,6 +16,9 @@
 //   もう前面にある（下の「前面とみなすウィンドウ」）ときは、タスクバーと同じく最小化して 2
 // - icon <ハンドル> <0/1>：ウィンドウのアイコン（タスクバーや Alt+Tab に出るもの）を PNG の base64 で答える。1 なら大きいほうを先に探す。
 //   取れなければ空行
+// - sink <ハンドル>：そのウィンドウを、最前面でないウィンドウの一番下へ送る（SetWindowPos の HWND_BOTTOM = 1、
+//   SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE = 0x13。前に出さない）。送れたら 1、ウィンドウがない・断られたら 0。
+//   全画面のアプリが開いたときに使う。最前面を外す（HWND_NOTOPMOST）だけでは、最前面でないウィンドウの一番上に置かれ、全画面のアプリより手前に残る
 
 import { createHelperLine } from './helper-line';
 
@@ -43,7 +46,7 @@ import { createHelperLine } from './helper-line';
 // - アイコンは WM_GETICON（0x7F。ICON_BIG = 1、ICON_SMALL2 = 2、ICON_SMALL = 0）を SendMessageTimeout（200 ms で打ち切り）で聞き、
 //   なければクラスのアイコン（GCLP_HICON = -14、GCLP_HICONSM = -34）。実行ファイルのアイコンと違い、タスクバーと同じ絵になる。
 //   アイコンはウィンドウのものなので破棄しない
-const SCRIPT = `
+export const SCRIPT = `
 Add-Type -Namespace Bantus -Name Win -UsingNamespace System.Text, System.Collections.Generic -ReferencedAssemblies System.Drawing -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
@@ -77,6 +80,7 @@ public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr hWnd);
 [DllImport("kernel32.dll")] public static extern bool GetProcessTimes(IntPtr h, out long creation, out long exit, out long kernel, out long user);
 [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")] public static extern IntPtr SendIconMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")] public static extern IntPtr GetClassLongPtr(IntPtr hWnd, int index);
 static string B64(string s) { return Convert.ToBase64String(Encoding.UTF8.GetBytes(s)); }
 static string ExePath(uint pid, out long created) {
@@ -265,6 +269,11 @@ function Invoke-Front([string]$arg) {
   }
   if ($ok) { '1' } else { '0' }
 }
+function Invoke-Sink([string]$arg) {
+  $n = [long]0
+  if (-not [long]::TryParse("$arg", [ref]$n)) { return '0' }
+  if ([Bantus.Win]::IsWindow([IntPtr]$n) -and [Bantus.Win]::SetWindowPos([IntPtr]$n, [IntPtr]1, 0, 0, 0, 0, 0x13)) { '1' } else { '0' }
+}
 while ($null -ne ($line = [Console]::In.ReadLine())) {
   $words = $line.Trim() -split ' ', 2
   $answer = switch ($words[0]) {
@@ -273,6 +282,7 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
     'wins' { Get-Windows $words[1] }
     'front' { Invoke-Front $words[1] }
     'icon' { Get-Icon $words[1] }
+    'sink' { Invoke-Sink $words[1] }
     default { Get-FgName }
   }
   [Console]::Out.WriteLine($answer)
@@ -280,7 +290,7 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
 }
 `;
 
-type Command = 'fg' | 'raise' | `open ${string}` | `wins ${string}` | `front ${string}` | `icon ${string}`;
+type Command = 'fg' | 'raise' | `open ${string}` | `wins ${string}` | `front ${string}` | `icon ${string}` | `sink ${string}`;
 const helper = createHelperLine('foreground', SCRIPT);
 
 /** 命令を 1 行送り、答えの 1 行を返す。補助プログラムが使えないときや時間切れは undefined */
@@ -353,4 +363,13 @@ export async function toggleWindow(handle: string, pid: number, timeoutMs = 1000
   if (!HANDLE.test(handle) || !Number.isInteger(pid) || pid <= 0) return undefined;
   const answer = await ask(`front ${handle} ${pid}`, timeoutMs);
   return answer === '1' ? 'front' : answer === '2' ? 'minimized' : undefined;
+}
+
+/**
+ * ハンドルのウィンドウを、最前面でないウィンドウの一番下へ送る（前に出さない）。全画面のアプリが開いたときに、最前面を外したあとで呼ぶ。
+ * 送れたら true。ウィンドウがない、断られた、補助プログラムが使えない、時間切れは false
+ */
+export async function sinkWindow(handle: string, timeoutMs = 1000): Promise<boolean> {
+  if (!HANDLE.test(handle)) return false;
+  return (await ask(`sink ${handle}`, timeoutMs)) === '1';
 }

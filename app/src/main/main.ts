@@ -9,7 +9,7 @@ import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appb
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
 import { FLYOUT_WINDOW_OPTIONS, createFlyout, isContent, isFlyRequest, isFlyTargets, type Flyout } from './flyout';
-import { askWindowList, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, startForegroundProbe, stopForegroundProbe, toggleWindow, windowIcon } from './foreground';
+import { askWindowList, foregroundProcessName, raiseClaudeWindow, sendOpenToClaude, sinkWindow, startForegroundProbe, stopForegroundProbe, toggleWindow, windowIcon } from './foreground';
 import { createGitFetch, type FetchTarget } from './git-fetch';
 import { createGitDetailReader, fixtureGitDetail } from './git-detail';
 import { createGitStatus } from './git-status';
@@ -248,6 +248,37 @@ function sidebarBounds() {
 /** 最前面にするか。固定していても、全画面のアプリが開いている間は外す */
 function applyAlwaysOnTop(s: Settings) {
   if (win && !win.isDestroyed()) win.setAlwaysOnTop(s.pinned && !fullscreenApp);
+}
+
+/**
+ * 全画面のアプリが開いた・閉じたとき。
+ * - ウィジェット：最前面を外し、最前面でないウィンドウの一番下へ送る。外す（HWND_NOTOPMOST）だけでは
+ *   最前面でないウィンドウの一番上に置かれ、全画面のアプリより手前に残った。閉じたら最前面に戻す
+ * - めくれとツールチップ：最前面（'pop-up-menu'）のままなので、開いている間は隠す。閉じたら、めくれの窓は出し直す
+ * - 縁取り：syncBezel が隠す
+ */
+function applyFullscreen(on: boolean) {
+  fullscreenApp = on;
+  applyAlwaysOnTop(getSettings());
+  if (on) {
+    hideTip();
+    const handle = widgetHandle();
+    if (handle) {
+      void sinkWindow(handle).then(() => {
+        // 送り終える前に全画面が閉じていたら、一番下へ送ったときに外れた最前面を付け直す
+        if (fullscreenApp || !win || win.isDestroyed() || !getSettings().pinned) return;
+        win.setAlwaysOnTop(false);
+        applyAlwaysOnTop(getSettings());
+      });
+    }
+  }
+  syncFlyoutVisible();
+  syncBezel();
+}
+
+/** めくれの窓を出しておくか。ウィジェットが見えていて、全画面のアプリが開いていない間だけ（flyout.ts の setWidgetVisible） */
+function syncFlyoutVisible() {
+  flyout?.setWidgetVisible(!!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && !fullscreenApp);
 }
 
 /**
@@ -544,8 +575,8 @@ function createWidget(): BrowserWindow {
   w.on('hide', hidden);
   w.on('minimize', hidden);
   // めくれのウィンドウはウィジェットと一緒に出したままにする（乗せるたびに出すと、Windows の表示のアニメーションがかかる）
-  w.on('show', () => flyout?.setWidgetVisible(true));
-  w.on('restore', () => flyout?.setWidgetVisible(true));
+  w.on('show', syncFlyoutVisible);
+  w.on('restore', syncFlyoutVisible);
   // CPU とメモリの取得は、見えている間だけ
   w.on('show', updateSystemUsage);
   w.on('hide', updateSystemUsage);
@@ -657,12 +688,13 @@ function adoptFlyout(w: BrowserWindow) {
   w.webContents.setZoomFactor(zoomFactor());
   w.webContents.on('did-finish-load', sendFlyoutColors);
   if (!w.webContents.isLoading()) sendFlyoutColors();
-  if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) flyout.setWidgetVisible(true);
+  syncFlyoutVisible();
 }
 
 /** ツールチップの中身の大きさ（CSS px）が届いたら、置いて見せる */
 function placeTip(width: number, height: number) {
-  if (!tipAnchor || !win || win.isDestroyed() || !tipWin || tipWin.isDestroyed()) return;
+  // 全画面のアプリが開いている間は出さない（ツールチップの窓は最前面なので、全画面のアプリより手前に出てしまう）
+  if (fullscreenApp || !tipAnchor || !win || win.isDestroyed() || !tipWin || tipWin.isDestroyed()) return;
   const s = getSettings();
   // 画面から届く大きさと位置は CSS px なので、拡大率を掛けて画面の座標にする
   const zoom = zoomFactor();
@@ -1113,11 +1145,7 @@ app.whenReady().then(() => {
       if (veilTimer) setTimeout(unveilWidget, 16);
       syncBezelLater();
     },
-    onFullscreen: (on) => {
-      fullscreenApp = on;
-      applyAlwaysOnTop(getSettings());
-      syncBezel();
-    },
+    onFullscreen: applyFullscreen,
   });
   // めくれと一覧、ツールチップのウィンドウは、ウィジェットの画面が読み込み終えたら開く（shareRenderer）
   applyZoom();

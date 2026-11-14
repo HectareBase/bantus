@@ -2,7 +2,7 @@
 // 1 行の命令に 1 行で答える。命令と答えの形は PowerShell のスクリプトとまったく同じにする。違いを足すときは両方を直す。
 //
 // 起動の引数
-// - なし：foreground.ts の命令（fg、raise、open、wins、front、icon）
+// - なし：foreground.ts の命令（fg、raise、open、wins、front、icon、sink）
 // - appbar：appbar.ts の命令（new、query、set、remove）。標準入力が閉じたら、登録したままのものを外してから終わる
 //
 // コンソールのないプログラム（/SUBSYSTEM:WINDOWS）にする。コンソールのプログラムだと、隠していても conhost.exe が 1 つ付いてくる。
@@ -537,6 +537,18 @@ static void cmd_front(Buf *b, char *arg) {
   buf_str(b, set_foreground(h) ? "1" : "0");
 }
 
+// 最前面でないウィンドウの一番下へ送る（全画面のアプリが開いたとき。HWND_NOTOPMOST だけでは一番上に残る）
+static void cmd_sink(Buf *b, char *arg) {
+  long long n;
+  if (!arg || !parse_i64(arg, &n)) {
+    buf_str(b, "0");
+    return;
+  }
+  HWND h = (HWND)(INT_PTR)n;
+  BOOL ok = IsWindow(h) && SetWindowPos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+  buf_str(b, ok ? "1" : "0");
+}
+
 // ---- icon（PNG に書き出す） ----
 
 static unsigned long crc_table[256];
@@ -721,6 +733,7 @@ static void run_foreground(void) {
     else if (strcmp(cmd, "wins") == 0) cmd_wins(&out, arg);
     else if (strcmp(cmd, "front") == 0) cmd_front(&out, arg);
     else if (strcmp(cmd, "icon") == 0) cmd_icon(&out, arg);
+    else if (strcmp(cmd, "sink") == 0) cmd_sink(&out, arg);
     else {
       wchar_t name[MAX_PATH];
       fg_name(name, MAX_PATH);

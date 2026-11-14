@@ -5,7 +5,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { createHelperLine, helperExeCandidates } from '../src/main/helper-line';
+import { SCRIPT as FOREGROUND_SCRIPT } from '../src/main/foreground';
+import { COMMAND_LINE_LIMIT, createHelperLine, helperExeCandidates, powershellArgs } from '../src/main/helper-line';
 
 describe('helperExeCandidates', () => {
   it('インストール版の resources を先に、開発中の native/build をあとに探す', () => {
@@ -32,6 +33,24 @@ describe('createHelperLine', () => {
       const [a, b] = await Promise.all([line.ask('one', 20000), line.ask('two', 20000)]);
       assert.equal(a, 'ps:one');
       assert.equal(b, 'ps:two');
+    } finally {
+      line.close();
+    }
+  });
+});
+
+describe('powershellArgs', () => {
+  it('foreground.ts のスクリプトがコマンドラインの上限に収まる', () => {
+    const length = ['powershell.exe', ...powershellArgs(FOREGROUND_SCRIPT)].join(' ').length;
+    assert.ok(length < COMMAND_LINE_LIMIT, `${length} 文字`);
+  });
+
+  it('行頭の空白を削っても、foreground.ts のスクリプトが命令に答える', { skip: process.platform !== 'win32', timeout: 30000 }, async () => {
+    const line = createHelperLine('foreground', FOREGROUND_SCRIPT, () => undefined);
+    try {
+      assert.equal(await line.ask('sink abc', 20000), '0');
+      assert.equal(await line.ask('sink 0', 5000), '0');
+      assert.equal(typeof (await line.ask('fg', 5000)), 'string');
     } finally {
       line.close();
     }
