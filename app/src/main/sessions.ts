@@ -788,6 +788,11 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
             : undefined;
       const outsideBranch = outside ? readWorktreeBranch(outside, heads) || basename(outside) : undefined;
       const mainHead = commonDir ? readHead(commonDir, heads) : undefined;
+      // アプリが作ったワークツリーのブランチは、記録（branch）ではなく実際の HEAD から読む。ワークツリーの中でブランチを切り替えると、
+      // 記録と食い違うため。読めなければ記録のまま。カードをまとめる目印は worktreeName のまま
+      const namedBranch: string | undefined = d.worktreeName
+        ? (typeof d.worktreePath === 'string' && d.worktreePath ? readWorktreeBranch(d.worktreePath, heads) : undefined) || d.branch || d.worktreeName
+        : undefined;
       const view: SessionView = {
         id: d.sessionId,
         title: d.title || ja.session.untitled,
@@ -797,8 +802,8 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
         mainBranch: mainHead?.branch,
         ...(mainHead?.commit && { mainHead: mainHead.commit.slice(0, SHORT_HEAD) }),
         ...(commonDir && { commonDir }),
-        worktree: d.worktreeName
-          ? { key: d.worktreeName, label: shortBranch(d.branch || d.worktreeName), branch: d.branch || d.worktreeName }
+        worktree: d.worktreeName && namedBranch
+          ? { key: d.worktreeName, label: shortBranch(namedBranch), branch: namedBranch }
           : outside && outsideBranch
             ? { key: folderKey(outside), label: shortBranch(outsideBranch), branch: outsideBranch }
             : undefined,

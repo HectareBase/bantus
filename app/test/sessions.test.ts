@@ -865,3 +865,27 @@ describe('readSessions（元のフォルダの分岐元と、ブランチにい�
     assert.equal(reads(), first + 1);
   });
 });
+
+describe('readSessions（アプリが作ったワークツリーのカード名）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+
+  it('ワークツリーの中でブランチを切り替えたら、記録の branch ではなく実際の HEAD の名前にする。目印は worktreeName のまま', () => {
+    const paths: DataPaths = { runningDir: join(tmp.path, 'sessions'), dataBase: join(tmp.path, 'Claude-Data') };
+    const repo = join(tmp.path, 'Repo');
+    const git = join(repo, '.git');
+    writeInPlace(join(git, 'HEAD'), 'ref: refs/heads/main\n');
+    const wtPath = join(repo, '.claude', 'worktrees', 'w');
+    writeInPlace(join(wtPath, '.git'), `gitdir: ${join(git, 'worktrees', 'w')}\n`);
+    writeInPlace(join(git, 'worktrees', 'w', 'HEAD'), 'ref: refs/heads/claude/renamed-abcdef\n');
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    const common = { worktreeName: 'w', branch: 'claude/w-123456', gitAnchors: [{ gitRoot: repo, commonDir: git }] };
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'switched', worktreePath: wtPath, ...common });
+    // フォルダを消したなどで HEAD を読めなければ、記録のまま
+    writeJson(join(dir, 'local_2.json'), { sessionId: 'local_2', title: 'gone', worktreePath: join(repo, '.claude', 'worktrees', 'gone'), ...common, worktreeName: 'gone' });
+    const list = readSessions(paths, 0);
+    const by = (t: string) => list.find((v) => v.title === t)!;
+    assert.deepEqual(by('switched').worktree, { key: 'w', label: 'renamed', branch: 'claude/renamed-abcdef' });
+    assert.deepEqual(by('gone').worktree, { key: 'gone', label: 'w', branch: 'claude/w-123456' });
+  });
+});
