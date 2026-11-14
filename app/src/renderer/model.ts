@@ -197,6 +197,19 @@ export function planSteps(s: Pick<SessionView, 'state' | 'plan'>): PlanStep[] | 
   return s.state === 'busy' && s.plan && s.plan.length >= 2 ? s.plan : undefined;
 }
 
+/**
+ * 棒のある札が行に収まらないときの詰め方の段（docs/design/widget-app-plan.md の表示ルール）。
+ * 棒を細くするのは CSS がする。それでも入らなければ「処理中」の文字を隠して棒だけにし、それでも入らなければ棒を隠して文字を「…」で切る
+ */
+export type PillFit = 'full' | 'text-hidden' | 'plan-hidden';
+
+/** 今の段で札がはみ出すときの、次の段。もう詰められない（棒も隠した）なら undefined */
+export function nextPillFit(fit: PillFit): PillFit | undefined {
+  if (fit === 'full') return 'text-hidden';
+  if (fit === 'text-hidden') return 'plan-hidden';
+  return undefined;
+}
+
 /** 「手順 2/3」の文。今の手順（2 つ以上なら最初のもの）の番号。今の手順がなければ、終わった手順の次（すべて終わったら最後） */
 export function planLabel(steps: readonly PlanStep[]): string {
   const active = steps.indexOf('active');
