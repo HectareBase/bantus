@@ -818,7 +818,8 @@ async function readCardGitDetail(key: string) {
   // マージの件名に出すため、同じリポジトリのワークツリーのブランチから、そこで作業したセッションのタイトルを引けるようにする
   const titles = new Map<string, string>();
   for (const v of lastSessions) if (v.repoKey === s.repoKey && v.worktree?.branch && !titles.has(v.worktree.branch)) titles.set(v.worktree.branch, v.title);
-  const src = { dir: s.workDir ?? '', ...(s.worktree && s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch, changes: s.changes, titles };
+  // 分岐元があれば渡す（ワークツリーと、既定以外のブランチにいる元のフォルダ）
+  const src = { dir: s.workDir ?? '', ...(s.baseBranch && { base: s.baseBranch }), branch: s.worktree?.branch ?? s.mainBranch, label: s.worktree?.label ?? s.mainBranch ?? s.mainHead, changes: s.changes, titles };
   if (fixture) return fixtureGitDetail(fixture, key, src);
   return gitDetail(src);
 }

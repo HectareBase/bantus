@@ -291,6 +291,8 @@ interface Folder {
   /** 元のフォルダの今のブランチ。元のブランチと違えば、マージした先として調べる */
   main?: string;
   commonDir?: string;
+  /** base を割り出さず（findBase を通さず）にそのまま使う。元のフォルダの既定のブランチ */
+  fixed?: boolean;
   states: SessionState[];
 }
 
@@ -312,7 +314,7 @@ export function createGitStatus(
   const lastStates = new Map<string, SessionState[]>();
   /** 作業フォルダの目印 → リポジトリの目印（取得のあとで、そのリポジトリの作業フォルダを調べ直すため） */
   const repoOf = new Map<string, string>();
-  const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string }[] = [];
+  const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string; fixed?: boolean }[] = [];
   let running = false;
 
   async function drain() {
@@ -320,7 +322,7 @@ export function createGitStatus(
     running = true;
     let changed = false;
     while (queue.length) {
-      const { key, dir, base, main, commonDir } = queue.shift()!;
+      const { key, dir, base, main, commonDir, fixed } = queue.shift()!;
       const opts = options();
       let changes: GitChanges | undefined;
       let upstream: Upstream | undefined;
@@ -329,10 +331,11 @@ export function createGitStatus(
         const output = await run(dir, opts.countUntracked);
         changes = parseStatus(output);
         if (base) {
-          // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる
-          found = await findBase(dir, base, main);
+          // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる。
+          // 元のフォルダ（fixed）は既定のブランチをそのまま使い、main（自分のブランチ）にマージしたかも調べない
+          found = fixed ? base : await findBase(dir, base, main);
           const remote = commonDir ? opts.remoteOf(commonDir) : undefined;
-          const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, main);
+          const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, fixed ? undefined : main);
           changes.behind = info.behind;
           changes.merged = info.merged;
           if (info.mergedInto) changes.mergedInto = info.mergedInto;
@@ -359,7 +362,7 @@ export function createGitStatus(
 
   /** 作業フォルダの目印 → そのフォルダを使うセッションの状態。調べ直しが要るものを並べる */
   function update(folders: Map<string, Folder>) {
-    for (const [key, { dir, base, main, commonDir, states }] of folders) {
+    for (const [key, { dir, base, main, commonDir, fixed, states }] of folders) {
       if (commonDir) repoOf.set(key, folderKey(commonDir));
       const prev = lastStates.get(key);
       lastStates.set(key, states);
@@ -370,7 +373,7 @@ export function createGitStatus(
       const maxAge = active ? MAX_AGE_ACTIVE_MS : MAX_AGE_QUIET_MS;
       // 処理中だったセッションが処理中でなくなった：ターンが終わり、変更が増えたかもしれない
       const turnEnded = prev !== undefined && prev.filter((s) => s === 'busy').length > states.filter((s) => s === 'busy').length;
-      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir) });
+      if (!entry || now() - entry.at >= maxAge || turnEnded) queue.push({ key, dir, base, main, commonDir: commonDir && folderKey(commonDir), fixed });
     }
     for (const key of cache.keys()) if (!folders.has(key)) cache.delete(key);
     for (const key of lastStates.keys()) if (!folders.has(key)) lastStates.delete(key);
@@ -384,7 +387,8 @@ export function createGitStatus(
     for (const s of sessions) {
       if (!s.workDir) continue;
       const key = folderKey(s.workDir);
-      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, main: s.mainBranch, commonDir: s.commonDir, states: [] };
+      // ワークツリーでないセッション（元のフォルダ）の分岐元は既定のブランチ（sessions.ts）。割り出さずにそのまま使う
+      const f = folders.get(key) ?? { dir: s.workDir, base: s.baseBranch, main: s.mainBranch, commonDir: s.commonDir, fixed: !s.worktree, states: [] };
       f.base ??= s.baseBranch;
       f.main ??= s.mainBranch;
       f.commonDir ??= s.commonDir;

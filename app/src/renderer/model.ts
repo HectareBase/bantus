@@ -905,7 +905,8 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       cards.push({
         key,
         isMain,
-        label: isMain ? first.mainBranch ?? ja.widget.originFolder : first.worktree!.label,
+        // 元のフォルダがブランチにいない（detached HEAD）ときは、短いコミット ID
+        label: isMain ? first.mainBranch ?? first.mainHead ?? ja.widget.originFolder : first.worktree!.label,
         tooltip: cardTooltip(first),
         ...baseOf(first),
         changes,
@@ -939,21 +940,23 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
 
 /** カードの見出しのツールチップ。ブランチ名の全体、分岐元と作業フォルダ */
 function cardTooltip(s: SessionView): string {
-  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(s.mainBranch ?? ja.tooltip.unknownBranch)];
-  if (s.worktree && s.baseBranch) lines.push(ja.tooltip.base(s.baseBranch));
+  const main = s.mainBranch ?? (s.mainHead ? ja.tooltip.detached(s.mainHead) : ja.tooltip.unknownBranch);
+  const lines = [s.worktree ? ja.tooltip.worktree(s.worktree.branch) : ja.tooltip.origin(main)];
+  if (s.baseBranch) lines.push(ja.tooltip.base(s.baseBranch));
   if (s.workDir) lines.push(s.workDir);
   return lines.join('\n');
 }
 
 /**
  * ワークツリーの分岐元。一覧ではいつも分岐元の行を出す（どのカードでも同じ形にそろえる）。
- * 段階的に分岐したとき（main → develop → feature）は offMain にし、以前のセッションがなくても一覧を開けるようにする
+ * 段階的に分岐したとき（main → develop → feature）は offMain にし、以前のセッションがなくても一覧を開けるようにする。
+ * 元のフォルダも、既定以外のブランチにいれば分岐元（既定のブランチ）を渡す（印のツールチップに使う）。一覧の形は変えないので offMain にしない
  */
 function baseOf(s: SessionView): Pick<WorktreeCard, 'base'> {
   const branch = s.baseBranch;
-  if (!s.worktree || !branch) return {};
-  const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? ja.tooltip.unknownBranch);
-  return { base: { branch, tip, offMain: branch !== s.mainBranch } };
+  if (!branch) return {};
+  const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? (s.mainHead ? ja.tooltip.detached(s.mainHead) : ja.tooltip.unknownBranch));
+  return { base: { branch, tip, offMain: !!s.worktree && branch !== s.mainBranch } };
 }
 
 /** 画面に並んでいる順（上から）の、アーカイブしていないセッション */

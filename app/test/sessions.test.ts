@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import { renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { createJsonCache, FULL_SCAN_MS, InterruptTracker, jsonCacheFor, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
+import { createJsonCache, FULL_SCAN_MS, InterruptTracker, jsonCacheFor, readDefaultBranch, readFixture, readSessions, sessionCacheStats, shortBranch, toState, type DataPaths } from '../src/main/sessions';
 import type { SessionView } from '../src/shared/types';
 import { tempDir, writeJson as writeInPlace } from './helpers';
 
@@ -761,5 +761,107 @@ describe('readSessions（フォルダの更新時刻で stat を省く）', () =
     assert.deepEqual(run(0).list, []);
     const again = run(1_000);
     assert.equal(again.stats, 1);
+  });
+});
+
+describe('readDefaultBranch（既定のブランチを .git のファイルから読む）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const sha = 'a'.repeat(40);
+
+  it('リモートの HEAD の指すブランチが手元にあれば、それ。origin を先に見る', () => {
+    const git = join(tmp.path, 'r1', '.git');
+    writeInPlace(join(git, 'refs', 'heads', 'develop'), `${sha}\n`);
+    writeInPlace(join(git, 'refs', 'heads', 'trunk'), `${sha}\n`);
+    writeInPlace(join(git, 'refs', 'remotes', 'aaa', 'HEAD'), 'ref: refs/remotes/aaa/trunk\n');
+    writeInPlace(join(git, 'refs', 'remotes', 'origin', 'HEAD'), 'ref: refs/remotes/origin/develop\n');
+    assert.equal(readDefaultBranch(git), 'develop');
+  });
+
+  it('リモートの HEAD がなければ、手元の main、master の順。packed-refs も見る', () => {
+    const g2 = join(tmp.path, 'r2', '.git');
+    writeInPlace(join(g2, 'packed-refs'), `# pack-refs with: peeled\n${sha} refs/heads/master\n${sha} refs/remotes/origin/main\n`);
+    assert.equal(readDefaultBranch(g2), 'master');
+    writeInPlace(join(g2, 'refs', 'heads', 'main'), `${sha}\n`);
+    assert.equal(readDefaultBranch(g2), 'main');
+  });
+
+  it('リモートの HEAD の指すブランチが手元になければ、次の候補。どれもなければ undefined', () => {
+    const g3 = join(tmp.path, 'r3', '.git');
+    writeInPlace(join(g3, 'refs', 'remotes', 'origin', 'HEAD'), 'ref: refs/remotes/origin/develop\n');
+    assert.equal(readDefaultBranch(g3), undefined);
+    writeInPlace(join(g3, 'refs', 'heads', 'main'), `${sha}\n`);
+    assert.equal(readDefaultBranch(g3), 'main');
+  });
+});
+
+describe('readSessions（元のフォルダの分岐元と、ブランチにいないとき）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const sha = 'b'.repeat(40);
+  const setup = (name: string, head: string, extra: (git: string) => void = () => {}) => {
+    const paths: DataPaths = { runningDir: join(tmp.path, name, 'sessions'), dataBase: join(tmp.path, name, 'Claude-Data') };
+    const repo = join(tmp.path, name, 'Repo');
+    const git = join(repo, '.git');
+    writeInPlace(join(git, 'HEAD'), head);
+    writeInPlace(join(git, 'refs', 'heads', 'main'), `${sha}\n`);
+    writeInPlace(join(git, 'refs', 'remotes', 'origin', 'HEAD'), 'ref: refs/remotes/origin/main\n');
+    extra(git);
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    const anchor = { gitRoot: repo, commonDir: git };
+    return { paths, repo, git, dir, anchor };
+  };
+
+  it('既定以外のブランチにいれば、既定のブランチを分岐元にする', () => {
+    const { paths, dir, anchor } = setup('feature', 'ref: refs/heads/feature\n');
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'main', gitAnchors: [anchor] });
+    const [v] = readSessions(paths, 0);
+    assert.equal(v!.mainBranch, 'feature');
+    assert.equal(v!.baseBranch, 'main');
+    assert.equal(v!.mainHead, undefined);
+  });
+
+  it('既定のブランチにいれば、分岐元はない', () => {
+    const { paths, dir, anchor } = setup('onmain', 'ref: refs/heads/main\n');
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'main', gitAnchors: [anchor] });
+    const [v] = readSessions(paths, 0);
+    assert.equal(v!.baseBranch, undefined);
+  });
+
+  it('ブランチにいなければ、短いコミット ID と、既定のブランチの分岐元', () => {
+    const { paths, dir, anchor } = setup('detached', `${'c'.repeat(40)}\n`);
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'main', gitAnchors: [anchor] });
+    const [v] = readSessions(paths, 0);
+    assert.equal(v!.mainBranch, undefined);
+    assert.equal(v!.mainHead, 'ccccccc');
+    assert.equal(v!.baseBranch, 'main');
+  });
+
+  it('ワークツリーのブランチが記録の分岐元と同じなら、既定のブランチを分岐元にする', () => {
+    const { paths, dir, anchor, repo } = setup('same', 'ref: refs/heads/main\n');
+    writeJson(join(dir, 'local_1.json'), {
+      sessionId: 'local_1',
+      title: 'wt',
+      worktreeName: 'w',
+      worktreePath: join(repo, '.claude', 'worktrees', 'w'),
+      branch: 'develop',
+      sourceBranch: 'develop',
+      gitAnchors: [anchor],
+    });
+    const [v] = readSessions(paths, 0);
+    assert.equal(v!.worktree?.branch, 'develop');
+    assert.equal(v!.baseBranch, 'main');
+  });
+
+  it('既定のブランチは期限（60 秒）まで使い回し、ふだんの読み直しでは読まない', () => {
+    const { paths, dir, anchor } = setup('ttl', 'ref: refs/heads/feature\n');
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'main', gitAnchors: [anchor] });
+    const reads = () => sessionCacheStats(paths.dataBase).defaultReads;
+    readSessions(paths, 0);
+    const first = reads();
+    for (const t of [1_000, 30_000, 59_999]) assert.equal(readSessions(paths, t)[0]!.baseBranch, 'main');
+    assert.equal(reads(), first, '期限の前は読み直さない');
+    readSessions(paths, 60_000);
+    assert.equal(reads(), first + 1);
   });
 });

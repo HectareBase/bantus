@@ -107,6 +107,8 @@ export const ja = {
     plan: (n: number, total: number) => `タスクリスト：手順 ${n}/${total}`,
     needsAction: (what: string) => `次にすること：${what}`,
     unknownBranch: '（ブランチ不明）',
+    /** メインの作業フォルダがブランチにいない（detached HEAD）とき。id は短いコミット ID */
+    detached: (id: string) => `ブランチなし（${id}）`,
     contextPercent: (pct: number, tokens: string, window: string) => `コンテキスト：${pct}%（${tokens} / ${window}）`,
     contextUnknownWindow: (tokens: string, model?: string) => `コンテキスト：${tokens}（上限不明${model ? `：${model}` : ''}）`,
   },

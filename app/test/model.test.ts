@@ -66,13 +66,29 @@ describe('buildRepos：カードの分け方', () => {
       view({ mainBranch: 'main', worktree: wt('c') }),
     ]);
     const by = (label: string) => repo!.cards.find((c) => c.label === label)!;
-    assert.equal(by('main').base, undefined, '元のフォルダのカードには持たせない');
+    assert.equal(by('main').base, undefined, '既定のブランチにいる元のフォルダのカードには持たせない');
     assert.equal(by('a').base?.branch, 'main', 'main から切ったいつものワークツリーも、一覧には分岐元を出す');
     assert.equal(by('a').base?.offMain, false);
     assert.equal(by('c').base, undefined, '分岐元がわからなければ持たせない');
     assert.equal(by('b').base?.branch, 'integration/new_feature');
     assert.equal(by('b').base?.offMain, true);
     assert.match(by('b').base!.tip, /^分岐元：integration\/new_feature\n.*main/);
+  });
+
+  it('元のフォルダが既定以外のブランチにいれば分岐元を持たせる（offMain にはしない）。マージ済みでも隠さない', () => {
+    const merged: GitChanges = { ...clean, merged: true };
+    const [repo] = buildRepos([view({ mainBranch: 'feature', baseBranch: 'main', workDir: 'C:/Repo', changes: merged })]);
+    const card = repo!.cards[0]!;
+    assert.equal(card.base?.branch, 'main');
+    assert.equal(card.base?.offMain, false);
+    assert.equal(card.hidden, false);
+    assert.equal(card.tooltip, 'メインの作業フォルダ：feature\n分岐元：main\nC:/Repo');
+  });
+
+  it('元のフォルダがブランチにいなければ、カードの名前は短いコミット ID', () => {
+    const [repo] = buildRepos([view({ mainHead: 'abc1234', baseBranch: 'main' })]);
+    assert.equal(repo!.cards[0]!.label, 'abc1234');
+    assert.match(repo!.cards[0]!.tooltip, /^メインの作業フォルダ：ブランチなし（abc1234）\n分岐元：main/);
   });
 
   it('リポジトリの並びは設定に従う（固定は名前順）', () => {

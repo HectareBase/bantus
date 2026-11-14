@@ -18,6 +18,8 @@ export interface SessionView {
   repoName: string;
   /** メインの作業場所のブランチ名（`.git/HEAD` から。わからなければ undefined） */
   mainBranch?: string;
+  /** メインの作業場所がブランチにいない（detached HEAD）ときの、短いコミット ID。カードの名前に使う */
+  mainHead?: string;
   /** ワークツリーのときだけ。小見出しの目印と表示名 */
   worktree?: {
     key: string;
@@ -26,7 +28,10 @@ export interface SessionView {
     /** 元のブランチ名（ツールチップ用） */
     branch: string;
   };
-  /** ワークツリーを作った元のブランチ（`sourceBranch`。なければ元のフォルダのブランチ）。遅れとマージ済みを調べるのに使う */
+  /**
+   * 遅れとマージ済みを調べる分岐元。ワークツリーは作った元のブランチ（`sourceBranch`。なければ元のフォルダのブランチ）で、
+   * git-status.ts が割り出した名前に置き換える。元のフォルダは、既定以外のブランチにいるかブランチにいないときだけ既定のブランチ
+   */
   baseBranch?: string;
   /** 別のセッションから作られたときの、元のセッションの ID（`spawnedFrom.sessionId`。サイドチャットは除く） */
   spawnedFrom?: string;
