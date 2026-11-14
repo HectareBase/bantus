@@ -176,6 +176,24 @@ export const ja = {
     memTip: (used: string, total: string, pct: number) => `MEM ${used} / ${total} GB（${pct}%）`,
   },
 
+  /** プロジェクトの ToDo（見出しとカードの間のチェックリスト。docs/design/todos.md） */
+  todo: {
+    /** 見出しの、名前の右のボタン */
+    add: 'ToDo を足す',
+    listAria: 'ToDo',
+    placeholder: 'やることを書いて Enter',
+    inputAria: '新しい ToDo',
+    editAria: 'ToDo を書き直す',
+    /** 行に乗せたときの × */
+    remove: '消す',
+    /** チェックの箱 */
+    check: '済みにする',
+    uncheck: '済みを取り消す',
+    /** 畳んでいるときのボタン。n は隠している件数 */
+    more: (n: number) => `ほか ${n} 件`,
+    fold: '畳む',
+  },
+
   /** ウィンドウの切り替え（ウィジェットの一番下の帯。docs/design/window-switcher.md） */
   switcher: {
     aria: 'ウィンドウの切り替え',

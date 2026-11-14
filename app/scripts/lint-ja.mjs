@@ -18,6 +18,7 @@ const SAMPLES = {
   'window.tip': [['Bantus']],
   'window.flyout': [['Bantus']],
   'monitor.other': [[2, 1920, 1080]],
+  'todo.more': [[3]],
   'state.waitingWithReason': [['許可待ち']],
   'settings.tooltipDelay.seconds': [[0.4]],
   'time.minutesAgo': [[5]],
