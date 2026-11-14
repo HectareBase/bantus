@@ -766,7 +766,8 @@ export function readSessions(paths = defaultPaths(), now = Date.now(), fsNow = D
       const summary = d.postTurnSummary ?? {};
       // リポジトリの外のワークツリー（git worktree add）で始めたセッションには gitAnchors がないことがあるので、作業フォルダから探す
       const startDir: string = d.originCwd || d.cwd || '';
-      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors)
+      // 空の配列も、ないものとして作業フォルダから探す（git 管理でなければ、探しても見つからない）
+      const anchor: GitAnchor | undefined = Array.isArray(d.gitAnchors) && d.gitAnchors.length
         ? d.gitAnchors[0]
         : startDir
           ? gitAnchorOf(startDir)

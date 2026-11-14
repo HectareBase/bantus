@@ -889,3 +889,23 @@ describe('readSessions（アプリが作ったワークツリーのカード名�
     assert.deepEqual(by('gone').worktree, { key: 'gone', label: 'w', branch: 'claude/w-123456' });
   });
 });
+
+describe('readSessions（gitAnchors が空の配列）', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+
+  it('空なら作業フォルダから .git を探す。git の外なら、これまでどおり git 管理でない', () => {
+    const paths: DataPaths = { runningDir: join(tmp.path, 'sessions'), dataBase: join(tmp.path, 'Claude-Data') };
+    const repo = join(tmp.path, 'Repo');
+    writeInPlace(join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    writeInPlace(join(repo, 'src', 'a.ts'), '');
+    const dir = join(paths.dataBase, 'claude_x', 'claude-code-sessions', 'account', 'org');
+    writeJson(join(dir, 'local_1.json'), { sessionId: 'local_1', title: 'empty', cwd: join(repo, 'src'), gitAnchors: [] });
+    writeJson(join(dir, 'local_2.json'), { sessionId: 'local_2', title: 'plain', cwd: join(tmp.path, 'plain'), gitAnchors: [] });
+    const list = readSessions(paths, 0);
+    const by = (t: string) => list.find((v) => v.title === t)!;
+    assert.equal(by('empty').workDir, repo);
+    assert.equal(by('empty').mainBranch, 'main');
+    assert.equal(by('plain').workDir, undefined);
+  });
+});
