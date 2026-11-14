@@ -237,6 +237,23 @@ describe('元のブランチとの差', () => {
     ]);
   });
 
+  it('追跡するブランチがあっても、push していないコミットが 0 なら元のブランチとの差を ahead にする（push した PR の後）', async () => {
+    const branch = async () => ({ behind: 1, ahead: 4, merged: false });
+    const pushed = '# branch.oid 1\n# branch.head w\n# branch.upstream origin/w\n# branch.ab +0 -0\n';
+    const unpushed = '# branch.oid 1\n# branch.head w\n# branch.upstream origin/w\n# branch.ab +2 -0\n';
+    const outputs: Record<string, string> = { 'C:/P': pushed, 'C:/U': unpushed };
+    const status = createGitStatus(() => {}, async (dir) => outputs[dir]!, () => 0, branch, () => true);
+    const list = () => [view({ workDir: 'C:/P', baseBranch: 'main' }), view({ workDir: 'C:/U', baseBranch: 'main' })];
+    status.apply(list());
+    await tick();
+    await tick();
+    assert.deepEqual(status.apply(list()).map((s) => s.changes), [
+      { changed: 0, untracked: 0, ahead: 4, behind: 1, merged: false, aheadOfBase: true },
+      // push していないコミットがあれば、そちらを出す
+      { changed: 0, untracked: 0, ahead: 2, behind: 1, merged: false },
+    ]);
+  });
+
   it('元のフォルダのブランチを渡し、main に入っていたらマージした先を changes に入れる', async () => {
     const mains: (string | undefined)[] = [];
     const branch = async (_dir: string, _base: string, _remote?: string, main?: string) => {

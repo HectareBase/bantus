@@ -337,8 +337,10 @@ export function createGitStatus(
           changes.merged = info.merged;
           if (info.mergedInto) changes.mergedInto = info.mergedInto;
           // Claude が作るワークツリーのブランチには、ふつう追跡するブランチがない。そのときは push していないコミットの代わりに、
-          // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）
-          if (!hasUpstream(output)) {
+          // 元のブランチにまだ入っていないコミットを数える（0 のままだと、コミットしたワークツリーに何も出ないため）。
+          // 追跡するブランチがあっても push していないコミットが 0 なら同じにする（push して PR を出したあと、マージされるまで残りを見せる）。
+          // どちらも上の branch の結果を使うだけで、git は増やさない
+          if (!hasUpstream(output) || changes.ahead === 0) {
             changes.ahead = info.ahead;
             changes.aheadOfBase = true;
           }

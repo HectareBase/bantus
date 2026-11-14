@@ -98,7 +98,7 @@ export interface GitChanges {
   changed: number;
   /** 未追跡のファイル（.gitignore に入っているものは除く） */
   untracked: number;
-  /** まだ push していないコミット。追跡するブランチがないワークツリーでは、元のブランチにまだ入っていないコミット（aheadOfBase） */
+  /** まだ push していないコミット。分岐元があり、追跡するブランチがないか push していないコミットが 0 なら、分岐元にまだ入っていないコミット（aheadOfBase） */
   ahead: number;
   /** ahead を元のブランチと比べて数えた（追跡するブランチがない） */
   aheadOfBase?: boolean;
