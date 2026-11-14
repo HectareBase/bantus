@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
+  NO_ARCHIVE, buildRepos, cardBadge, displayState, changeItems, changesTooltip, markItems, markTooltip, displayOrder, fetchStatusLines, formatAgo, isLive, revivedCards, revivedSessions,
   nextAttention, nextCycleTarget, FOCUS_FROM_GRACE_MS, PENDING_FOCUS_MS, resolveFocus, shortcutTarget, stateLabel, statusIconName, tooltip, waitingLabel, type ArchiveOptions,
   ALERT_COLLECT_MS, ALERT_GAP_MS, alertDelay, alertSound, attentionReason, attentionStateOf, mergeAlerts, pickAlerts, toastContent, type Alert,
   alertActions, hasAlertOutput, newlyFlagged, openedInClaude, canToggleArchive,
@@ -838,6 +838,20 @@ describe('コミットされていない変更と、元のブランチとの差'
     assert.deepEqual(changeItems({ ...clean, ahead: 4 }), [{ icon: 'arrow-up', count: 4 }]);
     assert.deepEqual(changeItems(clean), []);
     assert.deepEqual(changeItems(undefined), []);
+  });
+  it('見出しの印：数がすべて 0 でも薄いブランチのアイコン、失敗なら注意のアイコン、まだ調べていなければなし', () => {
+    assert.deepEqual(markItems(clean), [{ icon: 'git-branch', count: 0, kind: 'clean' }]);
+    assert.deepEqual(markItems(some), changeItems(some));
+    assert.deepEqual(markItems(undefined, 'unsafe'), [{ icon: 'circle-alert', count: 0, kind: 'error' }]);
+    assert.deepEqual(markItems(undefined), []);
+    assert.equal(markTooltip(clean), '変更はありません');
+    assert.equal(markTooltip(undefined, undefined, 'missing'), 'git が見つかりません（PATH）');
+    assert.equal(markTooltip({ ...clean, ahead: 2, aheadOfBase: true }, 'main'), 'main に未マージのコミット：2');
+  });
+  it('カードには、結果がないときだけ失敗の理由を持たせる', () => {
+    const [repo] = buildRepos([view({ gitError: 'timeout' }), view({ worktree: wt('x'), gitError: 'timeout', changes: clean })]);
+    assert.equal(repo!.cards.find((c) => c.isMain)?.gitError, 'timeout');
+    assert.equal(repo!.cards.find((c) => !c.isMain)?.gitError, undefined);
   });
   it('内訳はあるものだけ', () => {
     assert.equal(changesTooltip(some), '未コミットの変更：変更 3・未追跡 2\npush していないコミット：1\n元のブランチからの遅れ：4');

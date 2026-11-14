@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { createBranchReader, createGitStatus, git as realGit, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, readRefs, withUpstream, type GitOptions, type ReadBranch } from '../src/main/git-status';
+import { classifyGitError, createBranchReader, createGitStatus, git as realGit, hasUpstream, parseCounts, parseStatus, parseUpstream, readBranchInfo, readRefs, withUpstream, type GitOptions, type ReadBranch } from '../src/main/git-status';
 import { tempDir, view, writeJson } from './helpers';
 
 describe('parseStatus', () => {
@@ -690,5 +690,61 @@ describe('本物の git で、ふだんの読み直しで git を増やさない
     const after = reader.stats().calls;
     await round();
     assert.equal(reader.stats().calls, after);
+  });
+});
+
+describe('git の失敗', () => {
+  it('理由を見分ける：git がない、タイムアウト、safe.directory、そのほか', () => {
+    assert.equal(classifyGitError(Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })), 'missing');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { killed: true, signal: 'SIGTERM' })), 'timeout');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { code: 128, stderr: "fatal: detected dubious ownership in repository at 'C:/R'" })), 'unsafe');
+    assert.equal(classifyGitError(Object.assign(new Error('Command failed'), { code: 128, stderr: 'fatal: not a git repository' })), 'other');
+    assert.equal(classifyGitError(undefined), 'other');
+  });
+
+  it('フォルダがあるのに失敗したら、理由をセッションに付ける。成功したら外す', async () => {
+    let fail = true;
+    const run = async () => {
+      if (fail) throw Object.assign(new Error('x'), { killed: true });
+      return '';
+    };
+    let now = 0;
+    const status = createGitStatus(() => {}, run, () => now, noBranch, () => true);
+    status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    await tick();
+    const [s] = status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    assert.equal(s!.changes, undefined);
+    assert.equal(s!.gitError, 'timeout');
+    fail = false;
+    now = 30_000;
+    status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    await tick();
+    const [ok] = status.apply([view({ workDir: 'C:/Slow', state: 'busy' })]);
+    assert.equal(ok!.gitError, undefined);
+    assert.ok(ok!.changes);
+  });
+
+  it('2 回続けて失敗したフォルダは、5 分まで（ターンの終わりでも）調べ直さない', async () => {
+    let calls = 0;
+    const run = async () => {
+      calls++;
+      throw Object.assign(new Error('x'), { code: 'ENOENT' });
+    };
+    let now = 0;
+    const status = createGitStatus(() => {}, run, () => now, noBranch, () => true);
+    const round = async (t: number, state: 'busy' | 'idle' = 'busy') => {
+      now = t;
+      status.apply([view({ workDir: 'C:/NoGit', state })]);
+      await tick();
+    };
+    await round(0);
+    await round(30_000);
+    assert.equal(calls, 2);
+    await round(60_000);
+    await round(90_000, 'idle');
+    await round(30_000 + 5 * 60_000 - 1);
+    assert.equal(calls, 2, '続けて失敗している間は延ばす');
+    await round(30_000 + 5 * 60_000);
+    assert.equal(calls, 3);
   });
 });

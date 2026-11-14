@@ -5,7 +5,7 @@
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
 import { initSystemUsage } from './system-usage.js';
-import type { FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, PlanStep, SessionView, WidgetLayout } from '../shared/types';
+import type { FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, GitFailure, PlanStep, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
@@ -16,8 +16,8 @@ import {
   displayState,
   type AttentionState,
   buildRepos,
-  changeItems,
-  changesTooltip,
+  markItems,
+  markTooltip,
   contextLabel,
   contextLevel,
   contextPercent,
@@ -661,17 +661,20 @@ function getRow(s: SessionView): RowRefs {
 
 // ---- コミットされていない変更と、元のブランチとの差 ----
 
-/** 見出しの内訳の印（変更、未追跡、push していないコミット、元のブランチからの遅れ）。何もなければ隠す */
-function setChanges(el: HTMLElement, c: GitChanges | undefined, base?: string) {
-  const items = changeItems(c);
+/**
+ * 見出しの内訳の印（変更、未追跡、push していないコミット、元のブランチからの遅れ）。調べ終えて数がすべて 0 なら薄いブランチのアイコン、
+ * git が失敗したら注意のアイコン（docs/design/git-changes.md）。まだ調べていなければ隠す
+ */
+function setChanges(el: HTMLElement, c: GitChanges | undefined, base?: string, error?: GitFailure) {
+  const items = markItems(c, error);
   // 毎回作り直さないよう、内訳が変わったときだけ描き直す
-  const key = `${items.map((i) => `${i.icon}:${i.count}`).join(',')}|${base ?? ''}`;
+  const key = `${items.map((i) => `${i.icon}:${i.count}`).join(',')}|${base ?? ''}|${error ?? ''}`;
   if (el.dataset.items === key) return;
   el.dataset.items = key;
   el.hidden = items.length === 0;
   el.replaceChildren(...items.map((i) => {
     const item = document.createElement('span');
-    item.className = 'changes-item';
+    item.className = i.kind ? `changes-item ${i.kind}` : 'changes-item';
     item.append(createIcon(i.icon));
     if (i.count) {
       const n = document.createElement('span');
@@ -681,7 +684,7 @@ function setChanges(el: HTMLElement, c: GitChanges | undefined, base?: string) {
     }
     return item;
   }));
-  if (items.length) el.dataset.tip = changesTooltip(c, base);
+  if (items.length) el.dataset.tip = markTooltip(c, base, error);
   else delete el.dataset.tip;
 }
 
@@ -983,7 +986,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
     const label = heldLabel(card.held.since);
     if (refs.holdPill.textContent !== label) refs.holdPill.textContent = label;
   }
-  setChanges(refs.changes, showChanges ? card.changes : undefined, card.base?.branch);
+  setChanges(refs.changes, showChanges ? card.changes : undefined, card.base?.branch, showChanges ? card.gitError : undefined);
   refs.el.toggleAttribute('data-stack', card.stackCount > 0);
   refs.stackHit.dataset.count = String(card.stackCount);
   if (sync) syncChildren(refs.rows, card.sessions.map((s) => getRow(s).el));

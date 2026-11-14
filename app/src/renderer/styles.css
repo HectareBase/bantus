@@ -375,6 +375,9 @@ html[data-edge="left"] .stack-hit { right: calc(-8px - var(--card-indent)); }
 .changes-item svg { width: 11px; height: 11px; flex: none; }
 /* 数字は行の高さに任せず、字面をアイコンの中心にそろえる */
 .changes-item .n { line-height: 1; text-align: center; }
+/* 数がすべて 0：押せば詳細を開けることだけを、薄いブランチのアイコンで見せる */
+.changes-item.clean { opacity: 0.45; }
+.card-header .changes:hover .changes-item.clean { opacity: 0.8; }
 
 /* ---- 行 ---- */
 .rows { list-style: none; margin: 0; padding: 0; }
