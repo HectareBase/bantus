@@ -388,11 +388,11 @@ function canClickThrough(s: Settings): boolean {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, branchTree, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards,
+    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, branchTree, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };

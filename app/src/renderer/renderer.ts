@@ -57,6 +57,8 @@ import {
   type PillFit,
 } from './model.js';
 import { flapRect } from '../shared/flap.js';
+import type { TreeRow } from './card-tree.js';
+import { setTreeGuides } from './tree-guides.js';
 import { ja } from '../shared/strings/ja.js';
 import { enabled as motionEnabled, flip } from './flip.js';
 import { createIcon, fillIcons, setIcon } from './icon.js';
@@ -123,6 +125,8 @@ interface CardRefs {
   iconNow: HTMLElement;
   iconAlt: HTMLElement;
   label: HTMLElement;
+  /** ツリーで字下げできなかったときの、親の名前 */
+  via: HTMLElement;
   changes: HTMLElement;
   act: HTMLElement;
   hold: HTMLElement;
@@ -220,8 +224,11 @@ function setAttention(refs: RowRefs, id: string, on: boolean) {
   refs.el.toggleAttribute('data-attention', on);
 }
 
+/** カードを分岐元の下にぶら下げる（設定の branchTree） */
+let branchTree = false;
+
 function archiveOptions(): ArchiveOptions {
-  return { marks, cardMarks, holds, heldCards, attention, confirmedAt, mainMinutes, revived, now: Date.now(), sort };
+  return { marks, cardMarks, holds, heldCards, attention, confirmedAt, mainMinutes, revived, now: Date.now(), sort, tree: branchTree };
 }
 
 /** セッションの印を変えて保存する（null で外して自動の決まりに戻す） */
@@ -1019,6 +1026,7 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
       iconNow: icon.querySelector('.now')!,
       iconAlt: icon.querySelector('.alt')!,
       label: el.querySelector('.card-label')!,
+      via: el.querySelector('.card-via')!,
       changes: el.querySelector('.changes')!,
       act: el.querySelector('.card-act')!,
       hold,
@@ -1095,15 +1103,51 @@ function getCard(card: WorktreeCard, sync = true): CardRefs {
   return refs;
 }
 
+/** ツリーの、カードのない分岐元の段（リポジトリと分岐元ごとに 1 つ） */
+const treeGroups = new Map<string, HTMLElement>();
+
+function getTreeGroup(repoKey: string, row: TreeRow): HTMLElement {
+  const id = `${repoKey}|${row.key}`;
+  let el = treeGroups.get(id);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'tree-group';
+    const label = document.createElement('span');
+    label.className = 'tree-group-label';
+    const name = document.createElement('span');
+    name.className = 'tree-group-name';
+    label.append(createIcon('git-branch'), name);
+    el.append(label);
+    el.dataset.tip = ja.widget.treeGroupTip(row.key.slice('group:'.length));
+    treeGroups.set(id, el);
+  }
+  el.querySelector('.tree-group-name')!.textContent = row.label;
+  setTreeGuides(el, row);
+  return el;
+}
+
 function renderRepo(repo: RepoView): HTMLElement {
   const refs = getRepo(repo);
-  syncChildren(refs.cards, repo.cards.map((c) => getCard(c).el));
+  const rowOf = new Map(repo.tree?.map((r) => [r.key, r]));
+  const placed = new Map(repo.cards.map((c) => {
+    const card = getCard(c);
+    const row = rowOf.get(c.key);
+    setTreeGuides(card.el, row);
+    card.via.hidden = !row?.via;
+    card.via.textContent = row?.via ?? '';
+    return [c.key, card.el];
+  }));
+  const nodes = repo.tree
+    ? repo.tree.map((r) => (r.kind === 'card' ? placed.get(r.key)! : getTreeGroup(repo.key, r)))
+    : [...placed.values()];
+  syncChildren(refs.cards, nodes);
   return refs.el;
 }
 
 /** 並べ替えで動かす要素。親（リポジトリ）を子より先に */
 function* animatedElements(): Iterable<HTMLElement> {
   for (const r of repos.values()) yield r.el;
+  for (const g of treeGroups.values()) yield g;
   for (const c of cards.values()) yield c.el;
   for (const r of rows.values()) yield r.el;
 }
@@ -1160,6 +1204,7 @@ function render(sessions: SessionView[]) {
     for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
   }
   for (const [key, refs] of cards) if (!refs.el.isConnected) cards.delete(key);
+  for (const [key, el] of treeGroups) if (!el.isConnected) treeGroups.delete(key);
   for (const [key, refs] of repos) if (!refs.el.isConnected) repos.delete(key);
   // HTML ビューアは、今開いているセッションの作業フォルダのファイルを出す
   viewer.setTarget(applyFocus());
@@ -1273,6 +1318,7 @@ function applyLayout(layout: WidgetLayout) {
   const { edge, backgroundOpacity, cardOpacity, pinned } = layout;
   showPinned(pinned);
   sort = { project: layout.projectOrder, worktree: layout.worktreeOrder, session: layout.sessionOrder };
+  branchTree = layout.branchTree;
   marks = { ...layout.archive };
   cardMarks = { ...layout.archivedCards };
   holds = { ...layout.holds };

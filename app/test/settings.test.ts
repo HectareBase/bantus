@@ -247,7 +247,7 @@ describe('設定画面のカテゴリ', () => {
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>
     assert.deepEqual(layout('cards'), [
       ['アーカイブ', ['mainArchiveMinutes']],
-      ['並び順', ['projectOrder', 'worktreeOrder', 'sessionOrder']],
+      ['並び順', ['projectOrder', 'worktreeOrder', 'branchTree', 'sessionOrder']],
       ['行の大きさ', ['rowPadding']],
       ['行に表示する項目', ['showUpdated', 'showState', 'showContext']],
     ]));

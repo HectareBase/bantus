@@ -4,6 +4,7 @@ import { cardKeyOf } from '../shared/card-key.js';
 import type { ArchiveMark, HoldMark, SortOrder } from '../shared/settings';
 import type { ContextUsage, FetchStatus, FlyPlace, GitChanges, GitFailure, PlanStep, SessionState, SessionView } from '../shared/types';
 import { ja } from '../shared/strings/ja.js';
+import { layoutCardTree, type TreeCard, type TreeRow } from './card-tree.js';
 import type { IconName } from './icons.js';
 
 /** 並び順の「優先度」での順位。停止中は画面では待機中と同じに見せるので、待機と同じ（中断も） */
@@ -591,6 +592,8 @@ export interface ArchiveOptions extends HoldOptions {
   revived: ReadonlySet<string>;
   now: number;
   sort: SortOptions;
+  /** カードを分岐元の下にぶら下げる（設定の branchTree） */
+  tree?: boolean;
 }
 
 /** カード、カードの中の行の並び順（設定の projectOrder、worktreeOrder、sessionOrder） */
@@ -636,6 +639,8 @@ export interface WorktreeCard {
   isMain: boolean;
   /** 見出しの名前（短くしたブランチ名、main はそのブランチ名） */
   label: string;
+  /** カードのブランチ（ツリーの親子を決める）。ブランチにいない元のフォルダは undefined */
+  branch?: string;
   /** 見出しのツールチップ（ブランチ名の全体、分岐元と作業フォルダ） */
   tooltip: string;
   /**
@@ -676,6 +681,8 @@ export interface RepoView {
   cards: WorktreeCard[];
   /** カードごとアーカイブしたもの（見出しの件数） */
   hiddenCards: WorktreeCard[];
+  /** ツリーで出すときの段（cards はこの順に並ぶ）。ツリーにしないときは undefined */
+  tree?: TreeRow[];
   badge: { state: '' | 'waiting' | 'busy' | 'held'; text: string };
   rank: number;
   latest: number;
@@ -931,6 +938,7 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
         isMain,
         // 元のフォルダがブランチにいない（detached HEAD）ときは、短いコミット ID
         label: isMain ? first.mainBranch ?? first.mainHead ?? ja.widget.originFolder : first.worktree!.label,
+        ...((isMain ? first.mainBranch : first.worktree!.branch) && { branch: isMain ? first.mainBranch! : first.worktree!.branch }),
         tooltip: cardTooltip(first),
         ...baseOf(first),
         changes,
@@ -948,14 +956,29 @@ export function buildRepos(sessions: SessionView[], opts: ArchiveOptions = NO_AR
       });
     }
     cards.sort(compareItems<WorktreeCard>(opts.sort.worktree, (c) => c.label, (c) => c.isMain));
-    const shownCards = cards.filter((c) => !c.hidden);
+    let shownCards = cards.filter((c) => !c.hidden);
+    const hiddenCards = cards.filter((c) => c.hidden);
+    const toTree = (c: WorktreeCard): TreeCard => ({
+      key: c.key,
+      isMain: c.isMain,
+      label: c.label,
+      ...(c.branch && { branch: c.branch }),
+      ...(c.base && { base: c.base.branch }),
+    });
+    const tree = opts.tree ? layoutCardTree(shownCards.map(toTree), hiddenCards.map(toTree)) : undefined;
+    // 巡回（displayOrder）も画面と同じ順になるよう、カードをツリーの順に並べ直す
+    if (tree) {
+      const byKey = new Map(shownCards.map((c) => [c.key, c]));
+      shownCards = tree.flatMap((r) => (r.kind === 'card' ? [byKey.get(r.key)!] : []));
+    }
     // 保留の件数：保留のカードと、保留のカードの外にある保留の行
     const heldCount = shownCards.reduce((n, c) => n + (c.held ? 1 : c.sessions.filter((s) => isHeld(s, opts)).length), 0);
     result.push({
       key: repoKey,
       name: repo.name,
       cards: shownCards,
-      hiddenCards: cards.filter((c) => c.hidden),
+      hiddenCards,
+      ...(tree && { tree }),
       badge: cardBadge(repo.all, heldCount),
       ...rankOfList(repo.all, opts),
     });

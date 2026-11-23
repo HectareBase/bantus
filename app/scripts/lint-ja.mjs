@@ -80,6 +80,7 @@ const SAMPLES = {
   'flyout.baseOwn': [[3]],
   'flyout.mergedInto': [['main']],
   'widget.branchedFromTip': [['integration/new_feature', 'main']],
+  'widget.treeGroupTip': [['develop']],
   'settings.options.minutes': [[10]],
   'settings.options.hours': [[1]],
   'settings.colors.customAria': [['処理中']],

@@ -164,6 +164,8 @@ export const ja = {
     /** カードの名前。main のブランチがわからないとき */
     originFolder: 'メインの作業フォルダ',
     /** 一覧の分岐元の行のツールチップ */
+    /** ツリーの、カードのない分岐元の段のツールチップ */
+    treeGroupTip: (branch: string) => `分岐元：${branch}\nこのブランチのカードはありません`,
     branchedFromTip: (branch: string, mainBranch: string) =>
       `分岐元：${branch}\n遅れと未マージのコミットは、このブランチと比べている（メインの作業フォルダは ${mainBranch}）`,
     badgeWaiting: (n: number) => `対応待ち ${n}`,
@@ -386,6 +388,7 @@ export const ja = {
       },
       projectOrder: { label: 'プロジェクト', description: 'カードの並び' },
       worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。名前順では、メインの作業フォルダを先頭にする' },
+      branchTree: { label: 'ブランチのツリー', description: 'カードを分岐元の下にぶら下げて、線でつなぐ' },
       sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。作成順では、新しく作ったものが上' },
       rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」（処理中は「◯分経過」）' },

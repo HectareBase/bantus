@@ -60,6 +60,8 @@ export interface Settings {
   projectOrder: SortOrder;
   /** プロジェクトの中のカード（ワークツリー）の並び。fixed は元のフォルダを先頭に、あとは名前順 */
   worktreeOrder: SortOrder;
+  /** カードを分岐元の下にぶら下げ、角丸の線でつなぐ（docs/design/worktree-cards.md の「ブランチのツリー」） */
+  branchTree: boolean;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
   /** 行（セッション）の上下の余白（px）。小さくすると 1 画面に多くの行が入る */
@@ -250,6 +252,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
+  branchTree: false,
   sessionOrder: 'fixed',
   rowPadding: 4,
   showUpdated: true,
@@ -511,6 +514,10 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'worktreeOrder', category: 'cards', group: T.groups.order, type: 'segmented',
     ...T.items.worktreeOrder,
     options: orderOptions(T.options.orderName),
+  },
+  {
+    key: 'branchTree', category: 'cards', group: T.groups.order, type: 'toggle',
+    ...T.items.branchTree,
   },
   {
     key: 'sessionOrder', category: 'cards', group: T.groups.order, type: 'segmented',
