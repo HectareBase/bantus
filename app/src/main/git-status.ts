@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GitChanges, GitFailure, SessionState, SessionView } from '../shared/types';
 import { createBaseFinder, readBaseChoices, type FindBase } from './base-branch';
+import { readPackedRefs, type PackedRefs } from './packed-refs';
 import { findGitDirs, folderKey } from './sessions';
 
 /** 1 回の git status を待つ長さ。大きなリポジトリで止まらないよう、過ぎたら諦める */
@@ -148,20 +149,12 @@ export function readRefs(dir: string, names: string[]): { head: string; refs: (s
   if (!dirs) return undefined;
   // reftable の形式は読めないので、使い回さない（毎回 git に聞く）
   if (existsSync(join(dirs.refDir, 'reftable'))) return undefined;
-  let packed: Map<string, string> | undefined;
+  let packed: PackedRefs | undefined;
   const fromPacked = (name: string): string | null => {
-    if (!packed) {
-      packed = new Map();
-      try {
-        for (const line of readFileSync(join(dirs.refDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
-          const m = /^([0-9a-f]+) (refs\/\S+)$/.exec(line);
-          if (m) packed.set(m[2]!, m[1]!);
-        }
-      } catch {
-        // packed-refs がないのは普通
-      }
-    }
-    return packed.get(name) ?? null;
+    packed ??= readPackedRefs(dirs.refDir);
+    // ないのは普通（空で返る）。開けないときは、ref がないと決めつけない
+    if (!packed) throw new Error('unreadable packed-refs');
+    return packed.refs.get(name) ?? null;
   };
   /** ref の名前からコミットへ。シンボリックな ref（`ref: ...`）は数段までたどる。読めないときは throw */
   const resolveRef = (name: string, depth = 0): string | null => {
