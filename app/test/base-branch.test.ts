@@ -2,9 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { createBaseFinder, firstTime, ownCommits, parseHeadRows } from '../src/main/base-branch';
+import { basePickKey, branchExists, createBaseFinder, firstTime, fixtureBaseChoices, ownCommits, parseHeadRows, prunedBasePicks, readBaseChoices, setBasePick, startCommit } from '../src/main/base-branch';
 import { createGitStatus } from '../src/main/git-status';
 import { tempDir, view } from './helpers';
 
@@ -32,6 +33,11 @@ describe('ownCommits と firstTime', () => {
   it('最初の行の時刻', () => {
     assert.equal(firstTime(reflog), 100);
     assert.equal(firstTime(''), undefined);
+  });
+  it('始まったコミット：作成の行は新しい値、作成の行がなければ最初の行の古い値', () => {
+    assert.equal(startCommit(reflog), a);
+    assert.equal(startCommit(`${b} ${c} t <t> 300 +0900\tcommit: feat: x\n`), b);
+    assert.equal(startCommit(''), undefined);
   });
 });
 
@@ -215,6 +221,221 @@ describe('分岐元の割り出し（本物の git）', () => {
     commit(w, 'f1');
     g(r, 'pack-refs', '--all');
     assert.equal(await find(w), 'develop');
+  });
+
+  /** develop から切ったブランチで前の作業をして main にマージし、同じブランチで今の作業を続けたもの */
+  const reused = (catchUp: boolean) => {
+    const r = repo();
+    if (!r) return undefined;
+    const dev = worktree(r, 'develop', 'main');
+    commit(dev, 'd1');
+    const w = worktree(r, 'feature', 'develop');
+    commit(w, 'prev');
+    g(r, 'merge', '-q', '--no-ff', '-m', 'merge prev', 'feature');
+    if (catchUp) g(w, 'merge', '-q', '--ff-only', 'main');
+    commit(w, 'now');
+    return { r, w };
+  };
+
+  it('使い回したブランチの前の作業が main に入っていれば、最初の分岐元ではなく main', async () => {
+    for (const catchUp of [true, false]) {
+      const t = reused(catchUp);
+      if (!t) return;
+      assert.equal(await find(t.w, 'develop'), 'main', catchUp ? 'main に追いついたあと' : '追いつかずに続けたとき');
+    }
+  });
+
+  it('途中で切った子は分岐元にしない（reflog があるとき、消えたとき）', async () => {
+    const r = repo();
+    if (!r) return;
+    const a = worktree(r, 'a', 'main');
+    commit(a, 'a1');
+    g(a, 'branch', 'mid');
+    commit(a, 'a2');
+    assert.equal(await find(a), 'main');
+    rmSync(join(r, '.git', 'logs', 'refs', 'heads', 'mid'));
+    assert.equal(await find(a), 'main', 'reflog のない子は見分けられないので、自分のコミットを含むものは選ばない');
+  });
+
+  it('HEAD から切ったばかりで reflog のない子も分岐元にしない', async () => {
+    const r = repo();
+    if (!r) return;
+    const a = worktree(r, 'a', 'main');
+    commit(a, 'a1');
+    g(a, 'branch', 'tip');
+    rmSync(join(r, '.git', 'logs', 'refs', 'heads', 'tip'));
+    assert.equal(await find(a), 'main');
+  });
+
+  it('選んだ値を最優先にし、git を起動しない。やめると推定に戻る', async () => {
+    const r = repo();
+    if (!r) return;
+    g(r, 'branch', 'other');
+    const dev = worktree(r, 'develop', 'main');
+    commit(dev, 'd1');
+    const w = worktree(r, 'feature', 'develop');
+    commit(w, 'f1');
+    const finder = createBaseFinder(run);
+    assert.equal(await finder(w, 'main', 'main'), 'develop');
+    const calls = finder.stats().calls;
+    assert.equal(await finder(w, 'main', 'main', () => 'other'), 'other');
+    assert.equal(finder.stats().calls, calls, '選んだ値は git なしで答える');
+    assert.equal(await finder(w, 'main', 'main', () => 'other'), 'other');
+    assert.equal(await finder(w, 'main', 'main'), 'develop', '選んだ値が目印に入っているので、やめたら推定に戻る');
+    assert.ok(finder.stats().calls > calls);
+    assert.equal(await finder(w, 'main', 'main', () => 'feature'), 'develop', '自分のブランチは選べない');
+  });
+
+  it('選んだブランチが消えたら自動に戻す', async () => {
+    const r = repo();
+    if (!r) return;
+    g(r, 'branch', 'other');
+    const dev = worktree(r, 'develop', 'main');
+    commit(dev, 'd1');
+    const w = worktree(r, 'feature', 'develop');
+    commit(w, 'f1');
+    const finder = createBaseFinder(run);
+    assert.equal(await finder(w, 'main', 'main', () => 'other'), 'other');
+    g(r, 'branch', '-D', 'other');
+    assert.equal(await finder(w, 'main', 'main', () => 'other'), 'develop');
+  });
+
+  it('候補：近い順で、自分のコミットの数を添え、前の作業が入った main を出し、途中で切った子は出さない', async () => {
+    const t = reused(false);
+    if (!t) return;
+    g(t.w, 'branch', 'mid', 'HEAD~1');
+    const c = await readBaseChoices(t.w, 'develop', 'main', 'main', undefined, run);
+    assert.deepEqual(c, {
+      current: 'main',
+      inferred: 'main',
+      candidates: [
+        { name: 'main', own: 1 },
+        { name: 'develop', own: 2 },
+      ],
+    });
+  });
+
+  it('候補：5 件までで、遠くても既定のブランチと選んだ値は入れる', async () => {
+    const r = repo();
+    if (!r) return;
+    g(r, 'branch', 'far');
+    commit(r, 'm1');
+    const dev = worktree(r, 'develop', 'main');
+    commit(dev, 'd1');
+    for (const name of ['n1', 'n2', 'n3', 'n4', 'n5', 'n6']) g(r, 'branch', name, 'develop');
+    const w = worktree(r, 'feature', 'develop');
+    commit(w, 'f1');
+    const c = await readBaseChoices(w, 'main', 'main', 'main', 'far', run);
+    assert.ok(c);
+    const names = c.candidates.map((x) => x.name);
+    assert.equal(c.current, 'far');
+    assert.equal(c.picked, 'far');
+    assert.equal(c.inferred, 'develop');
+    assert.equal(names.length, 5);
+    for (const must of ['main', 'far', 'develop']) assert.ok(names.includes(must), must);
+    assert.deepEqual(c.candidates.map((x) => x.own), [...c.candidates.map((x) => x.own)].sort((x, y) => x - y), '近い順');
+  });
+
+  it('ブランチがあるかを読む。packed-refs だけのものも読み、リポジトリを読めなければ決めない', () => {
+    const r = repo();
+    if (!r) return;
+    g(r, 'branch', 'a/b');
+    const common = join(r, '.git');
+    assert.equal(branchExists(common, 'a/b'), true);
+    assert.equal(branchExists(common, 'a'), false, 'フォルダはブランチではない');
+    g(r, 'pack-refs', '--all');
+    assert.equal(branchExists(common, 'a/b'), true);
+    assert.equal(branchExists(common, 'none'), false);
+    assert.equal(branchExists(join(tmp.path, 'none'), 'a/b'), undefined);
+  });
+});
+
+describe('選んだ分岐元の保存', () => {
+  it('目印はリポジトリの目印とブランチ名', () => assert.equal(basePickKey('C:\\Repo\\.git\\', 'claude/x'), 'c:\\repo\\.git|claude/x'));
+  it('入れる、外す。上限を超えたら古いものから捨てる', () => {
+    const one = setBasePick({}, 'r|a', 'main');
+    assert.deepEqual(one, { 'r|a': 'main' });
+    assert.deepEqual(setBasePick(one, 'r|a', null), {});
+    let many: Record<string, string> = {};
+    for (let i = 0; i < 205; i++) many = setBasePick(many, `r|b${i}`, 'main');
+    assert.equal(Object.keys(many).length, 200);
+    assert.equal(many['r|b0'], undefined);
+    assert.equal(many['r|b204'], 'main');
+  });
+  it('作業ブランチか分岐元が消えた値を外す。読めないリポジトリの値は残す', () => {
+    const has: Record<string, boolean | undefined> = { 'r:keep': true, 'r:main': true, 'r:gone': false };
+    const exists = (repo: string, name: string) => (repo === 'off' ? undefined : has[`${repo}:${name}`] ?? false);
+    assert.deepEqual(prunedBasePicks({ 'r|keep': 'main', 'r|gone': 'main', 'r|keep2': 'gone', 'off|x': 'y' }, exists), { 'r|keep': 'main', 'off|x': 'y' });
+    assert.equal(prunedBasePicks({ 'r|keep': 'main' }, exists), undefined);
+  });
+  it('見本データの候補は、推定を先頭に重ねずに並べる', () => {
+    assert.deepEqual(fixtureBaseChoices('develop', ['main', 'develop'], undefined), {
+      current: 'develop',
+      inferred: 'develop',
+      candidates: [{ name: 'develop', own: 1 }, { name: 'main', own: 3 }],
+    });
+  });
+});
+
+describe('選んだ分岐元と git の数', () => {
+  const tmp = tempDir();
+  after(() => tmp.cleanup());
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'commit.gpgsign=false', '-c', 'core.logAllRefUpdates=true', '-C', cwd, ...args], { encoding: 'utf8', windowsHide: true }).trim();
+
+  it('選ぶと遅れ・未マージ・マージ済みが選んだ先との比較に切り替わり、やめると戻る', async () => {
+    const r = join(tmp.path, 'r');
+    try {
+      g(tmp.path, 'init', '-q', '-b', 'main', r);
+    } catch {
+      return;
+    }
+    g(r, 'commit', '-q', '--allow-empty', '-m', 'root');
+    const dev = join(tmp.path, 'dev');
+    g(r, 'worktree', 'add', '-q', '-b', 'develop', dev, 'main');
+    g(dev, 'commit', '-q', '--allow-empty', '-m', 'd1');
+    const w = join(tmp.path, 'w');
+    g(r, 'worktree', 'add', '-q', '-b', 'feature', w, 'develop');
+    g(w, 'commit', '-q', '--allow-empty', '-m', 'f1');
+    g(dev, 'merge', '-q', '--no-ff', '-m', 'merge feature', 'feature');
+    g(r, 'commit', '-q', '--allow-empty', '-m', 'm1');
+
+    let picked: string | undefined;
+    let wake: (() => void) | undefined;
+    const status = createGitStatus(() => wake?.(), undefined, undefined, undefined, undefined, () => ({
+      fetchEnabled: false,
+      countUntracked: true,
+      remoteOf: () => undefined,
+      pickedBase: () => picked,
+    }));
+    const list = () => [view({ workDir: w, commonDir: join(r, '.git'), baseBranch: 'main', mainBranch: 'main', worktree: { key: 'w', label: 'w', branch: 'feature' } })];
+    /** 調べ直しを待ってから、結果を付けた一覧を返す */
+    const settled = async () => {
+      const done = new Promise<void>((res) => (wake = res));
+      status.invalidate();
+      status.apply(list());
+      await done;
+      return status.apply(list())[0]!;
+    };
+
+    const auto = await settled();
+    assert.equal(auto.baseBranch, 'develop');
+    assert.equal(auto.basePicked, undefined);
+    assert.equal(auto.changes?.merged, true);
+
+    picked = 'main';
+    const chosen = await settled();
+    assert.equal(chosen.baseBranch, 'main');
+    assert.equal(chosen.basePicked, true);
+    assert.equal(chosen.changes?.merged, false);
+    assert.equal(chosen.changes?.behind, 1);
+    assert.equal(chosen.changes?.ahead, 2);
+
+    picked = undefined;
+    const back = await settled();
+    assert.equal(back.baseBranch, 'develop');
+    assert.equal(back.basePicked, undefined);
+    assert.equal(back.changes?.merged, true);
   });
 });
 

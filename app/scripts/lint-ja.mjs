@@ -77,6 +77,7 @@ const SAMPLES = {
   'tooltip.base': [['develop']],
   'changes.mergedInto': [['main', 'develop'], ['main']],
   'flyout.baseRootMerged': [['main']],
+  'flyout.baseOwn': [[3]],
   'flyout.mergedInto': [['main']],
   'widget.branchedFromTip': [['integration/new_feature', 'main']],
   'settings.options.minutes': [[10]],

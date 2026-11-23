@@ -5,7 +5,7 @@
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
 import { initSystemUsage } from './system-usage.js';
-import type { FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, GitFailure, PlanStep, SessionView, WidgetLayout } from '../shared/types';
+import type { BasePicker, FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, GitFailure, PlanStep, SessionView, WidgetLayout } from '../shared/types';
 import {
   PENDING_FOCUS_MS,
   PRIORITY_SORT,
@@ -716,7 +716,13 @@ function flyItem(t: TimelineItem): FlyItem {
 
 function cardContent(card: WorktreeCard): FlyContent {
   if (card.isMain) return { kind: 'plain', items: card.timeline.map(flyItem) };
-  return { kind: 'timeline', items: card.timeline.map(flyItem), ...(card.base && { base: { branch: card.base.branch, tip: card.base.tip, ...(card.mergedInto && { mergedInto: card.mergedInto }) } }) };
+  const picker = pickerOf(card.key);
+  return {
+    kind: 'timeline',
+    items: card.timeline.map(flyItem),
+    ...(card.base && { base: { branch: card.base.branch, tip: card.base.tip, ...(card.mergedInto && { mergedInto: card.mergedInto }), ...(card.base.picked && { picked: true }) } }),
+    ...(picker && { picker }),
+  };
 }
 
 function repoContent(repo: RepoView): FlyContent {
@@ -831,15 +837,77 @@ function updateFlyout() {
     if (repo) window.widget.updateFlyout(flyKey, repoContent(repo), repo.hiddenCards.length);
     return;
   }
+  if (flyKey.startsWith(GIT_PREFIX)) return updateGitFlyout(flyKey.slice(GIT_PREFIX.length));
   const card = cards.get(flyKey)?.data;
   if (card) window.widget.updateFlyout(flyKey, cardContent(card), card.stackCount);
 }
 
+// ---- 分岐元の候補（docs/design/worktree-cards.md の「分岐元を選ぶ」） ----
+
+/** 開いている候補の一覧。key はめくれの目印（カードの目印か `git:<カードの目印>`）。一覧を閉じたら忘れる */
+let basePicker: { key: string; picker: BasePicker } | undefined;
+/** 開いた順の番号。前に開いたものの結果が後から届いても使わない */
+let baseSeq = 0;
+
+function pickerOf(flyoutKey: string): BasePicker | undefined {
+  return basePicker?.key === flyoutKey ? basePicker.picker : undefined;
+}
+
+function cardOfFly(flyoutKey: string): string {
+  return flyoutKey.startsWith(GIT_PREFIX) ? flyoutKey.slice(GIT_PREFIX.length) : flyoutKey;
+}
+
+/** 分岐元の行を押した：候補の一覧を開け閉めする。git はこのときだけ動かす */
+async function toggleBasePicker(flyoutKey: string) {
+  const seq = ++baseSeq;
+  if (basePicker?.key === flyoutKey) {
+    basePicker = undefined;
+    return updateFlyout();
+  }
+  basePicker = { key: flyoutKey, picker: {} };
+  updateFlyout();
+  const choices = await window.widget.baseChoices(cardOfFly(flyoutKey)).catch(() => undefined);
+  if (seq !== baseSeq || basePicker?.key !== flyoutKey) return;
+  basePicker.picker = choices ? { choices } : { failed: true };
+  updateFlyout();
+}
+
+/** 候補を選んだ、または自動に戻した。比べ直した結果は一覧の更新で届く */
+function pickBase(flyoutKey: string, branch: string | null) {
+  baseSeq++;
+  basePicker = undefined;
+  window.widget.setBaseBranch(cardOfFly(flyoutKey), branch);
+  updateFlyout();
+}
+
 // ---- git の詳細（見出しの印を押したとき。docs/design/git-detail.md） ----
+
+const GIT_PREFIX = 'git:';
 
 /** git の詳細のめくれの目印。カードのタイムラインのめくれ（カードの目印そのまま）と区別する */
 function gitFlyKey(key: string): string {
-  return `git:${key}`;
+  return `${GIT_PREFIX}${key}`;
+}
+
+/** 開いている git の詳細と、そのときのカードの分岐元。分岐元が変わったら読み直す */
+let gitShown: { key: string; detail: GitDetail; base: string | undefined } | undefined;
+
+/** 開いている詳細の中身を送り直す。カードの分岐元が変わっていたら（候補から選んだ）、読み直してから送る */
+function updateGitFlyout(key: string) {
+  const fk = gitFlyKey(key);
+  if (gitShown?.key !== key) return;
+  const base = cards.get(key)?.data?.base?.branch;
+  const picker = pickerOf(fk);
+  window.widget.updateFlyout(fk, { kind: 'git', detail: gitShown.detail, ...(picker && { picker }) }, 0);
+  if (base === gitShown.base) return;
+  gitShown.base = base;
+  const seq = ++gitSeq;
+  void window.widget.gitDetail(key).catch(() => undefined).then((detail) => {
+    if (seq !== gitSeq || !detail || gitShown?.key !== key || flyKey !== fk) return;
+    gitShown.detail = detail;
+    const now = pickerOf(fk);
+    window.widget.updateFlyout(fk, { kind: 'git', detail, ...(now && { picker: now }) }, 0);
+  });
 }
 
 /** 詳細を待つ長さ。これより早く読めたら読み終えてから開き、読み込み中の表示をちらつかせない */
@@ -856,8 +924,15 @@ async function showGitFlyout(key: string) {
   const request = window.widget.gitDetail(key).catch(() => undefined);
   const early = await Promise.race([request, new Promise<null>((r) => setTimeout(() => r(null), GIT_WAIT_MS))]);
   if (seq !== gitSeq || !refs.el.isConnected) return;
-  const show = (detail: GitDetail | undefined) =>
+  const remember = (detail: GitDetail) => {
+    gitShown = { key, detail, base: refs.data?.base?.branch };
+  };
+  const show = (detail: GitDetail | undefined) => {
+    // 読んでいる途中は、前に開いたときの詳細で上書きしないよう忘れておく
+    if (detail) remember(detail);
+    else gitShown = undefined;
     window.widget.showFlyout({ key: fk, count: 0, anchor: rectOf(refs.card), hit: rectOf(refs.changes), content: { kind: 'git', ...(detail && { detail }) }, open: true });
+  };
   if (early !== null) {
     if (early) show(early);
     return;
@@ -866,13 +941,17 @@ async function showGitFlyout(key: string) {
   show(undefined);
   const detail = await request;
   if (seq !== gitSeq) return;
-  if (detail) window.widget.updateFlyout(fk, { kind: 'git', detail }, 0);
-  else window.widget.leaveFlyout(fk);
+  if (detail) {
+    remember(detail);
+    window.widget.updateFlyout(fk, { kind: 'git', detail }, 0);
+  } else window.widget.leaveFlyout(fk);
 }
 
 function onFlyAction(action: FlyAction) {
   if (action.type === 'open') openRow(action.id);
   else if (action.type === 'toggle') toggleArchive(action.id);
+  else if (action.type === 'base-open') void toggleBasePicker(action.key);
+  else if (action.type === 'base-pick') pickBase(action.key, action.branch);
   else toggleCard(action.key);
 }
 
@@ -1242,6 +1321,11 @@ window.widget.onFlyAction(onFlyAction);
 window.widget.onFlyState((key, open) => {
   flyKey = key;
   flyOpen = open;
+  // 一覧を閉じた、ほかのものに切り替わったら、候補の一覧も閉じる
+  if (basePicker && (!open || basePicker.key !== key)) {
+    basePicker = undefined;
+    baseSeq++;
+  }
   // めくれを出している間は、そのカードの重なりを濃くする。一覧を開いている間は、重なりが飛び出して一覧になったものとして隠す
   for (const [k, refs] of cards) {
     refs.el.toggleAttribute('data-fly', k === key);

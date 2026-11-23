@@ -234,6 +234,20 @@ export const ja = {
     baseRoot: '分岐元',
     /** 分岐元ではなく main に入ってマージ済みにしたとき */
     baseRootMerged: (into: string) => `分岐元（${into} にマージ済み）`,
+    /** 候補から選んだ分岐元の行の下の段 */
+    baseRootPicked: '手で選んだ分岐元',
+    /** 分岐元の行のツールチップの末尾と、読み上げ名 */
+    baseChange: '分岐元を選ぶ',
+    /** 候補の一覧の読み上げ名 */
+    baseChoices: '分岐元の候補',
+    /** 候補の右に出す、HEAD にあってそのブランチにないコミットの数 */
+    baseOwn: (n: number) => `自分のコミット ${n} 件`,
+    /** 自動で推定した候補の札 */
+    baseInferred: '推定',
+    /** 選んだ値をやめて、自動の推定に戻すボタン */
+    baseReset: '自動に戻す',
+    baseLoading: '候補を読んでいます…',
+    baseFailed: '候補を読めませんでした',
     /** マージ済みのカードの見出しのツールチップ。分岐元ではなく main に入っていたとき */
     mergedInto: (into: string) => `${into} にマージ済み`,
     unarchive: 'アーカイブから戻す',

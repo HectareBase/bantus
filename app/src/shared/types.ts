@@ -34,6 +34,8 @@ export interface SessionView {
    * git-status.ts が割り出した名前に置き換える。元のフォルダは、既定以外のブランチにいるかブランチにいないときだけ既定のブランチ
    */
   baseBranch?: string;
+  /** baseBranch はユーザーが候補から選んだもの（自動の推定ではない） */
+  basePicked?: boolean;
   /** 別のセッションから作られたときの、元のセッションの ID（`spawnedFrom.sessionId`。サイドチャットは除く） */
   spawnedFrom?: string;
   /** 最後のターンのまとめの文章（`turnWrapUp.description`）。一覧の下の段に出す */
@@ -191,6 +193,10 @@ export interface WidgetApi {
   showCardMenu(key: string): void;
   /** カードの git の詳細（見出しの印を押したとき）。フォルダはメインプロセスがセッションから探す。カードがわからなければ undefined */
   gitDetail(key: string): Promise<GitDetail | undefined>;
+  /** カードの分岐元の候補（候補の一覧を開いたときだけ調べる）。読めなければ undefined */
+  baseChoices(key: string): Promise<BaseChoices | undefined>;
+  /** カードの分岐元を選ぶ（null で自動に戻す）。Bantus の設定に保存する */
+  setBaseBranch(key: string, branch: string | null): void;
   /** セッションの行の右クリックメニュー（ID をコピー）。ID はメインプロセスが自分の一覧にあるか確かめてからコピーする */
   showSessionMenu(id: string): void;
   /** ウィジェットのタイトルの右クリックメニュー（アプリの終了） */
@@ -402,13 +408,38 @@ export interface GitDetail {
   failed?: boolean;
 }
 
+/** 分岐元の候補の 1 件 */
+export interface BaseCandidate {
+  name: string;
+  /** 自分のコミットの数（HEAD にあってそのブランチにないコミット） */
+  own: number;
+}
+
+/** カードの分岐元の候補（src/main/base-branch.ts の readBaseChoices） */
+export interface BaseChoices {
+  /** 今使っている分岐元 */
+  current: string;
+  /** 自動で推定したもの */
+  inferred?: string;
+  /** ユーザーが選んだもの。自動のときは undefined */
+  picked?: string;
+  /** 近い順 */
+  candidates: BaseCandidate[];
+}
+
+/** 開いている候補の一覧。choices も failed もなければ読んでいる途中 */
+export interface BasePicker {
+  choices?: BaseChoices;
+  failed?: boolean;
+}
+
 export type FlyContent =
-  /** base：ワークツリーの分岐元。起点のすぐ上（起点がなければ一番下）に分岐元の行を出す */
-  | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string; mergedInto?: string } }
+  /** base：ワークツリーの分岐元。起点のすぐ上（起点がなければ一番下）に分岐元の行を出す。picker は開いている候補の一覧 */
+  | { kind: 'timeline'; items: FlyItem[]; base?: { branch: string; tip: string; mergedInto?: string; picked?: boolean }; picker?: BasePicker }
   | { kind: 'plain'; items: FlyItem[] }
   | { kind: 'cards'; cards: FlyCard[] }
   /** カードの見出しの git の印を押したとき。detail がなければ読んでいる途中 */
-  | { kind: 'git'; detail?: GitDetail };
+  | { kind: 'git'; detail?: GitDetail; picker?: BasePicker };
 
 export interface FlyRequest {
   /** カードの目印（リポジトリの見出しから開くときは `repo:<目印>`） */
@@ -439,7 +470,11 @@ export interface FlyTarget {
 export type FlyAction =
   | { type: 'open'; id: string }
   | { type: 'toggle'; id: string }
-  | { type: 'toggle-card'; key: string };
+  | { type: 'toggle-card'; key: string }
+  /** 分岐元の候補の一覧を開け閉めする。key は出しているめくれの目印 */
+  | { type: 'base-open'; key: string }
+  /** 分岐元を選ぶ（null で自動に戻す） */
+  | { type: 'base-pick'; key: string; branch: string | null };
 
 /** めくれと一覧のウィンドウ（flyout.html）の API */
 export interface FlyoutApi {

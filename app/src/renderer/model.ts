@@ -642,7 +642,7 @@ export interface WorktreeCard {
    * ワークツリーの分岐元（遅れと未マージを比べている先）。印のツールチップと、一覧の分岐元の行に使う。
    * offMain は、分岐元が元のフォルダの今のブランチと違う（段階的に分岐した）とき。以前のセッションがなくても一覧を開けるようにする
    */
-  base?: { branch: string; tip: string; offMain: boolean };
+  base?: { branch: string; tip: string; offMain: boolean; picked?: boolean };
   changes?: GitChanges;
   /** 作業フォルダの git が失敗した理由（changes がないときだけ使う） */
   gitError?: GitFailure;
@@ -981,7 +981,7 @@ function baseOf(s: SessionView): Pick<WorktreeCard, 'base'> {
   const branch = s.baseBranch;
   if (!branch) return {};
   const tip = ja.widget.branchedFromTip(branch, s.mainBranch ?? (s.mainHead ? ja.tooltip.detached(s.mainHead) : ja.tooltip.unknownBranch));
-  return { base: { branch, tip, offMain: !!s.worktree && branch !== s.mainBranch } };
+  return { base: { branch, tip, offMain: !!s.worktree && branch !== s.mainBranch, ...(s.basePicked && { picked: true }) } };
 }
 
 /** 画面に並んでいる順（上から）の、アーカイブしていないセッション */

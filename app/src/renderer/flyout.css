@@ -259,9 +259,28 @@ html[data-motion="subtle"] .progress-still { display: block; }
 }
 
 /* ---- 分岐元（ワークツリーの分岐元が元のフォルダのブランチと違うときだけ） ---- */
-/* 分岐元のブランチの行：起点のすぐ上（なければ一番下）に、ブランチのアイコンと名前を出す。押せない */
-.node.base-root { cursor: default; }
-.node.base-root:hover { background: none; }
+/* 分岐元のブランチの行：起点のすぐ上（なければ一番下）に、ブランチのアイコンと名前を出す。押すと候補の一覧を開く */
+.node.base-toggle { cursor: pointer; }
+.node.base-toggle:hover, .node.git-node.base-toggle:not(.git-commit):hover { background: var(--row-hover); }
+.node.base-toggle:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
+.base-more { flex: none; display: grid; place-items: center; width: 16px; height: 16px; color: var(--text-tertiary); }
+.base-more svg { width: 12px; height: 12px; }
+.node.base-toggle:not(:hover):not(:focus-visible):not([aria-expanded="true"]) .base-more { visibility: hidden; }
+/* 候補の一覧：分岐元の行のすぐ下に開く。タイムラインの線は左を通す */
+.base-picker { position: relative; padding: 2px 8px 6px 30px; }
+.base-picker > .ln { top: 0; bottom: 0; height: auto; }
+.base-note { padding: 3px 6px; font-size: 11px; color: var(--text-tertiary); }
+.base-choice, .base-reset { width: 100%; display: flex; align-items: center; gap: 5px; min-height: 24px; padding: 2px 6px 2px 4px; border: 0; border-radius: 4px; background: none; text-align: left; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.base-choice:hover, .base-reset:hover { background: var(--row-hover); color: var(--text); }
+.base-choice:focus-visible, .base-reset:focus-visible { outline: 2px solid var(--focus-line); outline-offset: -2px; }
+.base-choice[aria-checked="true"] { color: var(--text); font-weight: 600; }
+.base-check { flex: none; width: 13px; height: 13px; display: grid; place-items: center; }
+.base-check svg { width: 12px; height: 12px; }
+.base-name { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.base-tag { flex: none; padding: 0 4px; border-radius: 3px; background: var(--selected); color: var(--text-secondary); font-size: 10px; font-weight: 400; line-height: 14px; }
+.base-own { flex: none; margin-left: auto; padding-left: 6px; font-size: 10.5px; font-weight: 400; color: var(--text-tertiary); }
+.base-reset { margin-top: 2px; font-size: 11px; color: var(--text-tertiary); }
+.base-reset svg { width: 12px; height: 12px; margin: 0 1px; }
 .base-root .base-ic { position: absolute; left: 11px; top: calc(50% - 7.5px); width: 15px; height: 15px; display: grid; place-items: center; color: var(--text-tertiary); background: var(--pop); z-index: 1; }
 .base-root .base-ic svg { width: 13px; height: 13px; }
 .base-root .ln.in { height: calc(50% - 7.5px); }
