@@ -21,6 +21,7 @@ const SAMPLES = {
   'todo.more': [[3]],
   'state.waitingWithReason': [['許可待ち']],
   'settings.tooltipDelay.seconds': [[0.4]],
+  'settings.signedPercent': [[5], [-5], [0]],
   'time.minutesAgo': [[5]],
   'time.hoursAgo': [[3]],
   'time.daysAgo': [[2]],

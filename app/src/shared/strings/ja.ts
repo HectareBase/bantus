@@ -358,6 +358,8 @@ export const ja = {
       off: '表示しない',
       seconds: (s: number) => `${s.toFixed(1)} 秒`,
     },
+    /** 0 を中央にしたスライダーの値 */
+    signedPercent: (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${-v}%` : '0%'),
     /** 項目ごとの名前と説明 */
     items: {
       edge: { label: '画面の端', description: 'ウィジェットを置く側' },
@@ -374,13 +376,17 @@ export const ja = {
       islandLine: { label: '縁の太さ', description: '帯の内側の端に引く黒い線の太さ。最前面に固定しているときは、画面の残りの 3 辺の線も同じ太さにする' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
-      headerShade: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% で区切り線だけになる' },
+      headerTone: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% が標準で、プラスで濃く、マイナスで薄くなる' },
       activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線。50% が標準、0% で塗らない' },
       zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
       motion: {
         label: 'アニメーション効果',
         description: '控えめにすると回転や点滅を止め、状態を色と枠で示す。CPU の負担が減る。並べ替えの動きは残す',
+      },
+      attentionLook: {
+        label: '未確認の強調',
+        description: '未確認の行の見た目。枠なしは控えめのときの枠を消す。なしは帯と光も消す。巡回の順番は変わらない',
       },
       mainArchiveMinutes: {
         label: 'メインの作業フォルダを自動でアーカイブ',
@@ -446,6 +452,9 @@ export const ja = {
       right: '右',
       motionFull: '標準',
       motionSubtle: '控えめ',
+      attentionFull: '標準',
+      attentionNoFrame: '枠なし',
+      attentionNone: 'なし',
       themeSystem: 'システム',
       themeLight: 'ライト',
       themeDark: 'ダーク',

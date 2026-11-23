@@ -514,7 +514,7 @@ export interface FlyShow {
 
 export type WidgetLayout = Pick<
   Settings,
-  | 'edge' | 'island' | 'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'pinned' | 'mainArchiveMinutes'
+  | 'edge' | 'island' | 'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerTone' | 'attentionLook' | 'activeHighlight' | 'pinned' | 'mainArchiveMinutes'
   | 'projectOrder' | 'worktreeOrder' | 'branchTree' | 'sessionOrder' | 'rowPadding' | 'showUpdated' | 'showState' | 'showContext' | 'showSystemUsage' | 'showWindowSwitcher' | 'archive' | 'archivedCards' | 'holds' | 'heldCards'
   | 'notifyWaiting' | 'notifyDone' | 'sound' | 'soundType' | 'soundVolume' | 'toast' | 'flash' | 'muteWhenOpen' | 'statusColors' | 'motion'
   | 'tooltipDelayMs' | 'showChanges' | 'viewerEnabled' | 'viewerPath' | 'viewerAutoHeight' | 'viewerHeight' | 'viewerCollapsed'

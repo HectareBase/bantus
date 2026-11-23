@@ -53,17 +53,17 @@
     <div id="switcher-bar" class="switcher-bar"></div>
   </nav>
 
-  <!-- リポジトリ：見出し（名前、ToDo を足すボタン、バッジ、カードごとアーカイブした件数）、ToDo のリスト、カードの並び。件数は右端に置く。
+  <!-- リポジトリ：見出し（名前、バッジ、カードごとアーカイブした件数、右端に ToDo を足すボタン）、ToDo のリスト、カードの並び。
        ToDo（docs/design/todos.md）の行は todo.ts が入れる。1 件もなければリストは出さない -->
   <template id="repo-template">
     <section class="repo">
       <h2 class="repo-header">
         <span class="repo-icon" data-icon="folder"></span>
         <span class="repo-name"></span>
-        <button class="todo-add" data-icon="todo-add" data-i18n-tip="todo.add" data-i18n-aria-label="todo.add"></button>
         <span class="spacer"></span>
         <span class="badge"></span>
         <button class="repo-archived" hidden><span class="repo-archived-icon" data-icon="archive"></span><span class="n"></span></button>
+        <button class="todo-add" data-icon="todo-add" data-i18n-tip="todo.add" data-i18n-aria-label="todo.add"></button>
       </h2>
       <div class="todos" hidden></div>
       <div class="repo-cards"></div>

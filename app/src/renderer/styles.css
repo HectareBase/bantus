@@ -261,7 +261,7 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
 .repo-archived .n { min-width: 1ch; line-height: 1; text-align: center; }
 
 /* ---- プロジェクトの ToDo（docs/design/todos.md） ----
-   見出しの名前のすぐ右に「ToDo を足す」ボタン。ふだんは薄く、見出しに乗せると濃くする。
+   見出しの右端に「ToDo を足す」ボタン。ふだんは薄く、見出しに乗せると濃くする。
    リストは見出しとカードの間に置き、行は低く（22px）、枠の余白も 2px だけにする。1 件もなければ出さない（hidden）。
    チェックした行は済みの見た目にして、下の細い線を --leave-ms かけて縮める。縮みきったら薄くして高さを詰めて消える（todo.ts）。
    動きは transform と opacity が中心で、高さを詰めるのだけは消える一度きり */
@@ -270,7 +270,6 @@ main::-webkit-scrollbar-thumb { background: var(--card-stroke); border-radius: 3
   flex: none;
   width: 20px;
   height: 18px;
-  margin-left: -2px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -926,6 +925,15 @@ html[data-motion="subtle"] .row[data-attention]::after {
 html[data-motion="subtle"] .row[data-attention][data-state="waiting"]::after { background: var(--waiting); }
 html[data-motion="subtle"] .row[data-attention][data-state="idle"]::after { background: var(--idle); }
 html[data-motion="subtle"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background]):focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+
+/* 未確認の強調の段階（設定の attentionLook）。変えるのは見た目だけで、未確認の判定、並び、巡回はそのまま。
+   no-frame は控えめのときの太い枠を消す（標準のアニメーションには枠がない）。none は帯、点滅、光も消し、未確認でない行と同じにする */
+html[data-motion="subtle"][data-attention-look="no-frame"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention]:not(:focus-visible) { box-shadow: none; }
+html[data-motion="subtle"][data-attention-look="no-frame"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention][data-focused]:not(:focus-visible),
+html[data-motion="subtle"][data-attention-look="none"] .card-wrap:not([data-held]) .row:is([data-state="waiting"], [data-state="idle"]):not([data-held]):not([data-background])[data-attention]:not(:focus-visible) { box-shadow: inset 0 0 0 1px var(--st-line); }
+html[data-attention-look="none"] .row[data-attention]::before { background: transparent; animation: none; will-change: auto; }
+html[data-attention-look="none"] .row[data-attention]::after { content: none; }
+html[data-attention-look="none"] .sweep { display: none; }
 
 /* ---- 幅を変える取っ手（内側の端）。線は描かず、カーソルの形だけで知らせる ---- */
 .resize-handle {

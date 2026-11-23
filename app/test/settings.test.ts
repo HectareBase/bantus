@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, highlightScale, normalizeColor, normalizeNote, normalizeSettings,
+  CATEGORIES, COLOR_STATES, COLOR_SWATCHES, DEFAULT_SETTINGS, DEFAULT_STATUS_COLORS, HOLD_NOTE_MAX, SETTING_DEFS, WIDTH_MIN, clampWidth, headerAlpha, highlightScale, normalizeColor, normalizeNote, normalizeSettings,
 } from '../src/shared/settings';
 
 describe('git の設定', () => {
@@ -141,13 +141,32 @@ describe('normalizeSettings のアーカイブの印', () => {
 });
 
 describe('normalizeSettings の見出しの濃さ', () => {
-  it('なければ 5%', () => assert.equal(normalizeSettings({}).headerShade, 5));
-  it('0〜20 に収め、整数にする', () => {
-    assert.equal(normalizeSettings({ headerShade: 0 }).headerShade, 0);
-    assert.equal(normalizeSettings({ headerShade: 50 }).headerShade, 20);
-    assert.equal(normalizeSettings({ headerShade: 7.6 }).headerShade, 8);
+  it('なければ 0 で、不透明度は以前の既定の 5%', () => {
+    assert.equal(normalizeSettings({}).headerTone, 0);
+    assert.equal(headerAlpha(0), 0.05);
   });
-  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerShade: '10' }).headerShade, 5));
+  it('-15〜15 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ headerTone: -50 }).headerTone, -15);
+    assert.equal(normalizeSettings({ headerTone: 50 }).headerTone, 15);
+    assert.equal(normalizeSettings({ headerTone: 2.6 }).headerTone, 3);
+  });
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerTone: '10' }).headerTone, 0));
+  it('前の版の値は、同じ不透明度になる値へ移す', () => {
+    for (const shade of [0, 1, 2, 3, 4, 5, 6, 12, 20]) {
+      const tone = normalizeSettings({ headerShade: shade }).headerTone;
+      assert.ok(Math.abs(headerAlpha(tone) - shade / 100) < 1e-9, String(shade));
+    }
+  });
+  it('今の値があれば前の版の値は見ない', () => assert.equal(normalizeSettings({ headerTone: 2, headerShade: 20 }).headerTone, 2));
+});
+
+describe('normalizeSettings の未確認の強調', () => {
+  it('なければ今までの見た目', () => assert.equal(normalizeSettings({}).attentionLook, 'full'));
+  it('段階を受け付ける', () => {
+    assert.equal(normalizeSettings({ attentionLook: 'no-frame' }).attentionLook, 'no-frame');
+    assert.equal(normalizeSettings({ attentionLook: 'none' }).attentionLook, 'none');
+  });
+  it('知らない値は既定に戻す', () => assert.equal(normalizeSettings({ attentionLook: 'x' }).attentionLook, 'full'));
 });
 
 describe('normalizeSettings の開いている行の濃さ', () => {
@@ -241,8 +260,8 @@ describe('設定画面のカテゴリ', () => {
   it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['テーマ', ['theme']],
-      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerShade', 'activeHighlight', 'zoom']],
-      ['状態の色', ['motion', 'statusColors']],
+      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerTone', 'activeHighlight', 'zoom']],
+      ['状態の色', ['motion', 'attentionLook', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>
     assert.deepEqual(layout('cards'), [

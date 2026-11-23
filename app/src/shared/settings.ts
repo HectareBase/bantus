@@ -31,8 +31,10 @@ export interface Settings {
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
   cardOpacity: number;
-  /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
-  headerShade: number;
+  /** カードの見出しの帯の濃さ。0 が標準で、プラスで濃く、マイナスで薄い。headerAlpha で不透明度にする */
+  headerTone: number;
+  /** 未確認の行の強調。full は今までの見た目、no-frame は枠を消す、none は帯と光も消す。判定と巡回は変えない */
+  attentionLook: AttentionLook;
   /**
    * デスクトップで今開いているセッションの行（とめくれの一覧の行）の強調の濃さ（%）。
    * highlightScale で倍率にして CSS の --hl に入れる。50 が以前からの見た目（倍率 1）、0 で強調しない
@@ -197,6 +199,25 @@ export function normalizeNote(v: unknown): string {
   return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
 }
 
+/** 未確認の行の強調の段階 */
+export type AttentionLook = 'full' | 'no-frame' | 'none';
+
+/** 見出しの濃さの範囲（0 を中央に、前後へこの幅）と、0 のときの帯の不透明度（%） */
+export const HEADER_TONE_RANGE = 15;
+const HEADER_BASE = 5;
+
+/** 見出しの濃さから帯の不透明度（0〜1）を出す。プラスは足し、マイナスは左端で 0 になるよう縮める */
+export function headerAlpha(tone: number): number {
+  const percent = tone >= 0 ? HEADER_BASE + tone : HEADER_BASE * (1 + tone / HEADER_TONE_RANGE);
+  return Math.max(0, percent) / 100;
+}
+
+/** 前の版の見出しの濃さ（0〜20%）を、同じ不透明度になる今の値に置き換える */
+function toneFromShade(shade: number): number {
+  const s = Math.min(20, Math.max(0, Math.round(shade)));
+  return s >= HEADER_BASE ? s - HEADER_BASE : (s - HEADER_BASE) * (HEADER_TONE_RANGE / HEADER_BASE);
+}
+
 /** アニメーション効果。full（標準）が以前からの見た目 */
 export type Motion = 'full' | 'subtle';
 
@@ -220,7 +241,7 @@ export function isLegacyValue(key: string, value: unknown): boolean {
 }
 
 /** 前の版にあった項目で、読んだときに今の項目へ移すもの。保存のときは残さない */
-export const LEGACY_KEYS: readonly string[] = ['alwaysShow'];
+export const LEGACY_KEYS: readonly string[] = ['alwaysShow', 'headerShade'];
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -242,7 +263,8 @@ export const DEFAULT_SETTINGS: Settings = {
   islandLine: 1,
   backgroundOpacity: 100,
   cardOpacity: 50,
-  headerShade: 5,
+  headerTone: 0,
+  attentionLook: 'full',
   activeHighlight: HIGHLIGHT_NORMAL,
   zoom: 100,
   theme: 'system',
@@ -389,7 +411,7 @@ export function isBranchName(name: unknown): name is string {
 
 export type SettingDef =
   | (Base<
-      'edge' | 'island' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
+      'edge' | 'island' | 'theme' | 'motion' | 'attentionLook' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -399,7 +421,7 @@ export type SettingDef =
   /** オンかオフ。トグルスイッチで描き、横に「オン」「オフ」を出す。ラベルは「〜する」か、オンオフで意味が通る名前にする */
   | (Base<BooleanKey> & { type: 'toggle' })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerTone' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -477,9 +499,9 @@ export const SETTING_DEFS: SettingDef[] = [
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'look', group: T.groups.widget, type: 'slider',
-    ...T.items.headerShade,
-    min: 0, max: 20, step: 1, unit: '%',
+    key: 'headerTone', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.headerTone,
+    min: -HEADER_TONE_RANGE, max: HEADER_TONE_RANGE, step: 1, unit: '%', format: T.signedPercent,
   },
   {
     key: 'activeHighlight', category: 'look', group: T.groups.widget, type: 'slider',
@@ -495,6 +517,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'motion', category: 'look', group: T.groups.statusColors, type: 'segmented',
     ...T.items.motion,
     options: [{ value: 'full', label: T.options.motionFull }, { value: 'subtle', label: T.options.motionSubtle }],
+  },
+  {
+    key: 'attentionLook', category: 'look', group: T.groups.statusColors, type: 'segmented',
+    ...T.items.attentionLook,
+    options: [{ value: 'full', label: T.options.attentionFull }, { value: 'no-frame', label: T.options.attentionNoFrame }, { value: 'none', label: T.options.attentionNone }],
   },
   {
     key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',
@@ -631,6 +658,8 @@ export function normalizeSettings(input: unknown): Settings {
     let v = src[def.key];
     // 前の版の開いている行の濃さ（薄い・標準・濃い）は、近い濃さ（%）に置き換える
     if (def.key === 'activeHighlight' && typeof v === 'string') v = LEGACY_HIGHLIGHT[v];
+    // 前の版の見出しの濃さは、同じ見た目になる値に置き換える
+    if (def.key === 'headerTone' && v === undefined && typeof src.headerShade === 'number' && Number.isFinite(src.headerShade)) v = toneFromShade(src.headerShade);
     switch (def.type) {
       case 'segmented':
         if (def.options.some((o) => o.value === v)) (out as any)[def.key] = v;
