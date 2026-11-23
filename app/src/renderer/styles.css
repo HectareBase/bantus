@@ -439,6 +439,28 @@ html[data-motion="subtle"] .todo.leaving::before { animation: none; }
 
 /* ワークツリー（元のフォルダを含む）のカード。後ろの重なりと押せる的を、カードと同じ高さで重ねる */
 .card-wrap { position: relative; margin-bottom: 8px; }
+
+/* ---- ブランチのツリー（設定の branchTree）。カードを字下げし、重なりと的もカードの端に付けて動かす（めくれもカードの端から伸びる）。
+   線は重なっても濃くならない不透明な灰色で、重なりと同じ色（色は状態を表すので、色相は使わない）。--tree-y は枝がカードに届く高さ（見出しの真ん中）。
+   縦の線は字下げの先の 11px 手前に置く。重なり（6px）に隠れない枝の長さを残すため ---- */
+[data-tree] { --tree-step: 16px; --tree-x: 5px; --tree-y: 16px; --tree-line: var(--stack); }
+html:not([data-edge="left"]) .card-wrap[data-tree] > .stack { left: calc(var(--tree-depth) * var(--tree-step) - 6px); }
+html:not([data-edge="left"]) .card-wrap[data-tree] > .stack-hit { left: calc(var(--tree-depth) * var(--tree-step) - 8px - var(--card-indent)); }
+.card-wrap[data-tree] > .card { margin-left: calc(var(--tree-depth) * var(--tree-step)); }
+.tree-guides { position: absolute; inset: 0 0 -8px 0; pointer-events: none; }
+.tree-guides > span { position: absolute; left: calc(var(--tree-level) * var(--tree-step) + var(--tree-x)); }
+.tree-rail { top: 0; bottom: 0; border-left: 2px solid var(--tree-line); }
+.tree-elbow { top: 0; width: calc(var(--tree-step) - var(--tree-x)); height: var(--tree-y); border-left: 2px solid var(--tree-line); border-bottom: 2px solid var(--tree-line); border-bottom-left-radius: 7px; }
+.tree-down { bottom: 0; height: 8px; border-left: 2px solid var(--tree-line); }
+.tree-group { position: relative; height: 22px; margin-bottom: 8px; --tree-y: 11px; }
+.tree-group-label { display: flex; align-items: center; gap: 5px; height: 100%; margin-left: calc(var(--tree-depth) * var(--tree-step)); font-size: 11px; color: var(--text-secondary); min-width: 0; }
+.tree-group-label svg { flex: none; width: 12px; height: 12px; }
+.tree-group-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 見出しの段はアイコンの真下から子の線を出す。枝はアイコンに触れないよう少し短くする */
+.tree-group .tree-elbow { width: calc(var(--tree-step) - var(--tree-x) - 3px); }
+.card-via { flex: 0 1 auto; max-width: 40%; min-width: 0; font-weight: 400; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-via::after { content: " ›"; }
+.card-via[hidden] { display: none; }
 .card {
   position: relative;
   background: var(--card);

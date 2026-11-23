@@ -60,6 +60,8 @@ export interface Settings {
   projectOrder: SortOrder;
   /** プロジェクトの中のカード（ワークツリー）の並び。fixed は元のフォルダを先頭に、あとは名前順 */
   worktreeOrder: SortOrder;
+  /** カードを分岐元の下にぶら下げ、角丸の線でつなぐ（docs/design/worktree-cards.md の「ブランチのツリー」） */
+  branchTree: boolean;
   /** 行（セッション）の並び。fixed は新しく作ったものが上 */
   sessionOrder: SortOrder;
   /** 行（セッション）の上下の余白（px）。小さくすると 1 画面に多くの行が入る */
@@ -124,6 +126,11 @@ export interface Settings {
   holds: Record<string, HoldMark>;
   /** 保留にしたカード（カードの目印 → 印）。設定画面には出さず、カードの見出しのアイコンで切り替える */
   heldCards: Record<string, HoldMark>;
+  /**
+   * ユーザーが選んだ分岐元（`<リポジトリの目印>|<作業ブランチ>` → 分岐元のブランチ）。設定画面には出さず、カードの分岐元の行で選ぶ。
+   * `.git/config` にも Claude のデータにも書かない。ブランチが消えたら外す（docs/design/worktree-cards.md の「分岐元を選ぶ」）
+   */
+  basePicks: Record<string, string>;
   /** カードの一覧の下に HTML ビューアを出す（docs/design/html-viewer.md） */
   viewerEnabled: boolean;
   /**
@@ -245,6 +252,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mainArchiveMinutes: 10,
   projectOrder: 'fixed',
   worktreeOrder: 'fixed',
+  branchTree: false,
   sessionOrder: 'fixed',
   rowPadding: 4,
   showUpdated: true,
@@ -271,6 +279,7 @@ export const DEFAULT_SETTINGS: Settings = {
   archivedCards: {},
   holds: {},
   heldCards: {},
+  basePicks: {},
   viewerEnabled: false,
   viewerPath: '',
   viewerAutoReload: true,
@@ -371,6 +380,11 @@ export const SESSION_KEY_ID = /^local_[\w-]{1,64}$/;
 /** カードの目印として受け付ける文字列（リポジトリのフォルダとワークツリーの目印を | でつないだもの） */
 export function isCardKey(key: unknown): key is string {
   return typeof key === 'string' && key.length > 0 && key.length <= 1024 && !/[\x00-\x1f]/.test(key);
+}
+
+/** ブランチ名として受け付ける文字列 */
+export function isBranchName(name: unknown): name is string {
+  return typeof name === 'string' && name.length > 0 && name.length <= 255 && !/[\x00-\x20\x7f~^:?*[\\]/.test(name);
 }
 
 export type SettingDef =
@@ -500,6 +514,10 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'worktreeOrder', category: 'cards', group: T.groups.order, type: 'segmented',
     ...T.items.worktreeOrder,
     options: orderOptions(T.options.orderName),
+  },
+  {
+    key: 'branchTree', category: 'cards', group: T.groups.order, type: 'toggle',
+    ...T.items.branchTree,
   },
   {
     key: 'sessionOrder', category: 'cards', group: T.groups.order, type: 'segmented',
@@ -651,6 +669,7 @@ export function normalizeSettings(input: unknown): Settings {
   out.archivedCards = normalizeMarks(src.archivedCards, isCardKey);
   out.holds = normalizeHolds(src.holds, (id) => SESSION_KEY_ID.test(id));
   out.heldCards = normalizeHolds(src.heldCards, isCardKey);
+  out.basePicks = normalizeBasePicks(src.basePicks);
   // 前の版の「常に表示」の星は、手で戻したものとして引き継ぐ
   if (Array.isArray(src.alwaysShow)) {
     for (const id of src.alwaysShow) {
@@ -676,6 +695,16 @@ function normalizeMarks(input: unknown, validKey: (key: string) => boolean): Rec
   if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
   for (const [key, mark] of Object.entries(input)) {
     if ((mark === 'archived' || mark === 'shown') && validKey(key)) out[key] = mark;
+  }
+  return out;
+}
+
+/** 選んだ分岐元の表から、目印とブランチ名が正しいものだけを残す */
+function normalizeBasePicks(input: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  for (const [key, branch] of Object.entries(input)) {
+    if (isCardKey(key) && key.indexOf('|') > 0 && isBranchName(branch)) out[key] = branch;
   }
   return out;
 }

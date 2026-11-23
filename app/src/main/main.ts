@@ -5,6 +5,7 @@ import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeThe
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAppBar, type AppBar } from './appbar';
+import { basePickKey, branchExists, fixtureBaseChoices, prunedBasePicks, readRefFiles, setBasePick } from './base-branch';
 import { areaWithoutBar, barOverhang, placeWidget, type PlacedBar } from './appbar-place';
 import { createBezel, type Bezel } from './bezel';
 import { bezelArea, bezelParts } from './bezel-place';
@@ -18,7 +19,7 @@ import { OPEN_SETTINGS_ARG, relaunchArgs } from './relaunch';
 import { startSelfUpdate } from './self-update';
 import { createSystemUsage } from './system-usage';
 import { copyableId } from './session-id';
-import { desktopDataFolders, folderKey, InterruptTracker, readFixtureHolds, readFixtureTodos, readSessions, sessionDataFolders, watchSessions } from './sessions';
+import { desktopDataFolders, folderKey, InterruptTracker, readDefaultBranch, readFixtureHolds, readFixtureTodos, readSessions, sessionDataFolders, watchSessions } from './sessions';
 import { getSettings, onSettingsChange, settingsFilePath, updateSettings } from './settings-store';
 import { scaleRect, tipBounds } from './tip-place';
 import { createTodoStore, todoFilePath, type TodoStoreFile } from './todo-store';
@@ -27,10 +28,10 @@ import { createWindowSwitcher } from './window-switcher';
 import { liveViewerKeys, resolveViewerTarget, type ViewerFs } from './viewer-target';
 import { worktreeAppUserModelId, worktreeInitialSettings, worktreeName, worktreeUserData, type GitEntry } from './worktree';
 import { cardKeyOf } from '../shared/card-key';
-import { SESSION_KEY_ID, clampWidth, isCardKey, widthLimit, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
+import { SESSION_KEY_ID, clampWidth, isBranchName, isCardKey, widthLimit, normalizeHold, type ArchiveMark, type HoldMark, type Settings, type WindowBounds } from '../shared/settings';
 import { DISPLAY_SETTLE_MS, PRIMARY, RESUME_SETTLE_MS, currentChoice, displayChoices, migrateLegacyDisplay, pickMonitor, rememberChoice, settleTimers } from '../shared/display-layout';
 import { ja } from '../shared/strings/ja';
-import type { AboutInfo, DisplayChoices, SessionView, TipRect, ToastRequest, ViewerState, WidgetLayout } from '../shared/types';
+import type { AboutInfo, BaseChoices, DisplayChoices, SessionView, TipRect, ToastRequest, ViewerState, WidgetLayout } from '../shared/types';
 
 /** 設定ウィンドウの最初の大きさと、いちばん小さい大きさ */
 const SETTINGS_SIZE = { width: 880, height: 640 };
@@ -104,7 +105,12 @@ const FETCH_TICK_MS = 15_000;
 /** 作業フォルダごとのコミットされていない変更。調べ終えて結果が変わったら、一覧を送り直す */
 const gitStatus = createGitStatus(() => sendSessions(), undefined, undefined, undefined, undefined, () => {
   const s = getSettings();
-  return { fetchEnabled: s.gitFetch, countUntracked: s.countUntracked, remoteOf: (commonDir) => gitFetch.remoteOf(commonDir) };
+  return {
+    fetchEnabled: s.gitFetch,
+    countUntracked: s.countUntracked,
+    remoteOf: (commonDir) => gitFetch.remoteOf(commonDir),
+    pickedBase: (commonDir, branch) => s.basePicks[basePickKey(commonDir, branch)],
+  };
 });
 /** 最後に読んだセッションの一覧と、画面が出している（アーカイブしていない）カードの目印。取得の対象を決めるのに使う */
 let lastSessions: SessionView[] = [];
@@ -382,11 +388,11 @@ function canClickThrough(s: Settings): boolean {
 }
 
 function widgetLayout(s: Settings): WidgetLayout {
-  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards } = s;
+  const { edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, branchTree, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards } = s;
   const { notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges } = s;
   const { viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed } = s;
   return {
-    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards,
+    edge, island, islandRadius, islandLine, backgroundOpacity, cardOpacity, headerShade, activeHighlight, pinned, mainArchiveMinutes, projectOrder, worktreeOrder, branchTree, sessionOrder, rowPadding, showUpdated, showState, showContext, showSystemUsage, showWindowSwitcher, archive, archivedCards, holds, heldCards,
     notifyWaiting, notifyDone, sound, soundType, soundVolume, toast, flash, muteWhenOpen, statusColors, motion, tooltipDelayMs, showChanges,
     viewerEnabled, viewerPath, viewerAutoHeight, viewerHeight, viewerCollapsed,
   };
@@ -857,6 +863,66 @@ async function readCardGitDetail(key: string) {
   return gitDetail(src);
 }
 
+/** カードの目印から、分岐元を選べるワークツリーのセッションを探す */
+function worktreeOfCard(key: string): SessionView | undefined {
+  const fixture = process.env.WIDGET_FIXTURE;
+  return lastSessions.find((v) => v.worktree && v.baseBranch && (fixture || (v.workDir && v.commonDir)) && cardKeyOf(v) === key);
+}
+
+/** カードの分岐元の候補。見本データでは git を動かさず、見本にある分岐元の名前から作る */
+async function readCardBaseChoices(key: string): Promise<BaseChoices | undefined> {
+  const s = worktreeOfCard(key);
+  if (!s?.worktree) return undefined;
+  if (process.env.WIDGET_FIXTURE) {
+    const raw = readSessions().filter((v) => v.repoKey === s.repoKey);
+    const inferred = raw.find((v) => cardKeyOf(v) === key)?.baseBranch;
+    const names = [...raw.map((v) => v.baseBranch), s.mainBranch].filter((n): n is string => !!n);
+    return fixtureBaseChoices(inferred, names, getSettings().basePicks[basePickKey(s.commonDir ?? s.repoKey, s.worktree.branch)]);
+  }
+  const own = readRefFiles(s.workDir!)?.branch;
+  if (!own) return undefined;
+  return gitStatus.baseChoices(s.workDir!, readDefaultBranch(s.commonDir!), getSettings().basePicks[basePickKey(s.commonDir!, own)]);
+}
+
+/** カードの分岐元を選ぶ（branch が null なら自動に戻す）。遅れ、未マージ、マージ済み、git の詳細も選んだ先と比べ直す */
+function setCardBase(key: string, branch: string | null) {
+  const s = worktreeOfCard(key);
+  if (!s?.worktree) return;
+  const fixture = !!process.env.WIDGET_FIXTURE;
+  const own = fixture ? s.worktree.branch : readRefFiles(s.workDir!)?.branch;
+  if (!own || own === branch) return;
+  if (!fixture && branch !== null && branchExists(s.commonDir!, branch) === false) return;
+  updateSettings({ basePicks: setBasePick(getSettings().basePicks, basePickKey(s.commonDir ?? s.repoKey, own), branch) });
+  if (s.commonDir) gitStatus.invalidate(folderKey(s.commonDir));
+  sendSessions(true);
+}
+
+/** 見本データでは git-status を通らないので、選んだ分岐元をここで当てる */
+function applyFixtureBasePicks(sessions: SessionView[]): SessionView[] {
+  const { basePicks } = getSettings();
+  for (const s of sessions) {
+    if (!s.worktree || !s.baseBranch) continue;
+    const picked = basePicks[basePickKey(s.commonDir ?? s.repoKey, s.worktree.branch)];
+    if (picked) {
+      s.baseBranch = picked;
+      s.basePicked = true;
+    }
+  }
+  return sessions;
+}
+
+/** 選んだ分岐元の値を見直す間隔 */
+const BASE_PICK_PRUNE_MS = 60_000;
+let basePicksPrunedAt = -Infinity;
+
+/** ブランチが消えた値を外す（溜まらないように）。ファイルを読むので、一覧を読むたびには動かさない */
+function pruneBasePicks() {
+  if (process.env.WIDGET_FIXTURE || Date.now() - basePicksPrunedAt < BASE_PICK_PRUNE_MS) return;
+  basePicksPrunedAt = Date.now();
+  const kept = prunedBasePicks(getSettings().basePicks);
+  if (kept) updateSettings({ basePicks: kept });
+}
+
 /**
  * カードの見出しの右クリックメニュー。作業フォルダは画面から受け取らず、セッションから探す（画面が任意のパスを開けないように）。
  * フォルダがわからない、またはもうないときは、項目を押せなくする
@@ -1047,7 +1113,7 @@ const interrupts = new InterruptTracker();
 function sendSessions(force = false) {
   if (!win || win.isDestroyed()) return;
   // 見本データの作業フォルダ（HTML ビューアの見本）では git を動かさない。見本の changes をそのまま見せる
-  const sessions = interrupts.apply(process.env.WIDGET_FIXTURE ? readSessions() : gitStatus.apply(readSessions()));
+  const sessions = interrupts.apply(process.env.WIDGET_FIXTURE ? applyFixtureBasePicks(readSessions()) : gitStatus.apply(readSessions()));
   lastSessions = sessions;
   updateFetchTargets();
   refreshViewer();
@@ -1070,6 +1136,7 @@ function sendSessions(force = false) {
     const keptHeldCards = pruneMarks(heldCards, cardKeys);
     if (keptHeldCards) patch.heldCards = keptHeldCards;
     if (Object.keys(patch).length) updateSettings(patch);
+    pruneBasePicks();
   }
 }
 
@@ -1241,6 +1308,15 @@ app.whenReady().then(() => {
   ipcMain.handle('git-detail', (e, key: unknown) => {
     if (e.sender !== win?.webContents || typeof key !== 'string') return undefined;
     return readCardGitDetail(key);
+  });
+  // 分岐元の候補と選択。画面からはカードの目印とブランチ名だけを受け取り、作業フォルダはメインプロセスがセッションから決める
+  ipcMain.handle('base-choices', (e, key: unknown) => {
+    if (e.sender !== win?.webContents || typeof key !== 'string') return undefined;
+    return readCardBaseChoices(key);
+  });
+  ipcMain.on('set-base', (e, key: unknown, branch: unknown) => {
+    if (e.sender !== win?.webContents || typeof key !== 'string' || (branch !== null && !isBranchName(branch))) return;
+    setCardBase(key, branch);
   });
   // git の詳細でコミットの行を押した。写すのは短い ID の形のものだけ（画面が任意の文字をクリップボードに入れないように）
   ipcMain.on('fly:copy-commit', (e, id: unknown) => {

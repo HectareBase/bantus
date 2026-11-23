@@ -110,7 +110,8 @@ function isAction(v: unknown): v is FlyAction {
   if (!v || typeof v !== 'object') return false;
   const a = v as Record<string, unknown>;
   if (a.type === 'open' || a.type === 'toggle') return typeof a.id === 'string';
-  return a.type === 'toggle-card' && typeof a.key === 'string';
+  if (a.type === 'base-pick') return typeof a.key === 'string' && (a.branch === null || typeof a.branch === 'string');
+  return (a.type === 'toggle-card' || a.type === 'base-open') && typeof a.key === 'string';
 }
 
 /** 重なりの的とめくれが飛び出す所（とカードの見出し）を、画面の座標にする。画面の座標は整数に丸まるので、端の 1px でちらつかないよう少し広げる */

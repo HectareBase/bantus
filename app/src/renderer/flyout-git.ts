@@ -6,6 +6,7 @@
 import type { GitCommit, GitDetail, GitMerge } from '../shared/types';
 import { mergeCountLabel, mergeHeadline } from '../shared/git-merge.js';
 import { ja } from '../shared/strings/ja.js';
+import { makeBaseToggle } from './flyout-base.js';
 import { createIcon } from './icon.js';
 import { formatAgo } from './model.js';
 
@@ -24,6 +25,8 @@ interface Parts {
   foot: HTMLElement;
   /** 中身の高さが変わった（たたんだものを広げた）ときに呼ぶ */
   onResize: () => void;
+  /** 分岐元の行（一番下の ◇）を押して開く候補の一覧。panel は開いているときの中身 */
+  base: { open: boolean; toggle: () => void; panel?: HTMLElement };
 }
 
 /** たたんだものを広げたか。新しく開いたときに戻す */
@@ -355,7 +358,11 @@ function renderBody(parts: Parts) {
       nodes.push(row('base', [document.createTextNode(ja.gitDetail.pushedHere)], [d.tracking ?? '', d.fork ?? ''], link));
     } else {
       const sub = [d.base ?? '', d.fork ?? '', d.baseAhead && !d.merged ? ja.gitDetail.baseAhead(d.baseAhead) : ''];
-      nodes.push(row('base', [document.createTextNode(ja.gitDetail.forkHere)], sub, link));
+      const el = row('base', [document.createTextNode(ja.gitDetail.forkHere)], sub, link);
+      el.title = ja.flyout.baseChange;
+      makeBaseToggle(el, parts.base.open, parts.base.toggle);
+      nodes.push(el);
+      if (parts.base.panel) nodes.push(parts.base.panel);
     }
   });
   parts.body.replaceChildren(...nodes);

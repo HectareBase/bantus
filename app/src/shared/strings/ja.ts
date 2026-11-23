@@ -164,6 +164,8 @@ export const ja = {
     /** カードの名前。main のブランチがわからないとき */
     originFolder: 'メインの作業フォルダ',
     /** 一覧の分岐元の行のツールチップ */
+    /** ツリーの、カードのない分岐元の段のツールチップ */
+    treeGroupTip: (branch: string) => `分岐元：${branch}\nこのブランチのカードはありません`,
     branchedFromTip: (branch: string, mainBranch: string) =>
       `分岐元：${branch}\n遅れと未マージのコミットは、このブランチと比べている（メインの作業フォルダは ${mainBranch}）`,
     badgeWaiting: (n: number) => `対応待ち ${n}`,
@@ -234,6 +236,20 @@ export const ja = {
     baseRoot: '分岐元',
     /** 分岐元ではなく main に入ってマージ済みにしたとき */
     baseRootMerged: (into: string) => `分岐元（${into} にマージ済み）`,
+    /** 候補から選んだ分岐元の行の下の段 */
+    baseRootPicked: '手で選んだ分岐元',
+    /** 分岐元の行のツールチップの末尾と、読み上げ名 */
+    baseChange: '分岐元を選ぶ',
+    /** 候補の一覧の読み上げ名 */
+    baseChoices: '分岐元の候補',
+    /** 候補の右に出す、HEAD にあってそのブランチにないコミットの数 */
+    baseOwn: (n: number) => `自分のコミット ${n} 件`,
+    /** 自動で推定した候補の札 */
+    baseInferred: '推定',
+    /** 選んだ値をやめて、自動の推定に戻すボタン */
+    baseReset: '自動に戻す',
+    baseLoading: '候補を読んでいます…',
+    baseFailed: '候補を読めませんでした',
     /** マージ済みのカードの見出しのツールチップ。分岐元ではなく main に入っていたとき */
     mergedInto: (into: string) => `${into} にマージ済み`,
     unarchive: 'アーカイブから戻す',
@@ -372,6 +388,7 @@ export const ja = {
       },
       projectOrder: { label: 'プロジェクト', description: 'カードの並び' },
       worktreeOrder: { label: 'ワークツリー', description: 'プロジェクトの中のカードの並び。名前順では、メインの作業フォルダを先頭にする' },
+      branchTree: { label: 'ブランチのツリー', description: 'カードを分岐元の下にぶら下げて、線でつなぐ' },
       sessionOrder: { label: 'セッション', description: 'カードの中の行の並び。作成順では、新しく作ったものが上' },
       rowPadding: { label: '上下の余白', description: 'セッションの行の上と下の余白' },
       showUpdated: { label: '更新日時', description: '2 行目の「◯分前」（処理中は「◯分経過」）' },

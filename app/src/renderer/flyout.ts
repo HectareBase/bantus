@@ -4,9 +4,10 @@
 // - 閉じるときは動きを付けずにすぐ消す（メインプロセスがウィンドウを隠す）
 // クリックを受け取る場所（めくれと一覧）はメインプロセスに知らせ、ほかはクリックを下へ通してもらう。
 
-import type { FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
+import type { BasePicker, FlyCard, FlyContent, FlyItem, FlyShow, TipRect } from '../shared/types';
 import { FLAP_INSET, FLAP_WIDTH, flapHeight } from '../shared/flap.js';
 import { ja } from '../shared/strings/ja.js';
+import { basePanel, makeBaseToggle } from './flyout-base.js';
 import { renderGit, resetGitFoot, scrollGitFoot } from './flyout-git.js';
 import { createIcon } from './icon.js';
 import { canToggleArchive, hasBackground, statusIconName, waitingLabel, type StatusIcon } from './model.js';
@@ -157,12 +158,16 @@ function line(side: 'in' | 'out', link: 'solid' | 'dashed'): HTMLElement {
 
 /**
  * 分岐元のブランチの行。起点（元のフォルダで始めたセッション）のすぐ上、起点がなければ一番下に置く。
- * セッションではないので押せない。線は上の行のつなぎ方をそのまま通す（in / out）
+ * 押すと分岐元の候補の一覧を開く。線は上の行のつなぎ方をそのまま通す（in / out）
  */
-function baseNode(base: { branch: string; tip: string; mergedInto?: string }, link: { in?: 'solid' | 'dashed'; out?: 'solid' | 'dashed' }): HTMLElement {
+function baseNode(
+  base: { branch: string; tip: string; mergedInto?: string; picked?: boolean },
+  link: { in?: 'solid' | 'dashed'; out?: 'solid' | 'dashed' },
+  open: boolean,
+): HTMLElement {
   const el = document.createElement('div');
   el.className = 'node linked base-root';
-  el.title = base.tip;
+  el.title = `${base.tip}\n${ja.flyout.baseChange}`;
   if (link.in) el.append(line('in', link.in));
   if (link.out) el.append(line('out', link.out));
   const ic = document.createElement('span');
@@ -175,10 +180,26 @@ function baseNode(base: { branch: string; tip: string; mergedInto?: string }, li
   title.textContent = base.branch;
   const sub = document.createElement('div');
   sub.className = 'sub';
-  sub.textContent = base.mergedInto ? ja.flyout.baseRootMerged(base.mergedInto) : ja.flyout.baseRoot;
+  sub.textContent = base.mergedInto ? ja.flyout.baseRootMerged(base.mergedInto) : base.picked ? ja.flyout.baseRootPicked : ja.flyout.baseRoot;
   txt.append(title, sub);
   el.append(ic, txt);
+  makeBaseToggle(el, open, toggleBase);
   return el;
+}
+
+/** 分岐元の候補の一覧を開け閉めする */
+function toggleBase() {
+  if (current) window.flyoutApi.action({ type: 'base-open', key: current.key });
+}
+
+/** 分岐元の候補を選ぶ（null で自動に戻す） */
+function pickBase(branch: string | null) {
+  if (current) window.flyoutApi.action({ type: 'base-pick', key: current.key, branch });
+}
+
+/** 候補の一覧。今の分岐元を押したら、変えずに閉じる */
+function pickerPanel(picker: BasePicker, through?: 'solid' | 'dashed'): HTMLElement {
+  return basePanel(picker, (branch) => (branch === picker.choices?.current ? toggleBase() : pickBase(branch)), () => pickBase(null), through);
 }
 
 function cardBlock(card: FlyCard): HTMLElement {
@@ -214,7 +235,13 @@ function renderContent(content: FlyContent, keepSummary = false) {
   list.classList.toggle('git', gitMode);
   if (content.kind === 'git') {
     // git の詳細（flyout-git.ts）。下の段はいつも出し、乗せたコミットの本文を出す
-    renderGit(content.detail, { head, body, foot, onResize: () => { placeList(); reportSolid(); } }, !keepSummary);
+    renderGit(content.detail, {
+      head,
+      body,
+      foot,
+      onResize: () => { placeList(); reportSolid(); },
+      base: { open: !!content.picker, toggle: toggleBase, ...(content.picker && { panel: pickerPanel(content.picker) }) },
+    }, !keepSummary);
     return;
   }
   head.hidden = true;
@@ -231,10 +258,11 @@ function renderContent(content: FlyContent, keepSummary = false) {
       if (at < 0) {
         // 起点がなければ一番下。上の行（一番古いもの）からは破線でつなぐ
         nodes.at(-1)?.append(line('out', 'dashed'));
-        nodes.push(baseNode(content.base, { in: 'dashed' }));
+        nodes.push(baseNode(content.base, { in: 'dashed' }, !!content.picker));
+        if (content.picker) nodes.push(pickerPanel(content.picker));
       } else {
         const link = above?.link ?? 'dashed';
-        nodes.splice(at, 0, baseNode(content.base, { ...(above && { in: link }), out: link }));
+        nodes.splice(at, 0, baseNode(content.base, { ...(above && { in: link }), out: link }, !!content.picker), ...(content.picker ? [pickerPanel(content.picker, link)] : []));
       }
     }
     body.replaceChildren(...nodes);

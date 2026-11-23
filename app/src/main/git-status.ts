@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GitChanges, GitFailure, SessionState, SessionView } from '../shared/types';
-import { createBaseFinder, type FindBase } from './base-branch';
+import { createBaseFinder, readBaseChoices, type FindBase } from './base-branch';
 import { findGitDirs, folderKey } from './sessions';
 
 /** 1 回の git status を待つ長さ。大きなリポジトリで止まらないよう、過ぎたら諦める */
@@ -290,6 +290,8 @@ export interface GitOptions {
   countUntracked: boolean;
   /** リポジトリ（commonDir の目印）の、取得するリモート。分からなければ undefined */
   remoteOf(commonDir: string): string | undefined;
+  /** リポジトリ（commonDir の目印）の作業ブランチに、ユーザーが選んだ分岐元。なければ undefined */
+  pickedBase?(commonDir: string, branch: string): string | undefined;
 }
 
 const DEFAULT_OPTIONS: GitOptions = { fetchEnabled: false, countUntracked: true, remoteOf: () => undefined };
@@ -332,6 +334,8 @@ export function createGitStatus(
   const lastStates = new Map<string, SessionState[]>();
   /** 作業フォルダの目印 → リポジトリの目印（取得のあとで、そのリポジトリの作業フォルダを調べ直すため） */
   const repoOf = new Map<string, string>();
+  /** 作業フォルダの目印 → 置き換える前の記録の分岐元と元のフォルダのブランチ（候補を調べるときに、推定と同じ順で比べるため） */
+  const recordedOf = new Map<string, { base: string; main?: string }>();
   const queue: { key: string; dir: string; base?: string; main?: string; commonDir?: string; fixed?: boolean }[] = [];
   let running = false;
 
@@ -352,7 +356,8 @@ export function createGitStatus(
         if (base) {
           // 記録の分岐元（sourceBranch）は当てにならないので、コミットのつながりから割り出したものと比べる。
           // 元のフォルダ（fixed）は既定のブランチをそのまま使い、main（自分のブランチ）にマージしたかも調べない
-          found = fixed ? base : await findBase(dir, base, main);
+          const repo = commonDir;
+          found = fixed ? base : await findBase(dir, base, main, repo && opts.pickedBase ? (b) => opts.pickedBase!(repo, b) : undefined);
           const remote = commonDir ? opts.remoteOf(commonDir) : undefined;
           const info = await branch(dir, found, remote ? `refs/remotes/${remote}/${found}` : undefined, fixed ? undefined : main);
           changes.behind = info.behind;
@@ -388,6 +393,8 @@ export function createGitStatus(
   function update(folders: Map<string, Folder>) {
     for (const [key, { dir, base, main, commonDir, fixed, states }] of folders) {
       if (commonDir) repoOf.set(key, folderKey(commonDir));
+      if (base && !fixed) recordedOf.set(key, { base, ...(main && { main }) });
+      else recordedOf.delete(key);
       const prev = lastStates.get(key);
       lastStates.set(key, states);
       if (queue.some((q) => q.key === key)) continue;
@@ -404,6 +411,7 @@ export function createGitStatus(
     for (const key of cache.keys()) if (!folders.has(key)) cache.delete(key);
     for (const key of lastStates.keys()) if (!folders.has(key)) lastStates.delete(key);
     for (const key of repoOf.keys()) if (!folders.has(key)) repoOf.delete(key);
+    for (const key of recordedOf.keys()) if (!folders.has(key)) recordedOf.delete(key);
     void drain();
   }
 
@@ -426,7 +434,10 @@ export function createGitStatus(
     for (const s of sessions) {
       const entry = s.workDir ? cache.get(folderKey(s.workDir)) : undefined;
       if (entry?.changes) s.changes = withUpstream(entry.changes, entry.upstream, fetchEnabled);
-      if (entry?.base && s.baseBranch) s.baseBranch = entry.base;
+      if (entry?.base && s.baseBranch) {
+        s.baseBranch = entry.base;
+        if (s.worktree && s.commonDir && options().pickedBase?.(folderKey(s.commonDir), s.worktree.branch) === entry.base) s.basePicked = true;
+      }
       if (entry?.error) s.gitError = entry.error;
     }
     return sessions;
@@ -439,5 +450,11 @@ export function createGitStatus(
     }
   }
 
-  return { apply, invalidate };
+  /** 作業フォルダの分岐元の候補。fallback は既定のブランチ、wanted は選んである値。まだ一覧で見ていないフォルダは undefined */
+  function baseChoices(dir: string, fallback: string | undefined, wanted: string | undefined) {
+    const r = recordedOf.get(folderKey(dir));
+    return r ? readBaseChoices(dir, r.base, r.main, fallback, wanted, git) : Promise.resolve(undefined);
+  }
+
+  return { apply, invalidate, baseChoices };
 }
