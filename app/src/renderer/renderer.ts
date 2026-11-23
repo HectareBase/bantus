@@ -4,6 +4,7 @@
 // 行・カード・見出しの要素は使い回し、並びが変わったところだけを動かす（アニメーションを途切れさせない）。
 
 import type { ArchiveMark, HoldMark } from '../shared/settings';
+import { headerAlpha } from '../shared/settings.js';
 import { initSystemUsage } from './system-usage.js';
 import type { BasePicker, FlyAction, FlyContent, FlyItem, GitChanges, GitDetail, GitFailure, PlanStep, SessionView, WidgetLayout } from '../shared/types';
 import {
@@ -1335,7 +1336,8 @@ function applyLayout(layout: WidgetLayout) {
   reportTargets();
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
-  root.style.setProperty('--header-alpha', String(layout.headerShade / 100));
+  root.style.setProperty('--header-alpha', String(headerAlpha(layout.headerLevel)));
+  root.dataset.attentionLook = layout.attentionLook;
   root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
   root.style.setProperty('--fillet', `${layout.islandRadius}px`);
   root.style.setProperty('--edge-cover', `${layout.islandLine}px`);

@@ -31,8 +31,10 @@ export interface Settings {
   backgroundOpacity: number;
   /** カードとタイトルバーの塗りの不透明度（%） */
   cardOpacity: number;
-  /** カードの見出しの帯の濃さ（%）。0 で塗らず、区切り線だけになる */
-  headerShade: number;
+  /** カードの見出しの帯の濃さ。0 が標準で、プラスで濃く、マイナスで薄い。headerAlpha で不透明度にする */
+  headerLevel: number;
+  /** 未確認の行の強調。full は今までの見た目、no-frame は枠を消す、none は帯と光も消す。判定と巡回は変えない */
+  attentionLook: AttentionLook;
   /**
    * デスクトップで今開いているセッションの行（とめくれの一覧の行）の強調の濃さ（%）。
    * highlightScale で倍率にして CSS の --hl に入れる。50 が以前からの見た目（倍率 1）、0 で強調しない
@@ -197,6 +199,39 @@ export function normalizeNote(v: unknown): string {
   return [...v.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, HOLD_NOTE_MAX).join('').trim();
 }
 
+/** 未確認の行の強調の段階 */
+export type AttentionLook = 'full' | 'no-frame' | 'none';
+
+/** 見出しの濃さの範囲（0 を中央に、前後へこの幅）と、0 のときの帯の不透明度（%） */
+export const HEADER_LEVEL_RANGE = 20;
+const HEADER_BASE = 5 / 3;
+/** 前の版の既定の不透明度（%）。これを使っていた人は、今の既定（0）へ移す */
+const OLD_HEADER_DEFAULT = 5;
+
+/** 見出しの濃さから帯の不透明度（0〜1）を出す。プラスは足し、マイナスは左端で 0 になるよう縮める */
+export function headerAlpha(level: number): number {
+  const percent = level >= 0 ? HEADER_BASE + level : HEADER_BASE * (1 + level / HEADER_LEVEL_RANGE);
+  return Math.max(0, percent) / 100;
+}
+
+/** 帯の不透明度（%）を、いちばん近い今の値に置き換える。前の版の既定は今の既定にする。+ 0 は -0 を 0 にするため */
+function levelFromPercent(percent: number): number {
+  if (Math.abs(percent - OLD_HEADER_DEFAULT) < 1e-9) return 0;
+  const level = percent >= HEADER_BASE ? percent - HEADER_BASE : (percent / HEADER_BASE - 1) * HEADER_LEVEL_RANGE;
+  return Math.round(level) + 0;
+}
+
+/** 前の版の見出しの濃さを今の値にする。headerTone（-15〜15、0 が 5%）を先に見て、なければ headerShade（0〜20%） */
+function migrateHeaderLevel(src: Record<string, unknown>): number | undefined {
+  const { headerTone: tone, headerShade: shade } = src;
+  if (typeof tone === 'number' && Number.isFinite(tone)) {
+    const t = Math.min(15, Math.max(-15, Math.round(tone)));
+    return levelFromPercent(t >= 0 ? OLD_HEADER_DEFAULT + t : OLD_HEADER_DEFAULT * (1 + t / 15));
+  }
+  if (typeof shade === 'number' && Number.isFinite(shade)) return levelFromPercent(Math.min(20, Math.max(0, Math.round(shade))));
+  return undefined;
+}
+
 /** アニメーション効果。full（標準）が以前からの見た目 */
 export type Motion = 'full' | 'subtle';
 
@@ -220,7 +255,7 @@ export function isLegacyValue(key: string, value: unknown): boolean {
 }
 
 /** 前の版にあった項目で、読んだときに今の項目へ移すもの。保存のときは残さない */
-export const LEGACY_KEYS: readonly string[] = ['alwaysShow'];
+export const LEGACY_KEYS: readonly string[] = ['alwaysShow', 'headerShade', 'headerTone'];
 
 /** 音の種類。chime は 2 音のチャイム、bell は余韻の長い鐘、pop は短い 1 音 */
 export type SoundType = 'chime' | 'bell' | 'pop';
@@ -242,7 +277,8 @@ export const DEFAULT_SETTINGS: Settings = {
   islandLine: 1,
   backgroundOpacity: 100,
   cardOpacity: 50,
-  headerShade: 5,
+  headerLevel: 0,
+  attentionLook: 'full',
   activeHighlight: HIGHLIGHT_NORMAL,
   zoom: 100,
   theme: 'system',
@@ -389,7 +425,7 @@ export function isBranchName(name: unknown): name is string {
 
 export type SettingDef =
   | (Base<
-      'edge' | 'island' | 'theme' | 'motion' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
+      'edge' | 'island' | 'theme' | 'motion' | 'attentionLook' | 'mainArchiveMinutes' | 'projectOrder' | 'worktreeOrder' | 'sessionOrder' | 'gitFetchMinutes' | 'soundType' | 'viewerAutoHeight'
     > & {
       type: 'segmented';
       options: { value: string | number | boolean; label: string }[];
@@ -399,7 +435,7 @@ export type SettingDef =
   /** オンかオフ。トグルスイッチで描き、横に「オン」「オフ」を出す。ラベルは「〜する」か、オンオフで意味が通る名前にする */
   | (Base<BooleanKey> & { type: 'toggle' })
   | (Base<'display'> & { type: 'display' })
-  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerShade' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
+  | (Base<'islandRadius' | 'islandLine' | 'backgroundOpacity' | 'cardOpacity' | 'headerLevel' | 'activeHighlight' | 'zoom' | 'viewerZoom' | 'rowPadding' | 'soundVolume' | 'tooltipDelayMs'> & { type: 'slider'; min: number; max: number; step: number; unit: string; format?: (value: number) => string })
   /** 状態ごとの色。行の見本、状態ごとの行、「すべて既定に戻す」をまとめて描く */
   | (Base<'statusColors'> & { type: 'status-colors' })
   /**
@@ -477,9 +513,9 @@ export const SETTING_DEFS: SettingDef[] = [
     min: 0, max: 100, step: 5, unit: '%',
   },
   {
-    key: 'headerShade', category: 'look', group: T.groups.widget, type: 'slider',
-    ...T.items.headerShade,
-    min: 0, max: 20, step: 1, unit: '%',
+    key: 'headerLevel', category: 'look', group: T.groups.widget, type: 'slider',
+    ...T.items.headerLevel,
+    min: -HEADER_LEVEL_RANGE, max: HEADER_LEVEL_RANGE, step: 1, unit: '%', format: T.signedPercent,
   },
   {
     key: 'activeHighlight', category: 'look', group: T.groups.widget, type: 'slider',
@@ -495,6 +531,11 @@ export const SETTING_DEFS: SettingDef[] = [
     key: 'motion', category: 'look', group: T.groups.statusColors, type: 'segmented',
     ...T.items.motion,
     options: [{ value: 'full', label: T.options.motionFull }, { value: 'subtle', label: T.options.motionSubtle }],
+  },
+  {
+    key: 'attentionLook', category: 'look', group: T.groups.statusColors, type: 'segmented',
+    ...T.items.attentionLook,
+    options: [{ value: 'full', label: T.options.attentionFull }, { value: 'no-frame', label: T.options.attentionNoFrame }, { value: 'none', label: T.options.attentionNone }],
   },
   {
     key: 'statusColors', category: 'look', group: T.groups.statusColors, type: 'status-colors',
@@ -631,6 +672,8 @@ export function normalizeSettings(input: unknown): Settings {
     let v = src[def.key];
     // 前の版の開いている行の濃さ（薄い・標準・濃い）は、近い濃さ（%）に置き換える
     if (def.key === 'activeHighlight' && typeof v === 'string') v = LEGACY_HIGHLIGHT[v];
+    // 前の版の見出しの濃さは、同じ見た目になる値に置き換える
+    if (def.key === 'headerLevel' && v === undefined) v = migrateHeaderLevel(src);
     switch (def.type) {
       case 'segmented':
         if (def.options.some((o) => o.value === v)) (out as any)[def.key] = v;
