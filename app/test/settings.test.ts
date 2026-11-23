@@ -141,23 +141,32 @@ describe('normalizeSettings のアーカイブの印', () => {
 });
 
 describe('normalizeSettings の見出しの濃さ', () => {
-  it('なければ 0 で、不透明度は以前の既定の 5%', () => {
-    assert.equal(normalizeSettings({}).headerTone, 0);
-    assert.equal(headerAlpha(0), 0.05);
+  it('なければ 0 で、不透明度は 5/3%', () => {
+    assert.equal(normalizeSettings({}).headerLevel, 0);
+    assert.ok(Math.abs(headerAlpha(0) - 5 / 300) < 1e-9);
   });
-  it('-15〜15 に収め、整数にする', () => {
-    assert.equal(normalizeSettings({ headerTone: -50 }).headerTone, -15);
-    assert.equal(normalizeSettings({ headerTone: 50 }).headerTone, 15);
-    assert.equal(normalizeSettings({ headerTone: 2.6 }).headerTone, 3);
+  it('-20〜20 に収め、整数にする', () => {
+    assert.equal(normalizeSettings({ headerLevel: -50 }).headerLevel, -20);
+    assert.equal(normalizeSettings({ headerLevel: 50 }).headerLevel, 20);
+    assert.equal(normalizeSettings({ headerLevel: 2.6 }).headerLevel, 3);
   });
-  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerTone: '10' }).headerTone, 0));
-  it('前の版の値は、同じ不透明度になる値へ移す', () => {
-    for (const shade of [0, 1, 2, 3, 4, 5, 6, 12, 20]) {
-      const tone = normalizeSettings({ headerShade: shade }).headerTone;
-      assert.ok(Math.abs(headerAlpha(tone) - shade / 100) < 1e-9, String(shade));
-    }
+  it('左端で帯が消える', () => assert.equal(headerAlpha(-20), 0));
+  it('数でなければ既定値に戻す', () => assert.equal(normalizeSettings({ headerLevel: '10' }).headerLevel, 0));
+  it('前の版の既定は今の既定へ移す', () => {
+    assert.equal(normalizeSettings({ headerShade: 5 }).headerLevel, 0);
+    assert.equal(normalizeSettings({ headerTone: 0 }).headerLevel, 0);
   });
-  it('今の値があれば前の版の値は見ない', () => assert.equal(normalizeSettings({ headerTone: 2, headerShade: 20 }).headerTone, 2));
+  it('前の版の -10 は新しい 0 になる', () => {
+    const level = normalizeSettings({ headerTone: -10 }).headerLevel;
+    assert.ok(Object.is(level, 0));
+  });
+  it('前の版の両端は今の範囲に収まる', () => {
+    assert.equal(normalizeSettings({ headerShade: 0 }).headerLevel, -20);
+    assert.equal(normalizeSettings({ headerTone: -15 }).headerLevel, -20);
+    assert.equal(normalizeSettings({ headerShade: 20 }).headerLevel, 18);
+    assert.equal(normalizeSettings({ headerTone: 15 }).headerLevel, 18);
+  });
+  it('今の値があれば前の版の値は見ない', () => assert.equal(normalizeSettings({ headerLevel: 2, headerTone: 9, headerShade: 20 }).headerLevel, 2));
 });
 
 describe('normalizeSettings の未確認の強調', () => {
@@ -260,7 +269,7 @@ describe('設定画面のカテゴリ', () => {
   it('デザインは テーマ → ウィジェット → 状態の色', () =>
     assert.deepEqual(layout('look'), [
       ['テーマ', ['theme']],
-      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerTone', 'activeHighlight', 'zoom']],
+      ['ウィジェット', ['island', 'islandRadius', 'islandLine', 'backgroundOpacity', 'cardOpacity', 'headerLevel', 'activeHighlight', 'zoom']],
       ['状態の色', ['motion', 'attentionLook', 'statusColors']],
     ]));
   it('カードの表示は アーカイブ → 並び順 → 行の大きさ → 行に表示する項目', () =>

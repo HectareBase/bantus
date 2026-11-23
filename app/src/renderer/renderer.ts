@@ -1336,7 +1336,7 @@ function applyLayout(layout: WidgetLayout) {
   reportTargets();
   root.style.setProperty('--bg-alpha', String(backgroundOpacity / 100));
   root.style.setProperty('--card-alpha', String(cardOpacity / 100));
-  root.style.setProperty('--header-alpha', String(headerAlpha(layout.headerTone)));
+  root.style.setProperty('--header-alpha', String(headerAlpha(layout.headerLevel)));
   root.dataset.attentionLook = layout.attentionLook;
   root.style.setProperty('--row-pad', `${layout.rowPadding}px`);
   root.style.setProperty('--fillet', `${layout.islandRadius}px`);

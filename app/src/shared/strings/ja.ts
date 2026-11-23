@@ -376,7 +376,7 @@ export const ja = {
       islandLine: { label: '縁の太さ', description: '帯の内側の端に引く黒い線の太さ。最前面に固定しているときは、画面の残りの 3 辺の線も同じ太さにする' },
       backgroundOpacity: { label: '背景の不透明度', description: '0% で背景が消え、カードとタイトルバーだけが浮かぶ' },
       cardOpacity: { label: 'カードの不透明度', description: 'カードとタイトルバーの塗り。0% で枠だけになる' },
-      headerTone: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% が標準で、プラスで濃く、マイナスで薄くなる' },
+      headerLevel: { label: '見出しの濃さ', description: 'カードの見出しの帯。0% が標準で、プラスで濃く、マイナスで薄くなる' },
       activeHighlight: { label: '開いている行の濃さ', description: 'デスクトップで今開いているセッションの行の塗りと斜線。50% が標準、0% で塗らない' },
       zoom: { label: '表示の拡大率', description: 'ウィジェットの文字やカードの大きさ' },
       statusColors: { label: '状態の色', description: 'アイコンと帯の色。ライトとダークで同じ色を使う' },
