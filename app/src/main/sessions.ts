@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 import { cardKeyOf } from '../shared/card-key';
 import { createBackgroundReader } from './background-work';
 import { createContextReader } from './context-usage';
+import { readPackedRefs, type PackedRefs } from './packed-refs';
 import { createPlanReader } from './plan-progress';
 import type { HoldMark } from '../shared/settings';
 import { ja } from '../shared/strings/ja';
@@ -244,21 +245,11 @@ const SHORT_HEAD = 7;
  * どれもなければ undefined（呼び出し側が記録の分岐元を使う）。docs/design/git-changes.md の「元のフォルダが既定以外のブランチにいるとき」
  */
 export function readDefaultBranch(refDir: string): string | undefined {
-  let packed: Set<string> | undefined;
+  let packed: PackedRefs | undefined;
   const has = (name: string): boolean => {
     if (existsSync(join(refDir, 'refs', 'heads', name))) return true;
-    if (!packed) {
-      packed = new Set();
-      try {
-        for (const line of readFileSync(join(refDir, 'packed-refs'), 'utf8').split(/\r?\n/)) {
-          const m = /^[0-9a-f]+ refs\/heads\/(\S+)$/.exec(line);
-          if (m) packed.add(m[1]!);
-        }
-      } catch {
-        // packed-refs がないのは普通
-      }
-    }
-    return packed.has(name);
+    packed ??= readPackedRefs(refDir);
+    return packed?.heads.has(name) ?? false;
   };
   const byName = (a: string, b: string) => (a === 'origin' ? -1 : b === 'origin' ? 1 : a < b ? -1 : a > b ? 1 : 0);
   const names: string[] = [];

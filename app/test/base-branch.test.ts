@@ -2,11 +2,12 @@
 
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { basePickKey, branchExists, createBaseFinder, firstTime, fixtureBaseChoices, ownCommits, parseHeadRows, prunedBasePicks, readBaseChoices, setBasePick, startCommit } from '../src/main/base-branch';
 import { createGitStatus } from '../src/main/git-status';
+import { packedRefsReads, parsePackedRefs, readPackedRefs } from '../src/main/packed-refs';
 import { tempDir, view } from './helpers';
 
 describe('parseHeadRows', () => {
@@ -368,6 +369,111 @@ describe('選んだ分岐元の保存', () => {
     assert.deepEqual(prunedBasePicks({ 'r|keep': 'main', 'r|gone': 'main', 'r|keep2': 'gone', 'off|x': 'y' }, exists), { 'r|keep': 'main', 'off|x': 'y' });
     assert.equal(prunedBasePicks({ 'r|keep': 'main' }, exists), undefined);
   });
+  describe('packed-refs の読み方', () => {
+    const tmp = tempDir();
+    after(() => tmp.cleanup());
+    const sha = (c: string) => c.repeat(40);
+    const old = (file: string, ago = 60_000) => {
+      const t = new Date(Date.now() - ago);
+      utimesSync(file, t, t);
+    };
+    /** HEAD と refs/heads だけの .git を作る。packed があれば packed-refs に書き、書いた直後の扱いを避けて時刻を戻す */
+    const gitDir = (name: string, packed?: string) => {
+      const dir = join(tmp.path, name, '.git');
+      mkdirSync(join(dir, 'refs', 'heads'), { recursive: true });
+      writeFileSync(join(dir, 'HEAD'), 'ref: refs/heads/main\n');
+      if (packed !== undefined) {
+        writeFileSync(join(dir, 'packed-refs'), packed);
+        old(join(dir, 'packed-refs'));
+      }
+      return dir;
+    };
+    const mixed = [
+      '# pack-refs with: peeled fully-peeled sorted ',
+      `${sha('a')} refs/heads/main`,
+      `${sha('b')} refs/heads/topic/x`,
+      `${sha('c')} refs/remotes/origin/only-remote`,
+      `${sha('d')} refs/tags/only-tag`,
+      `^${sha('e')}`,
+      '',
+    ];
+
+    it('リモート、タグ、peeled、コメントの行はブランチとして読まない。CRLF でも読む', () => {
+      for (const eol of ['\n', '\r\n']) {
+        const p = parsePackedRefs(mixed.join(eol));
+        assert.deepEqual([...p.heads], ['main', 'topic/x']);
+        assert.equal(p.refs.get('refs/tags/only-tag'), sha('d'), 'タグの値は peeled の行で上書きしない');
+        assert.equal(p.refs.get('refs/heads/main'), sha('a'));
+      }
+    });
+
+    it('1 回の見直しで、リポジトリごとに 1 度だけ読み、変わらなければ読み直さない', () => {
+      const a = gitDir('count-a', mixed.join('\n'));
+      const b = gitDir('count-b', mixed.join('\n'));
+      const picks: Record<string, string> = {};
+      for (const dir of [a, b]) {
+        picks[basePickKey(dir, 'topic/x')] = 'main';
+        picks[basePickKey(dir, 'main')] = 'topic/x';
+      }
+      const start = packedRefsReads();
+      assert.equal(prunedBasePicks(picks), undefined);
+      assert.equal(packedRefsReads() - start, 2, 'リポジトリの数だけ');
+      assert.equal(prunedBasePicks(picks), undefined);
+      assert.equal(packedRefsReads() - start, 2, '更新時刻と大きさが同じなら読まない');
+    });
+
+    it('大きさが同じでも、更新時刻が変われば読み直す', () => {
+      const dir = gitDir('rewrite', `${sha('a')} refs/heads/aaaa\n`);
+      const key = basePickKey(dir, 'aaaa');
+      assert.equal(prunedBasePicks({ [key]: 'aaaa' }), undefined);
+      writeFileSync(join(dir, 'packed-refs'), `${sha('a')} refs/heads/bbbb\n`);
+      old(join(dir, 'packed-refs'), 30_000);
+      assert.deepEqual(prunedBasePicks({ [key]: 'aaaa' }), {}, '消えたブランチの値を外す');
+    });
+
+    it('書いた直後のファイルは覚えない', () => {
+      const dir = gitDir('fresh');
+      const file = join(dir, 'packed-refs');
+      writeFileSync(file, `${sha('a')} refs/heads/main\n`);
+      const now = statSync(file).mtimeMs;
+      const start = packedRefsReads();
+      readPackedRefs(dir, now);
+      readPackedRefs(dir, now);
+      assert.equal(packedRefsReads() - start, 2);
+    });
+
+    it('リモートやタグにしかない名前と、ばらのファイルもない名前は消えたとみなす', () => {
+      const dir = gitDir('gone', mixed.join('\n'));
+      const k = (n: string) => basePickKey(dir, n);
+      assert.deepEqual(
+        prunedBasePicks({ [k('main')]: 'topic/x', [k('origin/only-remote')]: 'main', [k('only-remote')]: 'main', [k('only-tag')]: 'main', [k('topic/x')]: 'none' }),
+        { [k('main')]: 'topic/x' },
+      );
+    });
+
+    it('ばらのファイルを先に見る。packed-refs がなくても読める', () => {
+      const dir = gitDir('loose');
+      writeFileSync(join(dir, 'refs', 'heads', 'main'), `${sha('a')}\n`);
+      const start = packedRefsReads();
+      assert.equal(branchExists(dir, 'main'), true);
+      assert.equal(packedRefsReads() - start, 0, 'ばらのファイルがあれば packed-refs を開かない');
+      assert.equal(branchExists(dir, 'none'), false);
+    });
+
+    it('読めないリポジトリ、reftable、packed-refs を開けないときは決めない', () => {
+      const missing = join(tmp.path, 'missing', '.git');
+      const reftable = gitDir('reftable', mixed.join('\n'));
+      mkdirSync(join(reftable, 'reftable'));
+      const unreadable = gitDir('unreadable');
+      mkdirSync(join(unreadable, 'packed-refs'), { recursive: true });
+      assert.equal(branchExists(missing, 'main'), undefined);
+      assert.equal(branchExists(reftable, 'main'), undefined);
+      assert.equal(branchExists(unreadable, 'main'), undefined, 'ファイルとして読めない');
+      const picks = { [basePickKey(missing, 'x')]: 'y', [basePickKey(reftable, 'x')]: 'y', [basePickKey(unreadable, 'x')]: 'y' };
+      assert.equal(prunedBasePicks(picks), undefined);
+    });
+  });
+
   it('見本データの候補は、推定を先頭に重ねずに並べる', () => {
     assert.deepEqual(fixtureBaseChoices('develop', ['main', 'develop'], undefined), {
       current: 'develop',

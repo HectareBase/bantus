@@ -5,6 +5,7 @@
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BaseCandidate, BaseChoices } from '../shared/types';
+import { readPackedRefs, type PackedRefs } from './packed-refs';
 import { findGitDirs, folderKey } from './sessions';
 
 export type RunGit = (dir: string, args: string[]) => Promise<string>;
@@ -94,19 +95,11 @@ export interface RefFiles {
 export function readRefFiles(dir: string): RefFiles | undefined {
   const dirs = findGitDirs(dir);
   if (!dirs) return undefined;
-  let packed: string | undefined;
+  let packed: PackedRefs | undefined;
   /** packed-refs の中のそのブランチの先頭。なければ undefined */
   const fromPacked = (name: string): string | undefined => {
-    if (packed === undefined) {
-      try {
-        packed = readFileSync(join(dirs.refDir, 'packed-refs'), 'utf8');
-      } catch {
-        packed = '';
-      }
-    }
-    const at = packed.indexOf(` refs/heads/${name}\n`);
-    if (at < 0) return undefined;
-    return packed.slice(packed.lastIndexOf('\n', at) + 1, at);
+    packed ??= readPackedRefs(dirs.refDir);
+    return packed?.refs.get(`refs/heads/${name}`);
   };
   const loose = (name: string): string | undefined => {
     try {
@@ -468,22 +461,42 @@ export function setBasePick(picks: Record<string, string>, key: string, branch: 
   return next;
 }
 
+type BranchCheck = (commonDir: string, name: string) => boolean | undefined;
+
 /**
- * リポジトリ（共有の .git）にそのブランチがあるか。ばらのファイルと packed-refs を読む（git は起動しない）。
- * リポジトリを読めない、reftable の形式のときは undefined（消えたと決めつけない）
+ * ブランチがあるかを調べる関数を作る。ばらのファイルを先に見て、なければ packed-refs を見る（git は起動しない）。
+ * リポジトリを読めない、reftable の形式、packed-refs を開けないときは undefined（消えたと決めつけない）。
+ * 1 つの関数の中では、リポジトリごとに packed-refs を 1 度だけ読み、同じブランチは 1 度だけ調べる
  */
+function createBranchCheck(): BranchCheck {
+  const readable = new Map<string, boolean>();
+  const packed = new Map<string, PackedRefs | undefined>();
+  const answers = new Map<string, boolean | undefined>();
+  const check: BranchCheck = (commonDir, name) => {
+    let ok = readable.get(commonDir);
+    if (ok === undefined) {
+      ok = existsSync(join(commonDir, 'HEAD')) && !existsSync(join(commonDir, 'reftable'));
+      readable.set(commonDir, ok);
+    }
+    if (!ok) return undefined;
+    try {
+      if (statSync(join(commonDir, 'refs', 'heads', name)).isFile()) return true;
+    } catch {
+      // ばらのファイルがないのは普通
+    }
+    if (!packed.has(commonDir)) packed.set(commonDir, readPackedRefs(commonDir));
+    return packed.get(commonDir)?.heads.has(name);
+  };
+  return (commonDir, name) => {
+    const key = `${commonDir}|${name}`;
+    if (!answers.has(key)) answers.set(key, check(commonDir, name));
+    return answers.get(key);
+  };
+}
+
+/** リポジトリ（共有の .git）にそのブランチがあるか。読めないときは undefined（createBranchCheck） */
 export function branchExists(commonDir: string, name: string): boolean | undefined {
-  if (!existsSync(join(commonDir, 'HEAD')) || existsSync(join(commonDir, 'reftable'))) return undefined;
-  try {
-    if (statSync(join(commonDir, 'refs', 'heads', name)).isFile()) return true;
-  } catch {
-    // ばらのファイルがないのは普通
-  }
-  try {
-    return readFileSync(join(commonDir, 'packed-refs'), 'utf8').split(/\r?\n/).some((l) => l.endsWith(` refs/heads/${name}`));
-  } catch {
-    return false;
-  }
+  return createBranchCheck()(commonDir, name);
 }
 
 /**
@@ -492,7 +505,7 @@ export function branchExists(commonDir: string, name: string): boolean | undefin
  */
 export function prunedBasePicks(
   picks: Record<string, string>,
-  exists: (commonDir: string, name: string) => boolean | undefined = branchExists,
+  exists: BranchCheck = createBranchCheck(),
 ): Record<string, string> | undefined {
   const entries = Object.entries(picks);
   const kept = entries.filter(([key, base]) => {
